@@ -54,3 +54,4 @@ error_list.txt
 logs.txt
 "test log.txt"
 .qwen/
+*.txt
