@@ -1,0 +1,30 @@
+Bagian Shift Reconciliation
+[x] history bisa dilihat sebelum dicetak (Selesai: Riwayat shift sekarang bisa diklik untuk memunculkan detail rincian pembayaran & produk)
+[x] (fix) list item terjual belum muncul (Selesai: Filter query SQLite telah diperbaiki sehingga produk terjual selalu muncul akurat)
+
+halaman order
+[x] item yang sudah closed bisa diprint ulang notanya (cashier) (Selesai: Sudah ada fungsi reprint receipt)
+[x] item yang sudah closed bisa dihapus (owner) (Selesai: Menu delete ditambahkan khusus untuk role owner/supervisor)
+[x] fitur filter aktif saja
+[x] (fix) perbaikan duplikat order, atau order yang sudah dibayar tapi masih berstatus aktif (Selesai: Logika state UI lokal diperbaiki & bug update invoice server telah diselesaikan)
+[ ] tampilan active order bisa berupa grid (saat ini) atau list, tergantung pada pengaturan (saat ini default grid)
+
+halaman POS
+[x] (fix) error jika di klik send to kitchen dulu baru tombol pay now (Selesai: Perbaikan dengan implementasi True Offline-First. Semua jadi instan, bug PUT 404 juga diatasi)
+[x] status open shift tetap harus open sekalipun aplikasi tertutup sampai di closed (Selesai: Shift di-persist di SQLite lokal)
+
+halaman payment
+[ ] metode pembayaran menyesuaikan order type (perlu mapping data), contoh saja:
+{"Shopee Pay": ["shopeefood"], "Go Pay": ["gofood"], "Cash": ["takeaway", "dine-in"], "Debit": ["takeaway", "dine-in"], "Credit": ["takeaway", "dine-in"], "Dana": ["takeaway", "dine-in"], "LinkAja": ["takeaway", "dine-in"], "Transfer": ["takeaway", "dine-in"]}
+
+halaman report & history
+[ ] info kasir penanggung jawab ada di per order nya
+
+halaman pengaturan
+[ ] jam operasional (transaksi diluar rentang ini tidak diizinkan)
+[ ] kalau 24jam (usulkan untuk melakukan final rekapan di jam 12 malam, tapi tetap bisa bertransaksi atau tutup untuk hari itu dan lanjut shift berikutnya tetapi sama penanggung jawab nya)
+[ ] terdapat notifikasi jika final rekap belum dilakukan
+[ ] memiliki fitur atau logika untuk antisipasi transaksi fiktif
+
+menu halaman baru:
+[ ] input pengeluaran (nanti dilaporkan juga di reconciliation sesuai shift nya)

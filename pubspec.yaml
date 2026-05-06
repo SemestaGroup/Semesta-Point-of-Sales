@@ -1,0 +1,78 @@
+name: semesta_pos
+description: "semestaPOS application"
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ">=3.3.1 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  get: ^4.6.6
+  uuid: ^4.4.0
+  internet_connection_checker: ^1.0.0+1
+  shared_preferences: ^2.2.3
+  flutter_screenutil: ^5.9.0
+  json_annotation: ^4.9.0
+  http: ^1.2.1
+  cupertino_icons: ^1.0.8
+  flutter_native_splash: ^2.4.0
+  freezed_annotation: ^2.4.1
+  dropdown_search: ^5.0.6
+  intl: ^0.19.0
+  currency_text_input_formatter: ^2.2.2
+  lottie: ^3.1.0
+  webview_flutter: ^4.7.0
+  permission_handler: ^11.3.1
+  font_awesome_flutter: ^10.7.0
+  image_picker: ^1.1.1
+  fl_chart: ^0.68.0
+  date_picker_plus: ^4.0.0
+  sqflite: ^2.3.3
+  path: ^1.9.0
+  workmanager: ^0.7.0
+  blue_thermal_printer: ^1.2.3
+  esc_pos_utils_plus: ^2.0.3
+  cached_network_image: ^3.4.1
+  image: ^4.8.0
+  url_launcher: ^6.3.2
+  path_provider: ^2.1.5
+  open_filex: ^4.7.0
+  device_info_plus: ^10.1.0
+  dbcrypt: ^2.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  json_serializable: ^6.8.0
+  freezed: ^2.5.2
+  build_runner: ^2.4.9
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/img/
+    - assets/anim/
+  fonts:
+    - family: popmed
+      fonts:
+        - asset: assets/fonts/Poppins-Medium.ttf
+    - family: popreg
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+    - family: popsem
+      fonts:
+        - asset: assets/fonts/Poppins-SemiBold.ttf
+
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: assets/img/main_logo.jpeg
+  android_12:
+    image: assets/img/main_logo.jpeg
+    color: "#FFFFFF"
+  android: true
+  ios: true
+  android_gravity: center
+  ios_content_mode: center
