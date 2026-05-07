@@ -228,6 +228,8 @@ class HomeController extends GetxController {
   RxInt expandedBrandId = (-1).obs;
 
   RxString searchQuery = "".obs;
+  Rx<String?> currentParentId = Rx<String?>(null);
+  final TextEditingController searchProductController = TextEditingController();
 
   Future<void> fetchPaymentModes() async {
     try {
@@ -271,32 +273,40 @@ class HomeController extends GetxController {
       List<dynamic> whereArgs = [];
       String table = 'products';
 
-      if (selectedBrandId.value != 0) {
-        where += ' AND id_brand = ?';
-        whereArgs.add(selectedBrandId.value);
-      }
-
-      if (selectedCategoryId.value != 0) {
-        if (selectedBrandId.value == 0) {
-          final cat = await _dbService.query('categories',
-              where: 'id_kategori = ?', whereArgs: [selectedCategoryId.value]);
-          if (cat.isNotEmpty) {
-            final catName = cat[0]['nama_kategori'];
-            table =
-                'products p INNER JOIN categories c ON p.id_kategori = c.id_kategori';
-            where += ' AND c.nama_kategori = ?';
-            whereArgs.add(catName);
-          }
-        } else {
-          where += ' AND id_kategori = ?';
-          whereArgs.add(selectedCategoryId.value);
-        }
-      }
-
       if (searchQuery.value.isNotEmpty) {
+        // Global search: Ignore brand, category, and parent filters
         where += ' AND (nama_produk LIKE ? OR kode_produk LIKE ?)';
         whereArgs.add('%${searchQuery.value}%');
         whereArgs.add('%${searchQuery.value}%');
+      } else {
+        if (selectedBrandId.value != 0) {
+          where += ' AND id_brand = ?';
+          whereArgs.add(selectedBrandId.value);
+        }
+
+        if (selectedCategoryId.value != 0) {
+          if (selectedBrandId.value == 0) {
+            final cat = await _dbService.query('categories',
+                where: 'id_kategori = ?', whereArgs: [selectedCategoryId.value]);
+            if (cat.isNotEmpty) {
+              final catName = cat[0]['nama_kategori'];
+              table =
+                  'products p INNER JOIN categories c ON p.id_kategori = c.id_kategori';
+              where += ' AND c.nama_kategori = ?';
+              whereArgs.add(catName);
+            }
+          } else {
+            where += ' AND id_kategori = ?';
+            whereArgs.add(selectedCategoryId.value);
+          }
+        }
+
+        if (currentParentId.value == null) {
+          where += ' AND (parent IS NULL OR parent = "" OR parent = "null")';
+        } else {
+          where += ' AND parent = ?';
+          whereArgs.add(currentParentId.value);
+        }
       }
 
       final localProducts = await _dbService.query(table,
@@ -322,6 +332,8 @@ class HomeController extends GetxController {
             'discount_total': e['discount_total'],
             'discount_type': e['discount_type'],
             'status': e['status'],
+            'parent': e['parent'],
+            'children': e['children'],
           });
         }).toList());
         return;
@@ -336,20 +348,28 @@ class HomeController extends GetxController {
   }
 
   Future<void> filterByBrand(int brandId) async {
+    searchFocusNode.unfocus();
     if (selectedBrandId.value == brandId) {
       selectedBrandId.value = 0;
     } else {
       selectedBrandId.value = brandId;
     }
     selectedCategoryId.value = 0;
+    currentParentId.value = null;
+    searchQuery.value = "";
+    searchProductController.clear();
     await updateCategoriesForBrand();
     await getProductData();
   }
 
   /// Directly sets the brand filter without toggle logic (used by the accordion sidebar).
   Future<void> filterByBrandDirect(int brandId) async {
+    searchFocusNode.unfocus();
     selectedBrandId.value = brandId;
     selectedCategoryId.value = 0;
+    currentParentId.value = null;
+    searchQuery.value = "";
+    searchProductController.clear();
     await updateCategoriesForBrand();
     await getProductData();
   }
@@ -369,11 +389,15 @@ class HomeController extends GetxController {
   }
 
   Future<void> filterByCategory(int categoryId) async {
+    searchFocusNode.unfocus();
     if (selectedCategoryId.value == categoryId) {
       selectedCategoryId.value = 0;
     } else {
       selectedCategoryId.value = categoryId;
     }
+    currentParentId.value = null;
+    searchQuery.value = "";
+    searchProductController.clear();
     await getProductData();
   }
 
@@ -450,6 +474,24 @@ class HomeController extends GetxController {
     for (var order in penjualanDetailModelList) {
       controllerStock[order.idProduk] =
           TextEditingController(text: order.jumlah.toString());
+    }
+  }
+
+  void handleProductTap(ProductModel productModel) {
+    searchFocusNode.unfocus();
+    
+    bool hasChildren = productModel.children != null && 
+                       productModel.children != "[]" && 
+                       productModel.children != "null" && 
+                       productModel.children!.isNotEmpty;
+    
+    if (hasChildren) {
+      currentParentId.value = productModel.idProduk.toString();
+      searchQuery.value = "";
+      searchProductController.clear();
+      getProductData();
+    } else {
+      addProduct(productModel);
     }
   }
 

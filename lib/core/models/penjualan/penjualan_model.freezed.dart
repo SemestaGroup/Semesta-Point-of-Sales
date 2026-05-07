@@ -49,6 +49,7 @@ mixin _$PenjualanModel {
   int get manualDiscountValue => throw _privateConstructorUsedError;
   @JsonKey(name: 'remote_number')
   String? get remoteNumber => throw _privateConstructorUsedError;
+  @JsonKey(name: 'queue_number')
   int get queueNumber => throw _privateConstructorUsedError;
 
   /// Serializes this PenjualanModel to a JSON map.
@@ -84,7 +85,7 @@ abstract class $PenjualanModelCopyWith<$Res> {
       @JsonKey(name: 'discount_type') String discountType,
       @JsonKey(name: 'manual_discount_value') int manualDiscountValue,
       @JsonKey(name: 'remote_number') String? remoteNumber,
-      int queueNumber});
+      @JsonKey(name: 'queue_number') int queueNumber});
 }
 
 /// @nodoc
@@ -218,7 +219,7 @@ abstract class _$$PenjualanModelImplCopyWith<$Res>
       @JsonKey(name: 'discount_type') String discountType,
       @JsonKey(name: 'manual_discount_value') int manualDiscountValue,
       @JsonKey(name: 'remote_number') String? remoteNumber,
-      int queueNumber});
+      @JsonKey(name: 'queue_number') int queueNumber});
 }
 
 /// @nodoc
@@ -345,7 +346,7 @@ class _$PenjualanModelImpl implements _PenjualanModel {
       @JsonKey(name: 'discount_type') this.discountType = 'percent',
       @JsonKey(name: 'manual_discount_value') this.manualDiscountValue = 0,
       @JsonKey(name: 'remote_number') this.remoteNumber,
-      this.queueNumber = 0});
+      @JsonKey(name: 'queue_number') this.queueNumber = 0});
 
   factory _$PenjualanModelImpl.fromJson(Map<String, dynamic> json) =>
       _$$PenjualanModelImplFromJson(json);
@@ -399,7 +400,7 @@ class _$PenjualanModelImpl implements _PenjualanModel {
   @JsonKey(name: 'remote_number')
   final String? remoteNumber;
   @override
-  @JsonKey()
+  @JsonKey(name: 'queue_number')
   final int queueNumber;
 
   @override
@@ -485,23 +486,24 @@ class _$PenjualanModelImpl implements _PenjualanModel {
 
 abstract class _PenjualanModel implements PenjualanModel {
   const factory _PenjualanModel(
-      {@JsonKey(name: 'id_penjualan') final int idPenjualan,
-      @JsonKey(name: 'id_member') final int idMember,
-      @JsonKey(name: 'total_item') final int totalItem,
-      @JsonKey(name: 'total_harga') final int totalHarga,
-      final int diskon,
-      final int bayar,
-      final int diterima,
-      @JsonKey(name: 'id_user') final int idUser,
-      @JsonKey(name: 'created_at') final String? createdAt,
-      @JsonKey(name: 'updated_at') final String? updatedAt,
-      @JsonKey(name: 'id_pos') final String? idPos,
-      @JsonKey(name: 'order_type') final String? orderType,
-      @JsonKey(name: 'order_note') final String? orderNote,
-      @JsonKey(name: 'discount_type') final String discountType,
-      @JsonKey(name: 'manual_discount_value') final int manualDiscountValue,
-      @JsonKey(name: 'remote_number') final String? remoteNumber,
-      final int queueNumber}) = _$PenjualanModelImpl;
+          {@JsonKey(name: 'id_penjualan') final int idPenjualan,
+          @JsonKey(name: 'id_member') final int idMember,
+          @JsonKey(name: 'total_item') final int totalItem,
+          @JsonKey(name: 'total_harga') final int totalHarga,
+          final int diskon,
+          final int bayar,
+          final int diterima,
+          @JsonKey(name: 'id_user') final int idUser,
+          @JsonKey(name: 'created_at') final String? createdAt,
+          @JsonKey(name: 'updated_at') final String? updatedAt,
+          @JsonKey(name: 'id_pos') final String? idPos,
+          @JsonKey(name: 'order_type') final String? orderType,
+          @JsonKey(name: 'order_note') final String? orderNote,
+          @JsonKey(name: 'discount_type') final String discountType,
+          @JsonKey(name: 'manual_discount_value') final int manualDiscountValue,
+          @JsonKey(name: 'remote_number') final String? remoteNumber,
+          @JsonKey(name: 'queue_number') final int queueNumber}) =
+      _$PenjualanModelImpl;
 
   factory _PenjualanModel.fromJson(Map<String, dynamic> json) =
       _$PenjualanModelImpl.fromJson;
@@ -552,6 +554,7 @@ abstract class _PenjualanModel implements PenjualanModel {
   @JsonKey(name: 'remote_number')
   String? get remoteNumber;
   @override
+  @JsonKey(name: 'queue_number')
   int get queueNumber;
 
   /// Create a copy of PenjualanModel

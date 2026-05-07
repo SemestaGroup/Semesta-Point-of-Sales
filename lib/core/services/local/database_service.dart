@@ -62,10 +62,10 @@ class DatabaseService {
 
   Future<Database> _initDatabase() async {
     String path = join(await getDatabasesPath(), 'pos_database.db');
-    debugPrint('SQLite: Opening database at $path with version 39');
+    debugPrint('SQLite: Opening database at $path with version 40');
     return await openDatabase(
       path,
-      version: 39,
+      version: 40,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -450,6 +450,15 @@ class DatabaseService {
             'ALTER TABLE transactions ADD COLUMN tgl_bayar TEXT DEFAULT ""');
       } catch (e) { /* column might already exist */ }
     }
+
+    if (oldVersion < 40) {
+      try {
+        await db.execute('ALTER TABLE products ADD COLUMN parent TEXT');
+      } catch (e) { /* column might already exist */ }
+      try {
+        await db.execute('ALTER TABLE products ADD COLUMN children TEXT');
+      } catch (e) { /* column might already exist */ }
+    }
   }
 
   Future _onCreate(Database db, int version) async {
@@ -492,6 +501,8 @@ class DatabaseService {
         discount_total INTEGER DEFAULT 0,
         discount_type TEXT DEFAULT "percent",
         status TEXT DEFAULT "active",
+        parent TEXT,
+        children TEXT,
         is_synced INTEGER DEFAULT 1,
         FOREIGN KEY (id_kategori) REFERENCES categories (id_kategori),
         FOREIGN KEY (id_brand) REFERENCES brands (id_brand)

@@ -26,6 +26,8 @@ _$ProductModelImpl _$$ProductModelImplFromJson(Map<String, dynamic> json) =>
           json['discount_total'] == null ? 0 : _toInt(json['discount_total']),
       discountType: json['discount_type'] as String? ?? 'percent',
       status: json['status'] as String? ?? 'active',
+      parent: json['parent'] as String?,
+      children: json['children'] as String?,
     );
 
 Map<String, dynamic> _$$ProductModelImplToJson(_$ProductModelImpl instance) =>
@@ -47,4 +49,6 @@ Map<String, dynamic> _$$ProductModelImplToJson(_$ProductModelImpl instance) =>
       'discount_total': instance.discountTotal,
       'discount_type': instance.discountType,
       'status': instance.status,
+      'parent': instance.parent,
+      'children': instance.children,
     };

@@ -22,6 +22,8 @@ class ProductModel with _$ProductModel {
     @JsonKey(name: 'discount_total', fromJson: _toInt) @Default(0) int discountTotal,
     @JsonKey(name: 'discount_type') @Default('percent') String discountType,
     @Default('active') String status,
+    @JsonKey(name: 'parent') String? parent,
+    @JsonKey(name: 'children') String? children,
   }) = _ProductModel;
 
   factory ProductModel.fromJson(Map<String, dynamic> json) =>

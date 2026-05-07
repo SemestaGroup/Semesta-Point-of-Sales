@@ -204,6 +204,25 @@ class HomeScreen extends StatelessWidget {
                                 // Header: Full-width Search Bar & Profile Info
                                 Row(
                                   children: [
+                                    Obx(() => controller.currentParentId.value != null
+                                        ? GestureDetector(
+                                            onTap: () {
+                                              controller.searchFocusNode.unfocus();
+                                              controller.currentParentId.value = null;
+                                              controller.getProductData();
+                                            },
+                                            child: Container(
+                                              margin: EdgeInsets.only(right: 12.w),
+                                              padding: EdgeInsets.all(12.w),
+                                              decoration: BoxDecoration(
+                                                color: AppTheme.cardColor(context),
+                                                borderRadius: BorderRadius.circular(12.r),
+                                                border: Border.all(color: AppTheme.borderColor(context)),
+                                              ),
+                                              child: Icon(Icons.arrow_back, color: AppTheme.primaryColor),
+                                            ),
+                                          )
+                                        : const SizedBox.shrink()),
                                     Expanded(
                                       child: Container(
                                         height: 50.h,
@@ -222,6 +241,7 @@ class HomeScreen extends StatelessWidget {
                                           ],
                                         ),
                                         child: TextField(
+                                          controller: controller.searchProductController,
                                           focusNode: controller.searchFocusNode,
                                           onChanged: (value) =>
                                               controller.searchProduct(value),
@@ -314,7 +334,7 @@ class HomeScreen extends StatelessWidget {
                                                   return GestureDetector(
                                                     onTap: controller.isRefundMode.value
                                                         ? null
-                                                        : () => controller.addProduct(productItem),
+                                                        : () => controller.handleProductTap(productItem),
                                                     child: _buildProductItem(
                                                         context,
                                                         productItem,
@@ -1800,6 +1820,12 @@ class HomeScreen extends StatelessWidget {
     // Check if product has a discount
     final bool hasDiscount = productItem.discountTotal > 0;
 
+    // Check if product has children
+    final bool hasChildren = productItem.children != null && 
+                             productItem.children != "[]" && 
+                             productItem.children != "null" && 
+                             productItem.children!.isNotEmpty;
+
       return Container(
         decoration: BoxDecoration(
           color: AppTheme.cardColor(context),
@@ -1947,7 +1973,44 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
               ),
-            if (isSelected)
+            // MENU BADGE: shown when product is a parent
+            if (hasChildren)
+              Positioned(
+                top: 8.h,
+                right: 8.w,
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 4.h),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(6.r),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(CupertinoIcons.square_stack_3d_up_fill,
+                          size: 10.sp, color: Colors.white),
+                      SizedBox(width: 4.w),
+                      Text(
+                        'MENU',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontFamily: AppTheme.fontBold,
+                          fontSize: 9.sp,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            if (isSelected && !hasChildren)
               Positioned(
                 top: 8.h,
                 right: 8.w,

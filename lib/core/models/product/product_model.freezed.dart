@@ -51,6 +51,10 @@ mixin _$ProductModel {
   @JsonKey(name: 'discount_type')
   String get discountType => throw _privateConstructorUsedError;
   String get status => throw _privateConstructorUsedError;
+  @JsonKey(name: 'parent')
+  String? get parent => throw _privateConstructorUsedError;
+  @JsonKey(name: 'children')
+  String? get children => throw _privateConstructorUsedError;
 
   /// Serializes this ProductModel to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -85,7 +89,9 @@ abstract class $ProductModelCopyWith<$Res> {
       @JsonKey(name: 'order_types') String? orderTypes,
       @JsonKey(name: 'discount_total', fromJson: _toInt) int discountTotal,
       @JsonKey(name: 'discount_type') String discountType,
-      String status});
+      String status,
+      @JsonKey(name: 'parent') String? parent,
+      @JsonKey(name: 'children') String? children});
 }
 
 /// @nodoc
@@ -120,6 +126,8 @@ class _$ProductModelCopyWithImpl<$Res, $Val extends ProductModel>
     Object? discountTotal = null,
     Object? discountType = null,
     Object? status = null,
+    Object? parent = freezed,
+    Object? children = freezed,
   }) {
     return _then(_value.copyWith(
       idProduk: null == idProduk
@@ -190,6 +198,14 @@ class _$ProductModelCopyWithImpl<$Res, $Val extends ProductModel>
           ? _value.status
           : status // ignore: cast_nullable_to_non_nullable
               as String,
+      parent: freezed == parent
+          ? _value.parent
+          : parent // ignore: cast_nullable_to_non_nullable
+              as String?,
+      children: freezed == children
+          ? _value.children
+          : children // ignore: cast_nullable_to_non_nullable
+              as String?,
     ) as $Val);
   }
 }
@@ -219,7 +235,9 @@ abstract class _$$ProductModelImplCopyWith<$Res>
       @JsonKey(name: 'order_types') String? orderTypes,
       @JsonKey(name: 'discount_total', fromJson: _toInt) int discountTotal,
       @JsonKey(name: 'discount_type') String discountType,
-      String status});
+      String status,
+      @JsonKey(name: 'parent') String? parent,
+      @JsonKey(name: 'children') String? children});
 }
 
 /// @nodoc
@@ -252,6 +270,8 @@ class __$$ProductModelImplCopyWithImpl<$Res>
     Object? discountTotal = null,
     Object? discountType = null,
     Object? status = null,
+    Object? parent = freezed,
+    Object? children = freezed,
   }) {
     return _then(_$ProductModelImpl(
       idProduk: null == idProduk
@@ -322,6 +342,14 @@ class __$$ProductModelImplCopyWithImpl<$Res>
           ? _value.status
           : status // ignore: cast_nullable_to_non_nullable
               as String,
+      parent: freezed == parent
+          ? _value.parent
+          : parent // ignore: cast_nullable_to_non_nullable
+              as String?,
+      children: freezed == children
+          ? _value.children
+          : children // ignore: cast_nullable_to_non_nullable
+              as String?,
     ));
   }
 }
@@ -346,7 +374,9 @@ class _$ProductModelImpl implements _ProductModel {
       @JsonKey(name: 'order_types') this.orderTypes,
       @JsonKey(name: 'discount_total', fromJson: _toInt) this.discountTotal = 0,
       @JsonKey(name: 'discount_type') this.discountType = 'percent',
-      this.status = 'active'});
+      this.status = 'active',
+      @JsonKey(name: 'parent') this.parent,
+      @JsonKey(name: 'children') this.children});
 
   factory _$ProductModelImpl.fromJson(Map<String, dynamic> json) =>
       _$$ProductModelImplFromJson(json);
@@ -401,10 +431,16 @@ class _$ProductModelImpl implements _ProductModel {
   @override
   @JsonKey()
   final String status;
+  @override
+  @JsonKey(name: 'parent')
+  final String? parent;
+  @override
+  @JsonKey(name: 'children')
+  final String? children;
 
   @override
   String toString() {
-    return 'ProductModel(idProduk: $idProduk, idKategori: $idKategori, kodeProduk: $kodeProduk, namaProduk: $namaProduk, merk: $merk, hargaBeli: $hargaBeli, diskon: $diskon, hargaJual: $hargaJual, stok: $stok, img: $img, createdAt: $createdAt, updatedAt: $updatedAt, namaKategori: $namaKategori, orderTypes: $orderTypes, discountTotal: $discountTotal, discountType: $discountType, status: $status)';
+    return 'ProductModel(idProduk: $idProduk, idKategori: $idKategori, kodeProduk: $kodeProduk, namaProduk: $namaProduk, merk: $merk, hargaBeli: $hargaBeli, diskon: $diskon, hargaJual: $hargaJual, stok: $stok, img: $img, createdAt: $createdAt, updatedAt: $updatedAt, namaKategori: $namaKategori, orderTypes: $orderTypes, discountTotal: $discountTotal, discountType: $discountType, status: $status, parent: $parent, children: $children)';
   }
 
   @override
@@ -440,30 +476,36 @@ class _$ProductModelImpl implements _ProductModel {
                 other.discountTotal == discountTotal) &&
             (identical(other.discountType, discountType) ||
                 other.discountType == discountType) &&
-            (identical(other.status, status) || other.status == status));
+            (identical(other.status, status) || other.status == status) &&
+            (identical(other.parent, parent) || other.parent == parent) &&
+            (identical(other.children, children) ||
+                other.children == children));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(
-      runtimeType,
-      idProduk,
-      idKategori,
-      kodeProduk,
-      namaProduk,
-      merk,
-      hargaBeli,
-      diskon,
-      hargaJual,
-      stok,
-      img,
-      createdAt,
-      updatedAt,
-      namaKategori,
-      orderTypes,
-      discountTotal,
-      discountType,
-      status);
+  int get hashCode => Object.hashAll([
+        runtimeType,
+        idProduk,
+        idKategori,
+        kodeProduk,
+        namaProduk,
+        merk,
+        hargaBeli,
+        diskon,
+        hargaJual,
+        stok,
+        img,
+        createdAt,
+        updatedAt,
+        namaKategori,
+        orderTypes,
+        discountTotal,
+        discountType,
+        status,
+        parent,
+        children
+      ]);
 
   /// Create a copy of ProductModel
   /// with the given fields replaced by the non-null parameter values.
@@ -500,7 +542,9 @@ abstract class _ProductModel implements ProductModel {
       @JsonKey(name: 'discount_total', fromJson: _toInt)
       final int discountTotal,
       @JsonKey(name: 'discount_type') final String discountType,
-      final String status}) = _$ProductModelImpl;
+      final String status,
+      @JsonKey(name: 'parent') final String? parent,
+      @JsonKey(name: 'children') final String? children}) = _$ProductModelImpl;
 
   factory _ProductModel.fromJson(Map<String, dynamic> json) =
       _$ProductModelImpl.fromJson;
@@ -553,6 +597,12 @@ abstract class _ProductModel implements ProductModel {
   String get discountType;
   @override
   String get status;
+  @override
+  @JsonKey(name: 'parent')
+  String? get parent;
+  @override
+  @JsonKey(name: 'children')
+  String? get children;
 
   /// Create a copy of ProductModel
   /// with the given fields replaced by the non-null parameter values.

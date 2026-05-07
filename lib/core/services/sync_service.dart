@@ -1114,6 +1114,8 @@ class SyncService extends GetxService {
               'discount_total': _toInt(item['discount_total']),
               'discount_type': item['discount_type']?.toString() ?? 'percent',
               'status': item['status']?.toString() ?? 'active',
+              'parent': item['parent']?.toString(),
+              'children': item['children']?.toString(),
               'is_synced': 1,
             },
             conflictAlgorithm: ConflictAlgorithm.replace);

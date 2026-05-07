@@ -287,18 +287,140 @@ path: api/
     "status": true,
     "items": [
         {
-            "id": "98",
+            "id": "159",
             "brand_id": "30",
-            "category_id": "23",
-            "name": "A bite caramel popcorn waffle",
-            "description": "A bite caramel popcorn waffle",
-            "price": "20000.00",
+            "category_id": "31",
+            "name": "Cookies Sundae",
+            "description": "",
+            "price": "16000.00",
             "cost": "0.00",
-            "discount_total": "4.00",
+            "discount_total": "0.00",
             "discount_type": "percent",
-            "order_types": "[{\"dinein\":\"20000\"},{\"gofood\":\"26000\"},{\"shopeefood\":\"26000\"},{\"grabfood\":\"26000\"},{\"tiktok\":\"26000\"}]",
-            "sku": "100074",
-            "barcode": "68113735194",
+            "order_types": [
+                {
+                    "dinein": "16000"
+                },
+                {
+                    "gofood": "20800"
+                },
+                {
+                    "shopeefood": "20800"
+                },
+                {
+                    "grabfood": "20800"
+                },
+                {
+                    "tiktok": "20800"
+                }
+            ],
+            "sku": "X-00411",
+            "barcode": "77606429771",
+            "stock_quantity": "0",
+            "min_stock_level": "0",
+            "image_url": "",
+            "tax_rate": "0.00",
+            "locations": "",
+            "units": {
+                "main_unit": "",
+                "main_price": "",
+                "additional_units": []
+            },
+            "is_available": "yes",
+            "sort_order": "0",
+            "status": "active",
+            "parent": null,
+            "children": null,
+            "created_at": "2026-05-04 15:37:14",
+            "updated_at": "2026-05-04 15:37:14",
+            "group_names": [
+                {
+                    "id": "30",
+                    "name": "XIE XIE ICE CREAM"
+                }
+            ]
+        },
+        {
+            "id": "223",
+            "brand_id": "30",
+            "category_id": "7",
+            "name": "Happy",
+            "description": "",
+            "price": "16000.00",
+            "cost": "0.00",
+            "discount_total": "0.00",
+            "discount_type": "percent",
+            "order_types": [
+                {
+                    "dinein": "16000"
+                },
+                {
+                    "gofood": "16000"
+                },
+                {
+                    "shopeefood": "16000"
+                },
+                {
+                    "grabfood": "16000"
+                },
+                {
+                    "tiktok": "16000"
+                }
+            ],
+            "sku": "X-00575",
+            "barcode": "97923513351",
+            "stock_quantity": "0",
+            "min_stock_level": "0",
+            "image_url": "",
+            "tax_rate": "0.00",
+            "locations": "",
+            "units": {
+                "main_unit": "",
+                "main_price": "",
+                "additional_units": []
+            },
+            "is_available": "yes",
+            "sort_order": "0",
+            "status": "active",
+            "parent": null,
+            "children": "[572,573,574]",
+            "created_at": "2026-05-07 11:20:44",
+            "updated_at": "2026-05-07 11:20:44",
+            "group_names": [
+                {
+                    "id": "30",
+                    "name": "XIE XIE ICE CREAM"
+                }
+            ]
+        },
+        {
+            "id": "572",
+            "brand_id": "30",
+            "category_id": "7",
+            "name": "Happy-Nut",
+            "description": "",
+            "price": "16000.00",
+            "cost": "16000.00",
+            "discount_total": "0.00",
+            "discount_type": "",
+            "order_types": [
+                {
+                    "dinein": "16000.00"
+                },
+                {
+                    "gofood": "16000.00"
+                },
+                {
+                    "shopeefood": "16000.00"
+                },
+                {
+                    "grabfood": "16000.00"
+                },
+                {
+                    "tiktok": "16000.00"
+                }
+            ],
+            "sku": "X-00572",
+            "barcode": "34189251276",
             "stock_quantity": "0",
             "min_stock_level": "0",
             "image_url": "",
@@ -307,9 +429,11 @@ path: api/
             "units": "",
             "is_available": "yes",
             "sort_order": "0",
-            "status": "inactive",
-            "created_at": "2026-04-11 09:16:14",
-            "updated_at": "2026-04-13 08:16:34",
+            "status": "active",
+            "parent": "223",
+            "children": "[]",
+            "created_at": "2026-05-07 11:20:44",
+            "updated_at": "2026-05-07 11:20:44",
             "group_names": [
                 {
                     "id": "30",
