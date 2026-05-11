@@ -16,6 +16,7 @@ class StaffSelectionView extends GetView<AuthController> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       backgroundColor: AppTheme.scaffoldBackgroundColor(context),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -438,7 +439,7 @@ class StaffSelectionView extends GetView<AuthController> {
             ),
             SizedBox(height: 24.h),
             Text(
-              'Tambah Staff',
+              'Add Staff',
               style: TextStyle(
                 fontFamily: AppTheme.fontBold,
                 fontSize: 18.sp,
@@ -474,110 +475,303 @@ class StaffSelectionView extends GetView<AuthController> {
     final pinCtrl = TextEditingController();
     final selectedRole = '2'.obs; // Default: Cashier
     final roleLabels = {'1': 'Owner', '2': 'Cashier', '3': 'Kitchen', '4': 'Supervisor'};
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     Get.dialog(
       Dialog(
         backgroundColor: Colors.transparent,
-        insetPadding: EdgeInsets.symmetric(horizontal: 60.w, vertical: 40.h),
+        insetPadding: EdgeInsets.symmetric(horizontal: 60.w, vertical: 24.h),
         child: Container(
-          width: 480.w,
-          padding: EdgeInsets.all(32.w),
+          width: 520.w,
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
           decoration: BoxDecoration(
             color: AppTheme.cardColor(context),
-            borderRadius: BorderRadius.circular(24.r),
+            borderRadius: BorderRadius.circular(28.r),
             boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 30, offset: const Offset(0, 10)),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.15),
+                blurRadius: 40,
+                offset: const Offset(0, 16),
+              ),
             ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            child: Padding(
+              padding: EdgeInsets.all(32.w),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Tambah Staff Baru', style: TextStyle(fontFamily: AppTheme.fontBold, fontSize: 22.sp, color: AppTheme.textColor(context))),
-                  IconButton(onPressed: () => Get.back(), icon: const Icon(Icons.close, color: Colors.grey)),
+                  // Header
+                  Row(
+                    children: [
+                      Container(
+                        width: 48.w,
+                        height: 48.w,
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(14.r),
+                        ),
+                        child: Icon(Icons.person_add_alt_1_rounded, color: AppTheme.primaryColor, size: 24.sp),
+                      ),
+                      SizedBox(width: 16.w),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Add New Staff',
+                              style: TextStyle(
+                                fontFamily: AppTheme.fontBold,
+                                fontSize: 20.sp,
+                                color: AppTheme.textColor(context),
+                              ),
+                            ),
+                            SizedBox(height: 2.h),
+                            Text(
+                              'Fill in the details to create a new account',
+                              style: TextStyle(
+                                fontFamily: AppTheme.fontRegular,
+                                fontSize: 12.sp,
+                                color: AppTheme.secondaryTextColor(context),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Get.back(),
+                        icon: Icon(Icons.close_rounded, color: AppTheme.secondaryTextColor(context), size: 20.sp),
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppTheme.borderColor(context).withValues(alpha: 0.5),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.r)),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  SizedBox(height: 28.h),
+                  Divider(height: 1, color: AppTheme.borderColor(context)),
+                  SizedBox(height: 24.h),
+
+                  // First Name
+                  _buildDialogFieldLabel(context, 'First Name', required: true),
+                  SizedBox(height: 8.h),
+                  _buildDialogTextField(
+                    context,
+                    controller: firstnameCtrl,
+                    hint: 'e.g. John',
+                    icon: CupertinoIcons.person,
+                  ),
+
+                  SizedBox(height: 18.h),
+
+                  // Last Name
+                  _buildDialogFieldLabel(context, 'Last Name', required: false),
+                  SizedBox(height: 8.h),
+                  _buildDialogTextField(
+                    context,
+                    controller: lastnameCtrl,
+                    hint: 'e.g. Doe (optional)',
+                    icon: CupertinoIcons.person,
+                  ),
+
+                  SizedBox(height: 18.h),
+
+                  // PIN
+                  _buildDialogFieldLabel(context, 'PIN', required: false),
+                  SizedBox(height: 8.h),
+                  _buildDialogTextField(
+                    context,
+                    controller: pinCtrl,
+                    hint: 'Leave blank to use 0000',
+                    icon: CupertinoIcons.lock,
+                    keyboardType: TextInputType.number,
+                    obscureText: true,
+                    maxLength: 6,
+                  ),
+
+                  SizedBox(height: 18.h),
+
+                  // Role
+                  _buildDialogFieldLabel(context, 'Role', required: false),
+                  SizedBox(height: 8.h),
+                  Obx(() => Container(
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(14.r),
+                      border: Border.all(color: AppTheme.borderColor(context)),
+                    ),
+                    child: DropdownButtonFormField<String>(
+                      initialValue: selectedRole.value,
+                      decoration: InputDecoration(
+                        prefixIcon: Icon(CupertinoIcons.shield, size: 18.sp, color: AppTheme.secondaryTextColor(context)),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 14.h),
+                      ),
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontMedium,
+                        fontSize: 14.sp,
+                        color: AppTheme.textColor(context),
+                      ),
+                      dropdownColor: AppTheme.cardColor(context),
+                      items: roleLabels.entries
+                          .map((e) => DropdownMenuItem(
+                                value: e.key,
+                                child: Text(e.value, style: TextStyle(fontFamily: AppTheme.fontMedium)),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) selectedRole.value = val;
+                      },
+                    ),
+                  )),
+
+                  SizedBox(height: 32.h),
+
+                  // Action buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Get.back(),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.secondaryTextColor(context),
+                            side: BorderSide(color: AppTheme.borderColor(context)),
+                            padding: EdgeInsets.symmetric(vertical: 14.h),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14.r)),
+                          ),
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(fontFamily: AppTheme.fontMedium, fontSize: 15.sp),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 12.w),
+                      Expanded(
+                        flex: 2,
+                        child: Obx(() => ElevatedButton(
+                          onPressed: controller.isAddingStaff.value
+                              ? null
+                              : () async {
+                                  if (firstnameCtrl.text.trim().isEmpty) {
+                                    Get.snackbar(
+                                      'Required Field',
+                                      'First name is required.',
+                                      backgroundColor: Colors.orange.shade600,
+                                      colorText: Colors.white,
+                                    );
+                                    return;
+                                  }
+                                  await controller.addStaff(
+                                    firstname: firstnameCtrl.text.trim(),
+                                    lastname: lastnameCtrl.text.trim().isEmpty ? null : lastnameCtrl.text.trim(),
+                                    roleId: selectedRole.value,
+                                    pin: pinCtrl.text.isEmpty ? '0000' : pinCtrl.text,
+                                  );
+                                  Get.back();
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryColor,
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: AppTheme.primaryColor.withValues(alpha: 0.5),
+                            padding: EdgeInsets.symmetric(vertical: 14.h),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14.r)),
+                          ),
+                          child: controller.isAddingStaff.value
+                              ? SizedBox(
+                                  width: 20.w,
+                                  height: 20.w,
+                                  child: const CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.person_add_alt_1_rounded, size: 18.sp),
+                                    SizedBox(width: 8.w),
+                                    Text(
+                                      'Add Staff',
+                                      style: TextStyle(fontFamily: AppTheme.fontBold, fontSize: 15.sp),
+                                    ),
+                                  ],
+                                ),
+                        )),
+                      ),
+                    ],
+                  ),
                 ],
               ),
-              SizedBox(height: 24.h),
-              TextField(
-                controller: firstnameCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Nama Depan *',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.r)),
-                  prefixIcon: const Icon(Icons.person_outline),
-                ),
-              ),
-              SizedBox(height: 16.h),
-              TextField(
-                controller: lastnameCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Nama Belakang (opsional)',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.r)),
-                  prefixIcon: const Icon(Icons.person_outline),
-                ),
-              ),
-              SizedBox(height: 16.h),
-              TextField(
-                controller: pinCtrl,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: 'PIN (default: 0000)',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.r)),
-                  prefixIcon: const Icon(Icons.lock_outline),
-                ),
-              ),
-              SizedBox(height: 16.h),
-              Obx(() => DropdownButtonFormField<String>(
-                initialValue: selectedRole.value,
-                decoration: InputDecoration(
-                  labelText: 'Role',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.r)),
-                  prefixIcon: const Icon(Icons.badge_outlined),
-                ),
-                items: roleLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
-                onChanged: (val) { if (val != null) selectedRole.value = val; },
-              )),
-              SizedBox(height: 28.h),
-              Obx(() => SizedBox(
-                width: double.infinity,
-                height: 52.h,
-                child: ElevatedButton(
-                  onPressed: controller.isAddingStaff.value
-                    ? null
-                    : () async {
-                        if (firstnameCtrl.text.trim().isEmpty) {
-                          Get.snackbar('Perhatian', 'Nama depan harus diisi.',
-                              backgroundColor: Colors.orange.shade600, colorText: Colors.white);
-                          return;
-                        }
-                        await controller.addStaff(
-                          firstname: firstnameCtrl.text,
-                          lastname: lastnameCtrl.text.isEmpty ? null : lastnameCtrl.text,
-                          roleId: selectedRole.value,
-                          pin: pinCtrl.text.isEmpty ? '0000' : pinCtrl.text,
-                        );
-                        Get.back();
-                      },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14.r)),
-                    elevation: 0,
-                  ),
-                  child: controller.isAddingStaff.value
-                    ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-                    : Text('Tambahkan Staff', style: TextStyle(fontFamily: AppTheme.fontBold, fontSize: 16.sp)),
-                ),
-              )),
-            ],
+            ),
           ),
         ),
       ),
       barrierDismissible: true,
+    );
+  }
+
+  Widget _buildDialogFieldLabel(BuildContext context, String label, {bool required = false}) {
+    return Row(
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontFamily: AppTheme.fontMedium,
+            fontSize: 13.sp,
+            color: AppTheme.textColor(context),
+          ),
+        ),
+        if (required) ...[
+          SizedBox(width: 4.w),
+          Text(
+            '*',
+            style: TextStyle(color: Colors.red, fontSize: 13.sp),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildDialogTextField(
+    BuildContext context, {
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    TextInputType? keyboardType,
+    bool obscureText = false,
+    int? maxLength,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(14.r),
+        border: Border.all(color: AppTheme.borderColor(context)),
+      ),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        obscureText: obscureText,
+        maxLength: maxLength,
+        style: TextStyle(
+          fontFamily: AppTheme.fontMedium,
+          fontSize: 14.sp,
+          color: AppTheme.textColor(context),
+        ),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(
+            fontFamily: AppTheme.fontRegular,
+            fontSize: 14.sp,
+            color: AppTheme.secondaryTextColor(context),
+          ),
+          prefixIcon: Icon(icon, size: 18.sp, color: AppTheme.secondaryTextColor(context)),
+          border: InputBorder.none,
+          counterText: '',
+          contentPadding: EdgeInsets.symmetric(vertical: 14.h),
+        ),
+      ),
     );
   }
 }

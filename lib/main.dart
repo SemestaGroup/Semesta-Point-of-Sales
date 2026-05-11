@@ -89,6 +89,9 @@ class MainApp extends StatelessWidget {
   Widget build(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       requestBluetoothPermissions();
+      if (Get.isRegistered<SettingController>()) {
+        Get.find<SettingController>().checkUpdateBackground();
+      }
     });
 
     WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();

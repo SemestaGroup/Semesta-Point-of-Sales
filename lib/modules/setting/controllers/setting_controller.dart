@@ -22,6 +22,8 @@ import 'package:semesta_pos/core/services/local/database_service.dart';
 import 'package:semesta_pos/core/models/shift/shift_model.dart';
 import 'package:semesta_pos/modules/home/employee/controllers/shift_controller.dart';
 import 'package:semesta_pos/core/services/error_log_service.dart';
+import 'package:semesta_pos/modules/dashboard/employee/controllers/dashboard_employee_controller.dart';
+import 'package:semesta_pos/modules/dashboard/admin/controllers/dashboard_admin_controller.dart';
 
 class SettingController extends GetxController {
   ApiService get apiService {
@@ -52,6 +54,12 @@ class SettingController extends GetxController {
 
   RxBool isCheckingUpdate = false.obs;
   RxDouble downloadProgress = 0.0.obs;
+
+  RxBool hasUpdateAvailable = false.obs;
+  String cachedMasterVersion = "";
+  String cachedMasterApkUrl = "";
+  String cachedMasterChangelog = "";
+
   UserService get userService {
     if (!Get.isRegistered<UserService>()) {
       Get.put(UserService(), permanent: true);
@@ -1020,6 +1028,114 @@ class SettingController extends GetxController {
     } finally {
       isCheckingUpdate.value = false;
     }
+  }
+
+  Future<void> checkUpdateBackground() async {
+    try {
+      final masterResponse = await http.get(
+        Uri.parse('https://manajemenpondok.com/api/pos_options'),
+        headers: {'authtoken': userService.getAuthToken()},
+      ).timeout(const Duration(seconds: 15));
+      if (masterResponse.statusCode == 200) {
+        final masterData = jsonDecode(masterResponse.body);
+        if (masterData['status'] == true) {
+          final masterVersion = masterData['data']['version']?.toString() ?? "";
+          final masterPosPath =
+              masterData['data']['pos_path']?.toString() ?? "";
+          final masterChangelog =
+              masterData['data']['changelog']?.toString() ?? "";
+
+          final optionsApi = await apiService.getPosOptions();
+          String tenantVersion = "";
+          if (optionsApi.responsestate == Constants.successState &&
+              optionsApi.data != null) {
+            Map<String, dynamic> rawOptions = {};
+            if (optionsApi.data is Map) {
+              rawOptions = optionsApi.data as Map<String, dynamic>;
+            } else if (optionsApi.data is List) {
+              final list = optionsApi.data as List;
+              for (var item in list) {
+                if (item is Map) {
+                  if (item.containsKey('option_name') && item.containsKey('option_value')) {
+                    rawOptions[item['option_name'].toString()] = item['option_value'];
+                  } else {
+                    rawOptions.addAll(Map<String, dynamic>.from(item));
+                  }
+                }
+              }
+            }
+            final options = rawOptions.map((key, value) => MapEntry(key.trim(), value));
+            tenantVersion = options['version']?.toString() ?? options['pos_version']?.toString() ?? "";
+          }
+          
+          if (tenantVersion.isEmpty) {
+            tenantVersion = companyVersionFieldController.text.trim();
+          }
+
+          if (tenantVersion.isNotEmpty && masterVersion.isNotEmpty && tenantVersion != masterVersion) {
+            hasUpdateAvailable.value = true;
+            cachedMasterVersion = masterVersion;
+            cachedMasterApkUrl = masterPosPath;
+            cachedMasterChangelog = masterChangelog;
+            _showBackgroundUpdateDialog();
+          } else {
+            hasUpdateAvailable.value = false;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('checkUpdateBackground error: $e');
+    }
+  }
+
+  void _showBackgroundUpdateDialog() {
+    Get.dialog(
+      AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
+        backgroundColor: AppTheme.cardColor(Get.context!),
+        title: Row(
+          children: [
+            const Icon(Icons.system_update, color: AppTheme.primaryColor),
+            SizedBox(width: 8.w),
+            Text('Update Available',
+                style: TextStyle(
+                    fontFamily: AppTheme.fontBold,
+                    fontSize: 18.sp,
+                    color: AppTheme.textColor(Get.context!))),
+          ],
+        ),
+        content: Text('A new update ($cachedMasterVersion) is available. Do you want to go to settings to update?',
+            style: TextStyle(color: AppTheme.textColor(Get.context!))),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Get.back();
+            },
+            child: const Text('Later',
+                style: TextStyle(
+                    color: Colors.grey, fontFamily: AppTheme.fontMedium)),
+          ),
+          TextButton(
+            onPressed: () {
+              Get.back();
+              if (Get.isRegistered<DashboardEmployeeController>()) {
+                Get.find<DashboardEmployeeController>().stateSelectedIndex.value = 6;
+              } else if (Get.isRegistered<DashboardAdminController>()) {
+                Get.find<DashboardAdminController>().stateSelectedIndex.value = 6;
+              } else {
+                Get.toNamed('/setting');
+              }
+            },
+            child: const Text('Update',
+                style: TextStyle(
+                    color: AppTheme.primaryColor,
+                    fontFamily: AppTheme.fontBold)),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
   }
 
   void _showUpdateDialog(String version, String changelog, String apkUrl) {

@@ -115,8 +115,9 @@ class SettingScreen extends GetView<SettingController> {
                                         icon:
                                             CupertinoIcons.cloud_download_fill,
                                         title: 'Check for Updates',
-                                        subtitle:
-                                            'Check for legacy app updates',
+                                        subtitle: controller.hasUpdateAvailable.value 
+                                            ? '1 update available' 
+                                            : 'Check for legacy app updates',
                                         trailing: controller
                                                 .isCheckingUpdate.value
                                             ? SizedBox(
