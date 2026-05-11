@@ -158,9 +158,23 @@ class AuthController extends GetxController {
             await txn.delete('staff'); 
             
             for (var staff in remoteStaffList) {
-              await txn.insert('staff', staff.toJson(), conflictAlgorithm: ConflictAlgorithm.replace);
+              final staffId = staff.id != null ? int.tryParse(staff.id.toString()) : null;
+              final row = <String, dynamic>{
+                'firstname': staff.firstname ?? '',
+                'lastname': staff.lastname ?? '',
+                'email': staff.email ?? '',
+                'phonenumber': staff.phonenumber ?? '',
+                'role': staff.role ?? '',
+                'active': staff.active ?? '1',
+                'password': staff.password ?? '',
+                'pin': staff.pin ?? '',
+              };
+              if (staffId != null && staffId > 0) row['id'] = staffId;
+              await txn.insert('staff', row, conflictAlgorithm: ConflictAlgorithm.replace);
             }
           });
+          
+          await fetchLocalStaff();
           debugPrint('AuthController: Staff sync completed');
         }
         

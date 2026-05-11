@@ -100,8 +100,8 @@ class ReportController extends GetxController {
     // Automatically pull latest credit notes when opening reports
     if (Get.isRegistered<SyncService>()) {
       Get.find<SyncService>().pullCreditNotes().then((_) {
-        // Refresh orders if credit notes were updated
-        getOrders();
+        // Refresh orders silently if credit notes were updated
+        getOrders(silent: true);
       }).catchError((e) {
         debugPrint("ReportController: Failed to pull credit notes: $e");
         // No snackbar here to avoid annoyance on every page load
@@ -116,6 +116,8 @@ class ReportController extends GetxController {
           if (paymentModes.length <= 1) {
             loadPaymentModes();
           }
+          // Refresh orders silently on sync complete
+          getOrders(silent: true);
         }
       });
     }
@@ -161,9 +163,9 @@ class ReportController extends GetxController {
   }
 
   // --- ORDER HISTORY LOCAL LOGIC (MIGRATED) ---
-  Future<void> getOrders() async {
+  Future<void> getOrders({bool silent = false}) async {
     try {
-      isLoading.value = true;
+      if (!silent) isLoading.value = true;
       String startDate = startDateController.text;
       String endDate = endDateController.text;
 
@@ -248,11 +250,11 @@ class ReportController extends GetxController {
 
       await getTopProducts(startDate, endDate);
 
-      isLoading.value = false;
+      if (!silent) isLoading.value = false;
     } catch (e) {
-      isLoading.value = false;
+      if (!silent) isLoading.value = false;
       debugPrint('ReportController getOrders error: $e');
-      Get.snackbar("Error", "Koneksi bermasalah. Gagal memuat data dari server.");
+      Get.snackbar("Error", "Koneksi bermasalah. Gagal memuat data dari DB: $e");
     }
   }
 

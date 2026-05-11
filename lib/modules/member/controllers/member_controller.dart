@@ -43,6 +43,16 @@ class MemberController extends GetxController {
     namaMemberController.addListener(() {
       tempNama.value = namaMemberController.text;
     });
+
+    // Auto-refresh when background sync finishes
+    if (Get.isRegistered<SyncService>()) {
+      ever(Get.find<SyncService>().syncStatus, (String status) {
+        if (status == "Sync Complete" || status.contains("Updated")) {
+          // fetch from sqlite quietly without loading spinner
+          getMember(silent: true);
+        }
+      });
+    }
   }
 
   Future<void> refreshRemotePoints() async {
@@ -113,8 +123,8 @@ class MemberController extends GetxController {
     updatePagination();
   }
 
-  Future<void> getMember() async {
-    isLoading.value = true;
+  Future<void> getMember({bool silent = false}) async {
+    if (!silent) isLoading.value = true;
     try {
       final List<Map<String, dynamic>> results =
           await _dbService.query('members');
@@ -130,7 +140,7 @@ class MemberController extends GetxController {
           backgroundColor: Colors.red.withValues(alpha: 0.1),
           icon: const Icon(Icons.error, color: Colors.red));
     } finally {
-      isLoading.value = false;
+      if (!silent) isLoading.value = false;
     }
   }
 

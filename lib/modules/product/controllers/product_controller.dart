@@ -7,6 +7,7 @@ import 'package:semesta_pos/core/services/remote/api_service.dart';
 import 'package:semesta_pos/core/util/constans.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
 import 'package:semesta_pos/core/services/local/database_service.dart';
+import 'package:semesta_pos/core/services/sync_service.dart';
 
 class ProductController extends GetxController {
   DatabaseService get _dbService => Get.find<DatabaseService>();
@@ -32,10 +33,22 @@ class ProductController extends GetxController {
   int productId = 0;
   ProductModel productModel = const ProductModel();
 
-  Future<void> getProductData() async {
+  @override
+  void onInit() {
+    super.onInit();
+    // Auto-refresh when background sync finishes
+    if (Get.isRegistered<SyncService>()) {
+      ever(Get.find<SyncService>().syncStatus, (String status) {
+        if (status == "Sync Complete" || status.contains("Updated")) {
+          getProductData(silent: true);
+        }
+      });
+    }
+  }
+
+  Future<void> getProductData({bool silent = false}) async {
     try {
-      productModelList.clear();
-      isLoadingProduct.value = true;
+      if (!silent) isLoadingProduct.value = true;
       final List<Map<String, dynamic>> results =
           await _dbService.query('products');
       productModelList.value = results.map((e) {
@@ -61,7 +74,7 @@ class ProductController extends GetxController {
     } catch (e) {
       Get.snackbar('Error', 'Gagal memuat data produk lokal: $e');
     } finally {
-      isLoadingProduct.value = false;
+      if (!silent) isLoadingProduct.value = false;
     }
   }
 

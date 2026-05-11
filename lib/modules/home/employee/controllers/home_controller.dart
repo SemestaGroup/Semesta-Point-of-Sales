@@ -149,6 +149,9 @@ class HomeController extends GetxController {
           if (allPaymentModes.isEmpty || cashlessPaymentModes.isEmpty) {
             fetchPaymentModes();
           }
+          // Refresh catalog and members seamlessly
+          getProductData(silent: true);
+          getMember(silent: true);
         }
       });
     }
@@ -246,10 +249,10 @@ class HomeController extends GetxController {
     }
   }
 
-  Future<void> getProductData() async {
+  Future<void> getProductData({bool silent = false}) async {
     try {
       productModelList.clear();
-      isLoadingProduct.value = true;
+      if (!silent) isLoadingProduct.value = true;
 
       // Only show brands that have at least one active product
       final activeBrandRows = await _dbService.rawQuery(
@@ -1149,8 +1152,8 @@ class HomeController extends GetxController {
     _resetPOSUIState();
   }
 
-  Future<void> getMember() async {
-    isLoadingMember.value = true;
+  Future<void> getMember({bool silent = false}) async {
+    if (!silent) isLoadingMember.value = true;
     try {
       final List<Map<String, dynamic>> results =
           await _dbService.query('members');
@@ -1161,7 +1164,7 @@ class HomeController extends GetxController {
     } catch (e) {
       debugPrint('HomeController: Error loading members from SQLite: $e');
     } finally {
-      isLoadingMember.value = false;
+      if (!silent) isLoadingMember.value = false;
     }
   }
 

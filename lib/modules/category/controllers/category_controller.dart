@@ -11,9 +11,22 @@ class CategoryController extends GetxController {
   RxBool isLoadingStore = false.obs;
   TextEditingController controllerNamaKategori = TextEditingController();
 
-  Future<void> getCategory() async {
+  @override
+  void onInit() {
+    super.onInit();
+    // Auto-refresh when background sync finishes
+    if (Get.isRegistered<SyncService>()) {
+      ever(Get.find<SyncService>().syncStatus, (String status) {
+        if (status == "Sync Complete" || status.contains("Updated")) {
+          getCategory(silent: true);
+        }
+      });
+    }
+  }
+
+  Future<void> getCategory({bool silent = false}) async {
     try {
-      isLoading.value = true;
+      if (!silent) isLoading.value = true;
       final List<Map<String, dynamic>> results =
           await _dbService.query('categories');
       categoryModelList.value =
@@ -24,7 +37,7 @@ class CategoryController extends GetxController {
     } catch (e) {
       Get.snackbar('Error', 'Gagal memuat data kategori lokal: $e');
     } finally {
-      isLoading.value = false;
+      if (!silent) isLoading.value = false;
     }
   }
 
