@@ -2476,28 +2476,30 @@ class HomeScreen extends StatelessWidget {
                 // Actions
                 Row(
                   children: [
-                    Expanded(
-                      flex: 2,
-                      child: OutlinedButton.icon(
-                        icon: const Icon(CupertinoIcons.trash, size: 18),
-                        onPressed: () {
-                          controller.removeItemCart(index);
-                          Get.back();
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red,
-                          side: const BorderSide(color: Colors.red),
-                          padding: EdgeInsets.symmetric(vertical: 16.h),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12.r)),
+                    if (!controller.isRefundMode.value) ...[
+                      Expanded(
+                        flex: 2,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(CupertinoIcons.trash, size: 18),
+                          onPressed: () {
+                            controller.removeItemCart(index);
+                            Get.back();
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            side: const BorderSide(color: Colors.red),
+                            padding: EdgeInsets.symmetric(vertical: 16.h),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12.r)),
+                          ),
+                          label: Text("Delete",
+                              style: TextStyle(
+                                  fontFamily: AppTheme.fontBold,
+                                  fontSize: 16.sp)),
                         ),
-                        label: Text("Delete",
-                            style: TextStyle(
-                                fontFamily: AppTheme.fontBold,
-                                fontSize: 16.sp)),
                       ),
-                    ),
-                    SizedBox(width: 12.w),
+                      SizedBox(width: 12.w),
+                    ],
                     Expanded(
                       flex: 3,
                       child: ElevatedButton(

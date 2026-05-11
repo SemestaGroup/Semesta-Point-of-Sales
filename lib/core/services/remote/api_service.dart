@@ -1236,7 +1236,7 @@ class ApiService extends GetxService {
     try {
       final responseApi = await http.get(_getUri(EndPoint.posStaff), headers: _getAuthHeaders());
       if (responseApi.statusCode == 200) {
-        dynamic dataResponse; try { dataResponse = jsonDecode(responseApi.body); } catch (_) { debugPrint('storePosOrder Invalid JSON: '); String errorMsg = 'Server Error: '; if (responseApi.body.contains('<p>')) { final RegExp exp = RegExp(r'<p>(.*?)<\/p>'); final match = exp.firstMatch(responseApi.body); if (match != null) errorMsg = match.group(1) ?? errorMsg; } return ResponseApiModel(message: errorMsg, responsestate: Constants.serverErrState, data: null); }
+        dynamic dataResponse; try { dataResponse = jsonDecode(responseApi.body); } catch (_) { debugPrint('getStaff Invalid JSON: ${responseApi.body}'); String errorMsg = 'Server Error: '; if (responseApi.body.contains('<p>')) { final RegExp exp = RegExp(r'<p>(.*?)<\/p>'); final match = exp.firstMatch(responseApi.body); if (match != null) errorMsg = match.group(1) ?? errorMsg; } return ResponseApiModel(message: errorMsg, responsestate: Constants.serverErrState, data: null); }
         List rawList = [];
         if (dataResponse is List) {
           rawList = dataResponse;
@@ -1267,29 +1267,56 @@ class ApiService extends GetxService {
   Future<ResponseApiModel> createStaff(Map<String, dynamic> data) async {
     final uri = _getUri(EndPoint.posStaff);
     try {
-      final responseApi = await http.post(
-        uri,
-        headers: _getAuthHeaders(),
-        body: jsonEncode(data),
-      );
-      dynamic dataResponse; try { dataResponse = jsonDecode(responseApi.body); } catch (_) { debugPrint('storePosOrder Invalid JSON: '); String errorMsg = 'Server Error: '; if (responseApi.body.contains('<p>')) { final RegExp exp = RegExp(r'<p>(.*?)<\/p>'); final match = exp.firstMatch(responseApi.body); if (match != null) errorMsg = match.group(1) ?? errorMsg; } return ResponseApiModel(message: errorMsg, responsestate: Constants.serverErrState, data: null); }
+      final request = http.MultipartRequest('POST', uri);
+      request.headers.addAll(_getAuthHeaders(isMultipart: true));
+      data.forEach((key, value) {
+        request.fields[key] = value.toString();
+      });
+
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 15));
+      final responseApi = await http.Response.fromStream(streamedResponse);
+      dynamic dataResponse;
+      try {
+        dataResponse = jsonDecode(responseApi.body);
+      } catch (_) {
+        debugPrint('createStaff Invalid JSON: ${responseApi.body}');
+        String errorMsg = 'Server Error: ';
+        if (responseApi.body.contains('<p>')) {
+          final RegExp exp = RegExp(r'<p>(.*?)<\/p>');
+          final match = exp.firstMatch(responseApi.body);
+          if (match != null) errorMsg = match.group(1) ?? errorMsg;
+        }
+        return ResponseApiModel(message: errorMsg, responsestate: Constants.serverErrState, data: null);
+      }
       if (responseApi.statusCode == 200 || responseApi.statusCode == 201) {
-        if (dataResponse['status'] == true) {
+        bool isError = false;
+        String? message;
+        dynamic dataPayload;
+        
+        if (dataResponse is Map) {
+          isError = dataResponse['status'] == false || dataResponse['status'] == 'error';
+          message = dataResponse['message'];
+          dataPayload = dataResponse['data'];
+        }
+
+        if (!isError) {
           return ResponseApiModel(
             responsestate: Constants.successState,
-            message: dataResponse['message'] ?? 'Staff created',
-            data: dataResponse['data'],
+            message: message ?? 'Staff created',
+            data: dataPayload ?? dataResponse,
           );
         }
         return ResponseApiModel(
           responsestate: Constants.errorState,
-          message: dataResponse['message'] ?? 'Failed to create staff',
+          message: message ?? 'Failed to create staff',
           data: null,
         );
       } else {
+        String? message;
+        if (dataResponse is Map) message = dataResponse['message'];
         return ResponseApiModel(
           responsestate: Constants.errorState,
-          message: dataResponse['message'] ?? 'HTTP ${responseApi.statusCode}',
+          message: message ?? 'HTTP ${responseApi.statusCode}',
           data: null,
         );
       }

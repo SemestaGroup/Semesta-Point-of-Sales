@@ -22,43 +22,78 @@ class StaffSelectionView extends GetView<AuthController> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leadingWidth: 150.w,
-        leading: Padding(
-          padding: EdgeInsets.only(left: 24.w, top: 8.h, bottom: 8.h),
-          child: InkWell(
-            onTap: () => Get.back(),
-            borderRadius: BorderRadius.circular(12.r),
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppTheme.cardColor(context),
+        leading: controller.userService.getPrefBool('has_active_staff')
+          ? Padding(
+              padding: EdgeInsets.only(left: 24.w, top: 8.h, bottom: 8.h),
+              child: InkWell(
+                onTap: () => Get.back(),
                 borderRadius: BorderRadius.circular(12.r),
-                border: Border.all(color: AppTheme.borderColor(context)),
-                boxShadow: isDark ? [] : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.03),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  )
-                ]
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.arrow_back_ios_new, color: AppTheme.primaryColor, size: 16.sp),
-                  SizedBox(width: 8.w),
-                  Text(
-                    'Back',
-                    style: TextStyle(
-                      fontFamily: AppTheme.fontBold,
-                      fontSize: 14.sp,
-                      color: AppTheme.primaryColor,
-                    ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardColor(context),
+                    borderRadius: BorderRadius.circular(12.r),
+                    border: Border.all(color: AppTheme.borderColor(context)),
+                    boxShadow: isDark ? [] : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      )
+                    ]
                   ),
-                ],
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.arrow_back_ios_new, color: AppTheme.primaryColor, size: 16.sp),
+                      SizedBox(width: 8.w),
+                      Text(
+                        'Back',
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontBold,
+                          fontSize: 14.sp,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          : const SizedBox.shrink(),
+        actions: [
+          // Lock Account button (visible to everyone who has an active session to lock)
+          if (controller.userService.getPrefBool('has_active_staff'))
+            Padding(
+              padding: EdgeInsets.only(right: 12.w, top: 8.h, bottom: 8.h),
+              child: InkWell(
+                onTap: () => controller.lockAccount(),
+                borderRadius: BorderRadius.circular(12.r),
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 16.w),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade600.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12.r),
+                    border: Border.all(color: Colors.orange.shade600.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.lock_outline_rounded, color: Colors.orange.shade700, size: 16.sp),
+                      SizedBox(width: 8.w),
+                      Text(
+                        'Lock App',
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontBold,
+                          fontSize: 14.sp,
+                          color: Colors.orange.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-        actions: [
+          
           Builder(
             builder: (context) {
               try {
@@ -670,7 +705,6 @@ class StaffSelectionView extends GetView<AuthController> {
                                     roleId: selectedRole.value,
                                     pin: pinCtrl.text.isEmpty ? '0000' : pinCtrl.text,
                                   );
-                                  Get.back();
                                 },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.primaryColor,

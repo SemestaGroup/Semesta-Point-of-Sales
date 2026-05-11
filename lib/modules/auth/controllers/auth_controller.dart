@@ -249,7 +249,7 @@ class AuthController extends GetxController {
       await userService.saveBool('has_active_staff', true);
 
       isLoading.value = false;
-      Get.snackbar("Berhasil", "Selamat bekerja, ${staff.fullName}!");
+      Get.snackbar("Success", "Enjoy your work, ${staff.fullName}!");
 
       // Since sync is already done during initial login/boot, go straight to dashboard
       if (staff.role?.toLowerCase() == 'owner' || staff.role?.toLowerCase() == 'supervisor') {
@@ -271,10 +271,32 @@ class AuthController extends GetxController {
     Get.toNamed(Routes.staffSelection);
   }
 
+  Future<void> lockAccount() async {
+    // Lock the account so the user cannot go back to the dashboard without entering a PIN
+    await userService.saveBool('has_active_staff', false);
+    
+    if (Get.isRegistered<AppService>()) {
+      final appService = Get.find<AppService>();
+      await appService.saveSettingsLocally({'pos_active_staff': ''});
+    }
+
+    // Replace the route to clear the back stack
+    Get.offAllNamed(Routes.staffSelection);
+    
+    Get.snackbar(
+      'Aplikasi Terkunci', 
+      'Silakan pilih akun dan masukkan PIN untuk melanjutkan.',
+      backgroundColor: Colors.orange.shade700, 
+      colorText: Colors.white,
+      duration: const Duration(seconds: 3),
+    );
+  }
+
   Future<void> refreshStaff() async {
+    isLoading.value = true;
     try {
       final staffResponse = await apiService.getStaff();
-      if (staffResponse.responsestate == 'success' && staffResponse.data != null) {
+      if (staffResponse.responsestate == Constants.successState && staffResponse.data != null) {
         final List<StaffModel> remoteStaffList = staffResponse.data;
         await _dbService.transaction((txn) async {
           await txn.delete('staff');
@@ -295,12 +317,15 @@ class AuthController extends GetxController {
           }
         });
         await fetchLocalStaff();
-        Get.snackbar('Staff Diperbarui', '${remoteStaffList.length} staff berhasil disinkronkan.',
-            backgroundColor: Colors.green.shade600, colorText: Colors.white,
-            duration: const Duration(seconds: 2));
+        // Get.snackbar('Staff Diperbarui', '${remoteStaffList.length} staff berhasil disinkronkan.', backgroundColor: Colors.green.shade600, colorText: Colors.white, duration: const Duration(seconds: 2));
+      } else {
+        Get.snackbar('Gagal Sync Staff', staffResponse.message ?? 'Unknown error',
+            backgroundColor: Colors.red.shade600, colorText: Colors.white);
       }
     } catch (e) {
       debugPrint('AuthController refreshStaff error: $e');
+    } finally {
+      isLoading.value = false;
     }
   }
 
@@ -327,7 +352,8 @@ class AuthController extends GetxController {
       };
 
       final response = await apiService.createStaff(body);
-      if (response.responsestate == 'success') {
+      if (response.responsestate == Constants.successState) {
+        Get.back();
         Get.snackbar('Staff Ditambahkan', 'Staff "$sanitizedFirst" berhasil dibuat.',
             backgroundColor: Colors.green.shade600, colorText: Colors.white,
             duration: const Duration(seconds: 3));
