@@ -2000,13 +2000,15 @@ class HomeController extends GetxController {
             : (selectedMember.value!.nama ?? 'Customer');
       }
 
+      final queueNoStr = (penjualan?.queueNumber ?? appService.queueNumber.value).toString().padLeft(3, '0');
+
       bytes += generator.row([
         PosColumn(
             text: '$dateStr $timeStr',
             width: 7,
             styles: const PosStyles(align: PosAlign.left)),
         PosColumn(
-            text: 'Q: ${currentRemoteNumber.value}',
+            text: 'Q: $queueNoStr',
             width: 5,
             styles: const PosStyles(align: PosAlign.right, bold: true)),
       ]);
