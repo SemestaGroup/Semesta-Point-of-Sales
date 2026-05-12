@@ -55,3 +55,4 @@ logs.txt
 "test log.txt"
 .qwen/
 *.txt
+public/

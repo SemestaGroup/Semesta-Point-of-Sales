@@ -536,7 +536,7 @@ class SettingController extends GetxController {
     List<int> bytes = [];
 
     String companyName = userService.getPrefString(Constants.posCompanyName);
-    if (companyName == 'Guest' || companyName.isEmpty) companyName = 'SEMESTA POS';
+    if (companyName == 'Guest' || companyName.isEmpty) companyName = 'FLINKPOS';
     String address = userService.getPrefString(Constants.posAddress);
     if (address == 'Guest') address = '';
     String phone = userService.getPrefString(Constants.posPhoneNumber);
@@ -627,7 +627,7 @@ class SettingController extends GetxController {
     }
 
     String companyName = userService.getPrefString(Constants.posCompanyName);
-    if (companyName == 'Guest' || companyName.isEmpty) companyName = 'SEMESTA POS';
+    if (companyName == 'Guest' || companyName.isEmpty) companyName = 'FLINKPOS';
 
     // Header
     bytes += generator.text(companyName.toUpperCase(),

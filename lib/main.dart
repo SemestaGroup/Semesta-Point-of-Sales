@@ -106,9 +106,8 @@ class MainApp extends StatelessWidget {
         : Get.put(UserService());
 
     // Determine initial route ONCE at startup
-    final String initialRoute = userService.isLoggedIn.value
-        ? Routes.sync
-        : Routes.login;
+    final String initialRoute =
+        userService.isLoggedIn.value ? Routes.sync : Routes.login;
 
     return ScreenUtilInit(
         designSize: const Size(1024, 768),
@@ -116,6 +115,7 @@ class MainApp extends StatelessWidget {
         splitScreenMode: true,
         builder: (_, context) {
           return GetMaterialApp(
+            title: 'Flink POS',
             debugShowCheckedModeBanner: false,
             themeMode: themeService.theme,
             theme: ThemeData(
@@ -161,7 +161,8 @@ Future<void> requestBluetoothPermissions() async {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("The application requires Bluetooth and Location access to:"),
+            const Text(
+                "The application requires Bluetooth and Location access to:"),
             const SizedBox(height: 12),
             const Row(
               children: [

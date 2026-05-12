@@ -20,7 +20,7 @@ class SettingScreen extends GetView<SettingController> {
       Get.lazyPut(() => SettingController());
     }
     final controller = Get.find<SettingController>();
-    
+
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBackgroundColor(context),
       body: SafeArea(
@@ -115,8 +115,9 @@ class SettingScreen extends GetView<SettingController> {
                                         icon:
                                             CupertinoIcons.cloud_download_fill,
                                         title: 'Check for Updates',
-                                        subtitle: controller.hasUpdateAvailable.value 
-                                            ? '1 update available' 
+                                        subtitle: controller
+                                                .hasUpdateAvailable.value
+                                            ? '1 update available'
                                             : 'Check for legacy app updates',
                                         trailing: controller
                                                 .isCheckingUpdate.value
@@ -137,9 +138,10 @@ class SettingScreen extends GetView<SettingController> {
                                     height: 1.h,
                                     color: AppTheme.borderColor(context)),
                                 Obx(() {
-                                  final appService = Get.isRegistered<AppService>()
-        ? Get.find<AppService>()
-        : Get.put(AppService());
+                                  final appService =
+                                      Get.isRegistered<AppService>()
+                                          ? Get.find<AppService>()
+                                          : Get.put(AppService());
                                   return _buildSettingTile(
                                     context,
                                     icon: CupertinoIcons.cube_box_fill,
@@ -169,7 +171,8 @@ class SettingScreen extends GetView<SettingController> {
                                 children: [
                                   InkWell(
                                     onTap: () {
-                                      if (!Get.isRegistered<ShiftController>()) {
+                                      if (!Get.isRegistered<
+                                          ShiftController>()) {
                                         Get.lazyPut(() => ShiftController());
                                       }
                                       Get.dialog(const ManageShiftDialog());
@@ -201,83 +204,112 @@ class SettingScreen extends GetView<SettingController> {
                               children: [
                                 Obx(() {
                                   final appService = Get.find<AppService>();
-                                  final display = appService.posSettings['display'] ?? {};
+                                  final display =
+                                      appService.posSettings['display'] ?? {};
                                   return Column(
                                     children: [
                                       Obx(() {
-                                        final themeService = Get.isRegistered<ThemeService>()
-                                            ? Get.find<ThemeService>()
-                                            : Get.put(ThemeService());
+                                        final themeService =
+                                            Get.isRegistered<ThemeService>()
+                                                ? Get.find<ThemeService>()
+                                                : Get.put(ThemeService());
                                         return _buildSettingTile(
                                           context,
                                           icon: CupertinoIcons.moon_fill,
                                           title: 'Dark Mode',
-                                          subtitle: 'Switch between light and dark themes',
+                                          subtitle:
+                                              'Switch between light and dark themes',
                                           trailing: CupertinoSwitch(
-                                            value: themeService.isDarkMode.value,
-                                            activeTrackColor: AppTheme.primaryColor,
-                                            onChanged: (v) => themeService.setTheme(v),
+                                            value:
+                                                themeService.isDarkMode.value,
+                                            activeTrackColor:
+                                                AppTheme.primaryColor,
+                                            onChanged: (v) =>
+                                                themeService.setTheme(v),
                                           ),
                                         );
                                       }),
-                                      Divider(height: 1.h, color: AppTheme.borderColor(context)),
+                                      Divider(
+                                          height: 1.h,
+                                          color: AppTheme.borderColor(context)),
                                       _buildSettingTile(
                                         context,
                                         icon: CupertinoIcons.photo,
                                         title: 'Show Product Image',
-                                        subtitle: 'Images are always shown (required)',
+                                        subtitle:
+                                            'Images are always shown (required)',
                                         trailing: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Icon(CupertinoIcons.lock_fill,
                                                 size: 14.sp,
-                                                color: AppTheme.primaryColor.withValues(alpha: 0.6)),
+                                                color: AppTheme.primaryColor
+                                                    .withValues(alpha: 0.6)),
                                             SizedBox(width: 6.w),
                                             const Opacity(
                                               opacity: 0.6,
                                               child: CupertinoSwitch(
                                                 value: true,
-                                                activeTrackColor: AppTheme.primaryColor,
+                                                activeTrackColor:
+                                                    AppTheme.primaryColor,
                                                 onChanged: null, // LOCKED
                                               ),
                                             ),
                                           ],
                                         ),
                                       ),
-                                      Divider(height: 1.h, color: AppTheme.borderColor(context)),
+                                      Divider(
+                                          height: 1.h,
+                                          color: AppTheme.borderColor(context)),
                                       _buildSettingTile(
                                         context,
                                         icon: CupertinoIcons.textformat,
                                         title: 'Show Product Name',
-                                        subtitle: 'Display names on product cards',
+                                        subtitle:
+                                            'Display names on product cards',
                                         trailing: CupertinoSwitch(
                                           value: display['show_name'] ?? true,
-                                          activeTrackColor: AppTheme.primaryColor,
-                                          onChanged: (v) => appService.updateDisplaySetting('show_name', v),
+                                          activeTrackColor:
+                                              AppTheme.primaryColor,
+                                          onChanged: (v) =>
+                                              appService.updateDisplaySetting(
+                                                  'show_name', v),
                                         ),
                                       ),
-                                      Divider(height: 1.h, color: AppTheme.borderColor(context)),
+                                      Divider(
+                                          height: 1.h,
+                                          color: AppTheme.borderColor(context)),
                                       _buildSettingTile(
                                         context,
                                         icon: CupertinoIcons.money_dollar,
                                         title: 'Show Product Price',
-                                        subtitle: 'Display prices on product cards',
+                                        subtitle:
+                                            'Display prices on product cards',
                                         trailing: CupertinoSwitch(
                                           value: display['show_price'] ?? false,
-                                          activeTrackColor: AppTheme.primaryColor,
-                                          onChanged: (v) => appService.updateDisplaySetting('show_price', v),
+                                          activeTrackColor:
+                                              AppTheme.primaryColor,
+                                          onChanged: (v) =>
+                                              appService.updateDisplaySetting(
+                                                  'show_price', v),
                                         ),
                                       ),
-                                      Divider(height: 1.h, color: AppTheme.borderColor(context)),
+                                      Divider(
+                                          height: 1.h,
+                                          color: AppTheme.borderColor(context)),
                                       _buildSettingTile(
                                         context,
                                         icon: CupertinoIcons.cube_box,
                                         title: 'Show Product Stock',
-                                        subtitle: 'Display stock levels on product cards',
+                                        subtitle:
+                                            'Display stock levels on product cards',
                                         trailing: CupertinoSwitch(
                                           value: display['show_stock'] ?? false,
-                                          activeTrackColor: AppTheme.primaryColor,
-                                          onChanged: (v) => appService.updateDisplaySetting('show_stock', v),
+                                          activeTrackColor:
+                                              AppTheme.primaryColor,
+                                          onChanged: (v) =>
+                                              appService.updateDisplaySetting(
+                                                  'show_stock', v),
                                         ),
                                       ),
                                     ],
@@ -316,49 +348,64 @@ class SettingScreen extends GetView<SettingController> {
                             child: Column(
                               children: [
                                 InkWell(
-                                  onTap: () => Get.dialog(
-                                      const ManagePrinterDialog()),
+                                  onTap: () =>
+                                      Get.dialog(const ManagePrinterDialog()),
                                   child: Obx(() {
-                                    final count = controller.assignedPrinters.length;
-                                    final connectedCount = controller.assignedPrinters.where((p) => p.isConnected).length;
+                                    final count =
+                                        controller.assignedPrinters.length;
+                                    final connectedCount = controller
+                                        .assignedPrinters
+                                        .where((p) => p.isConnected)
+                                        .length;
                                     return _buildSettingTile(
                                       context,
                                       icon: CupertinoIcons.printer_fill,
                                       title: 'Manage Printer',
-                                      subtitle: count == 0 
-                                          ? 'No printers configured yet' 
+                                      subtitle: count == 0
+                                          ? 'No printers configured yet'
                                           : '$connectedCount / $count Printers Connected',
-                                      trailing: Icon(CupertinoIcons.chevron_right,
+                                      trailing: Icon(
+                                          CupertinoIcons.chevron_right,
                                           color: Colors.grey.shade400,
                                           size: 20.sp),
                                     );
                                   }),
                                 ),
-                                Divider(height: 1.h, color: AppTheme.borderColor(context)),
+                                Divider(
+                                    height: 1.h,
+                                    color: AppTheme.borderColor(context)),
                                 Obx(() {
                                   final appService = Get.find<AppService>();
-                                  final printing = appService.posSettings['printing'] ?? {};
+                                  final printing =
+                                      appService.posSettings['printing'] ?? {};
                                   return _buildSettingTile(
                                     context,
                                     icon: CupertinoIcons.doc_plaintext,
                                     title: 'Auto Print Receipt',
-                                    subtitle: 'Automatically print receipt after payment',
+                                    subtitle:
+                                        'Automatically print receipt after payment',
                                     trailing: CupertinoSwitch(
                                       value: printing['auto_print'] ?? false,
                                       activeTrackColor: AppTheme.primaryColor,
-                                      onChanged: (v) => appService.updatePrintingSetting('auto_print', v),
+                                      onChanged: (v) =>
+                                          appService.updatePrintingSetting(
+                                              'auto_print', v),
                                     ),
                                   );
                                 }),
-                                Divider(height: 1.h, color: AppTheme.borderColor(context)),
+                                Divider(
+                                    height: 1.h,
+                                    color: AppTheme.borderColor(context)),
                                 Padding(
                                   padding: EdgeInsets.symmetric(vertical: 8.h),
                                   child: _buildInputField(
                                     context,
-                                    controller: controller.labelOffsetXFieldController,
+                                    controller:
+                                        controller.labelOffsetXFieldController,
                                     label: 'Label X-Offset (Dots)',
                                     hint: 'Default: 20',
-                                    icon: CupertinoIcons.arrow_right_square_fill,
+                                    icon:
+                                        CupertinoIcons.arrow_right_square_fill,
                                     keyboardType: TextInputType.number,
                                   ),
                                 ),
@@ -394,7 +441,8 @@ class SettingScreen extends GetView<SettingController> {
                                     style: TextStyle(
                                       fontFamily: AppTheme.fontRegular,
                                       fontSize: AppTheme.fontSizeLabelSmall,
-                                      color: AppTheme.secondaryTextColor(context),
+                                      color:
+                                          AppTheme.secondaryTextColor(context),
                                     ),
                                   ),
                                   SizedBox(height: 20.h),
@@ -404,8 +452,10 @@ class SettingScreen extends GetView<SettingController> {
                                     currentMode: currentMode,
                                     icon: CupertinoIcons.printer_fill,
                                     title: 'Kitchen Printer',
-                                    subtitle: 'Order ticket is printed to the registered kitchen printer. Works offline.',
-                                    onTap: () => appService.updateKitchenSetting('printer'),
+                                    subtitle:
+                                        'Order ticket is printed to the registered kitchen printer. Works offline.',
+                                    onTap: () => appService
+                                        .updateKitchenSetting('printer'),
                                   ),
                                   SizedBox(height: 12.h),
                                   _buildKitchenModeOption(
@@ -414,8 +464,10 @@ class SettingScreen extends GetView<SettingController> {
                                     currentMode: currentMode,
                                     icon: CupertinoIcons.wifi,
                                     title: 'Live Sync (KDS)',
-                                    subtitle: 'Order is pushed to the Kitchen Display System in real-time. Requires the POS to be online.',
-                                    onTap: () => appService.updateKitchenSetting('livesync'),
+                                    subtitle:
+                                        'Order is pushed to the Kitchen Display System in real-time. Requires the POS to be online.',
+                                    onTap: () => appService
+                                        .updateKitchenSetting('livesync'),
                                   ),
                                 ],
                               );
@@ -504,7 +556,8 @@ class SettingScreen extends GetView<SettingController> {
                           SizedBox(height: 24.h),
 
                           // Developer Settings Section (Owner only)
-                          if (controller.userService.getRole().toLowerCase() == 'owner') ...[
+                          if (controller.userService.getRole().toLowerCase() ==
+                              'owner') ...[
                             _buildSectionTitle(context, 'Developer'),
                             SizedBox(height: 16.h),
                             _buildCard(
@@ -517,35 +570,50 @@ class SettingScreen extends GetView<SettingController> {
                                       context,
                                       icon: CupertinoIcons.wrench_fill,
                                       title: 'Developer Mode',
-                                      subtitle: 'Enables SQLite Inspector menu and detailed error logs. Owner-only.',
+                                      subtitle:
+                                          'Enables SQLite Inspector menu and detailed error logs. Owner-only.',
                                       trailing: CupertinoSwitch(
                                         value: appService.developerMode.value,
                                         activeTrackColor: Colors.deepPurple,
                                         onChanged: (v) {
-                                          if (controller.userService.getRole().toLowerCase() == 'owner') {
+                                          if (controller.userService
+                                                  .getRole()
+                                                  .toLowerCase() ==
+                                              'owner') {
                                             appService.setDeveloperMode(v);
                                             Get.snackbar(
                                               'Developer Mode ${v ? 'ON' : 'OFF'}',
-                                              v ? 'SQLite Inspector & detailed errors are now visible.' : 'Developer features hidden.',
-                                              backgroundColor: v ? Colors.deepPurple.shade700 : Colors.grey.shade700,
+                                              v
+                                                  ? 'SQLite Inspector & detailed errors are now visible.'
+                                                  : 'Developer features hidden.',
+                                              backgroundColor: v
+                                                  ? Colors.deepPurple.shade700
+                                                  : Colors.grey.shade700,
                                               colorText: Colors.white,
-                                              duration: const Duration(seconds: 2),
+                                              duration:
+                                                  const Duration(seconds: 2),
                                             );
                                           }
                                         },
                                       ),
                                     ),
                                     if (appService.developerMode.value) ...[
-                                      Divider(height: 1.h, color: AppTheme.borderColor(context)),
+                                      Divider(
+                                          height: 1.h,
+                                          color: AppTheme.borderColor(context)),
                                       InkWell(
-                                        onTap: () => Get.toNamed(Routes.inspector),
+                                        onTap: () =>
+                                            Get.toNamed(Routes.inspector),
                                         child: _buildSettingTile(
                                           context,
                                           icon: CupertinoIcons.table_fill,
                                           title: 'SQLite Inspector',
-                                          subtitle: 'Browse and inspect local database tables',
-                                          trailing: Icon(CupertinoIcons.chevron_right,
-                                              color: Colors.grey.shade400, size: 20.sp),
+                                          subtitle:
+                                              'Browse and inspect local database tables',
+                                          trailing: Icon(
+                                              CupertinoIcons.chevron_right,
+                                              color: Colors.grey.shade400,
+                                              size: 20.sp),
                                         ),
                                       ),
                                     ],
@@ -570,7 +638,8 @@ class SettingScreen extends GetView<SettingController> {
                                         ? SizedBox(
                                             width: 20.w,
                                             height: 20.w,
-                                            child: const CircularProgressIndicator(
+                                            child:
+                                                const CircularProgressIndicator(
                                               strokeWidth: 2,
                                               color: Colors.white,
                                             ),
@@ -610,9 +679,9 @@ class SettingScreen extends GetView<SettingController> {
                   ),
                 ],
               )),
-    ),
-  );
-}
+      ),
+    );
+  }
 
   Widget _buildHeader(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -697,7 +766,8 @@ class SettingScreen extends GetView<SettingController> {
         Text(
           title,
           style: TextStyle(
-            fontFamily: AppTheme.fontBold, // Use Bold for better emphasis at smaller size
+            fontFamily: AppTheme
+                .fontBold, // Use Bold for better emphasis at smaller size
             fontSize: AppTheme.fontSizeBodyMedium,
             color: AppTheme.textColor(context),
           ),
@@ -808,7 +878,9 @@ class SettingScreen extends GetView<SettingController> {
               ? AppTheme.primaryColor.withValues(alpha: isDark ? 0.15 : 0.07)
               : AppTheme.scaffoldBackgroundColor(context),
           border: Border.all(
-            color: isSelected ? AppTheme.primaryColor : AppTheme.borderColor(context),
+            color: isSelected
+                ? AppTheme.primaryColor
+                : AppTheme.borderColor(context),
             width: isSelected ? 2 : 1.5,
           ),
           borderRadius: BorderRadius.circular(12.r),
@@ -825,7 +897,8 @@ class SettingScreen extends GetView<SettingController> {
               ),
               child: Icon(
                 icon,
-                color: isSelected ? AppTheme.primaryColor : Colors.grey.shade500,
+                color:
+                    isSelected ? AppTheme.primaryColor : Colors.grey.shade500,
                 size: 22.sp,
               ),
             ),
@@ -865,7 +938,8 @@ class SettingScreen extends GetView<SettingController> {
                 shape: BoxShape.circle,
                 color: isSelected ? AppTheme.primaryColor : Colors.transparent,
                 border: Border.all(
-                  color: isSelected ? AppTheme.primaryColor : Colors.grey.shade400,
+                  color:
+                      isSelected ? AppTheme.primaryColor : Colors.grey.shade400,
                   width: 2,
                 ),
               ),
@@ -925,7 +999,8 @@ class SettingScreen extends GetView<SettingController> {
                 ? Colors.grey.shade900
                 : Colors.grey.shade50,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10.r), // Slightly smaller radius
+              borderRadius:
+                  BorderRadius.circular(10.r), // Slightly smaller radius
               borderSide: BorderSide.none,
             ),
             enabledBorder: OutlineInputBorder(
@@ -934,7 +1009,8 @@ class SettingScreen extends GetView<SettingController> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10.r),
-              borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+              borderSide:
+                  const BorderSide(color: AppTheme.primaryColor, width: 1.5),
             ),
             contentPadding:
                 EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
@@ -1012,7 +1088,7 @@ class SettingScreen extends GetView<SettingController> {
           backgroundColor: AppTheme.cardColor(context),
           title: Row(
             children: [
-          const Icon(CupertinoIcons.info_circle,
+              const Icon(CupertinoIcons.info_circle,
                   color: AppTheme.primaryColor),
               SizedBox(width: 10.w),
               Text('App Info',
@@ -1026,7 +1102,7 @@ class SettingScreen extends GetView<SettingController> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _infoRow(context, 'Association', 'Semesta POS'),
+              _infoRow(context, 'Association', 'Flink POS'),
               _infoRow(
                   context,
                   'App Version',

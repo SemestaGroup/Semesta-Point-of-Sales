@@ -94,7 +94,7 @@ class LoginScreen extends GetView<AuthController> {
                             ),
                             SizedBox(height: 32.h),
                             Text(
-                              'Semesta POS',
+                              'Flink POS',
                               style: TextStyle(
                                 fontFamily: AppTheme.fontBold,
                                 fontSize: 28.sp,
@@ -323,7 +323,8 @@ class LoginScreen extends GetView<AuthController> {
                                           controller.validateLogin();
                                         },
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppTheme.primaryColor,
+                                          backgroundColor:
+                                              AppTheme.primaryColor,
                                           foregroundColor: Colors.white,
                                           elevation: 0,
                                           shape: RoundedRectangleBorder(
@@ -348,7 +349,7 @@ class LoginScreen extends GetView<AuthController> {
                           // Footer note
                           Center(
                             child: Text(
-                              '© 2025 Semesta POS · All rights reserved',
+                              '© 2025 Flink POS · All rights reserved',
                               style: TextStyle(
                                 fontFamily: AppTheme.fontRegular,
                                 fontSize: 11.sp,

@@ -1939,7 +1939,7 @@ class HomeController extends GetxController {
         companyName = appService.appModel.value.namaPerusahaan;
       }
       if (companyName.isEmpty) {
-        companyName = 'SEMESTA POS';
+        companyName = 'FLINKPOS';
       }
       String address = userService.getPrefString(Constants.posAddress);
       if (address == 'Guest') {

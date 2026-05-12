@@ -528,7 +528,7 @@ class ReportController extends GetxController {
       // 2. Header
       String companyName = userService.getPrefString(Constants.posCompanyName);
       if (companyName == 'Guest' || companyName.isEmpty) companyName = appService.appModel.value.namaPerusahaan;
-      if (companyName.isEmpty) companyName = 'SEMESTA POS';
+      if (companyName.isEmpty) companyName = 'FLINKPOS';
       String address = userService.getPrefString(Constants.posAddress);
       if (address == 'Guest') address = '';
       String phone = userService.getPrefString(Constants.posPhoneNumber);

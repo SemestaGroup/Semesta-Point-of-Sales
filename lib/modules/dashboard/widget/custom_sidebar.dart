@@ -83,7 +83,7 @@ class CustomSidebar extends StatelessWidget {
                       child: Row(
                         children: [
                           Text(
-                            'Semesta',
+                            'Flink',
                             style: TextStyle(
                               fontFamily: AppTheme.fontBold,
                               fontSize: 21.sp,

@@ -14,7 +14,7 @@ class StaffSelectionView extends GetView<AuthController> {
   Widget build(BuildContext context) {
     debugPrint("StaffSelectionView: build() started");
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Scaffold(
       resizeToAvoidBottomInset: false,
       backgroundColor: AppTheme.scaffoldBackgroundColor(context),
@@ -23,43 +23,46 @@ class StaffSelectionView extends GetView<AuthController> {
         elevation: 0,
         leadingWidth: 150.w,
         leading: controller.userService.getPrefBool('has_active_staff')
-          ? Padding(
-              padding: EdgeInsets.only(left: 24.w, top: 8.h, bottom: 8.h),
-              child: InkWell(
-                onTap: () => Get.back(),
-                borderRadius: BorderRadius.circular(12.r),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppTheme.cardColor(context),
-                    borderRadius: BorderRadius.circular(12.r),
-                    border: Border.all(color: AppTheme.borderColor(context)),
-                    boxShadow: isDark ? [] : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.03),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      )
-                    ]
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.arrow_back_ios_new, color: AppTheme.primaryColor, size: 16.sp),
-                      SizedBox(width: 8.w),
-                      Text(
-                        'Back',
-                        style: TextStyle(
-                          fontFamily: AppTheme.fontBold,
-                          fontSize: 14.sp,
-                          color: AppTheme.primaryColor,
+            ? Padding(
+                padding: EdgeInsets.only(left: 24.w, top: 8.h, bottom: 8.h),
+                child: InkWell(
+                  onTap: () => Get.back(),
+                  borderRadius: BorderRadius.circular(12.r),
+                  child: Container(
+                    decoration: BoxDecoration(
+                        color: AppTheme.cardColor(context),
+                        borderRadius: BorderRadius.circular(12.r),
+                        border:
+                            Border.all(color: AppTheme.borderColor(context)),
+                        boxShadow: isDark
+                            ? []
+                            : [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.03),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                )
+                              ]),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.arrow_back_ios_new,
+                            color: AppTheme.primaryColor, size: 16.sp),
+                        SizedBox(width: 8.w),
+                        Text(
+                          'Back',
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontBold,
+                            fontSize: 14.sp,
+                            color: AppTheme.primaryColor,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            )
-          : const SizedBox.shrink(),
+              )
+            : const SizedBox.shrink(),
         actions: [
           // Lock Account button (visible to everyone who has an active session to lock)
           if (controller.userService.getPrefBool('has_active_staff'))
@@ -73,12 +76,14 @@ class StaffSelectionView extends GetView<AuthController> {
                   decoration: BoxDecoration(
                     color: Colors.orange.shade600.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12.r),
-                    border: Border.all(color: Colors.orange.shade600.withValues(alpha: 0.2)),
+                    border: Border.all(
+                        color: Colors.orange.shade600.withValues(alpha: 0.2)),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.lock_outline_rounded, color: Colors.orange.shade700, size: 16.sp),
+                      Icon(Icons.lock_outline_rounded,
+                          color: Colors.orange.shade700, size: 16.sp),
                       SizedBox(width: 8.w),
                       Text(
                         'Lock App',
@@ -93,84 +98,96 @@ class StaffSelectionView extends GetView<AuthController> {
                 ),
               ),
             ),
-          
-          Builder(
-            builder: (context) {
-              try {
-                final role = controller.userService.getRole().toLowerCase();
-                if (role != 'owner') return const SizedBox.shrink();
 
-                return Padding(
-                  padding: EdgeInsets.only(right: 24.w, top: 8.h, bottom: 8.h),
-                  child: Row(
-                    children: [
-                      // Sync Staff button
-                      Obx(() => InkWell(
-                        onTap: controller.isLoading.value ? null : () => controller.refreshStaff(),
-                        borderRadius: BorderRadius.circular(12.r),
-                        child: Container(
-                          padding: EdgeInsets.symmetric(horizontal: 14.w),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12.r),
-                            border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.2)),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              controller.isLoading.value
-                                ? SizedBox(width: 16.w, height: 16.w, child: const CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor))
-                                : Icon(Icons.sync_rounded, color: AppTheme.primaryColor, size: 16.sp),
-                              SizedBox(width: 8.w),
-                              Text(
-                                'Sync Staff',
-                                style: TextStyle(
-                                  fontFamily: AppTheme.fontBold,
-                                  fontSize: 14.sp,
-                                  color: AppTheme.primaryColor,
+          Builder(builder: (context) {
+            try {
+              final role = controller.userService.getRole().toLowerCase();
+              if (role != 'owner') return const SizedBox.shrink();
+
+              return Padding(
+                padding: EdgeInsets.only(right: 24.w, top: 8.h, bottom: 8.h),
+                child: Row(
+                  children: [
+                    // Sync Staff button
+                    Obx(() => InkWell(
+                          onTap: controller.isLoading.value
+                              ? null
+                              : () => controller.refreshStaff(),
+                          borderRadius: BorderRadius.circular(12.r),
+                          child: Container(
+                            padding: EdgeInsets.symmetric(horizontal: 14.w),
+                            decoration: BoxDecoration(
+                              color:
+                                  AppTheme.primaryColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12.r),
+                              border: Border.all(
+                                  color: AppTheme.primaryColor
+                                      .withValues(alpha: 0.2)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                controller.isLoading.value
+                                    ? SizedBox(
+                                        width: 16.w,
+                                        height: 16.w,
+                                        child: const CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: AppTheme.primaryColor))
+                                    : Icon(Icons.sync_rounded,
+                                        color: AppTheme.primaryColor,
+                                        size: 16.sp),
+                                SizedBox(width: 8.w),
+                                Text(
+                                  'Sync Staff',
+                                  style: TextStyle(
+                                    fontFamily: AppTheme.fontBold,
+                                    fontSize: 14.sp,
+                                    color: AppTheme.primaryColor,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
+                        )),
+                    SizedBox(width: 12.w),
+                    // Logout Location button
+                    InkWell(
+                      onTap: () => controller.logoutLocation(),
+                      borderRadius: BorderRadius.circular(12.r),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(horizontal: 16.w),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12.r),
+                          border: Border.all(
+                              color: Colors.redAccent.withValues(alpha: 0.2)),
                         ),
-                      )),
-                      SizedBox(width: 12.w),
-                      // Logout Location button
-                      InkWell(
-                        onTap: () => controller.logoutLocation(),
-                        borderRadius: BorderRadius.circular(12.r),
-                        child: Container(
-                          padding: EdgeInsets.symmetric(horizontal: 16.w),
-                          decoration: BoxDecoration(
-                            color: Colors.redAccent.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12.r),
-                            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.2)),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.power_settings_new, color: Colors.redAccent, size: 16.sp),
-                              SizedBox(width: 8.w),
-                              Text(
-                                'Logout Location',
-                                style: TextStyle(
-                                  fontFamily: AppTheme.fontBold,
-                                  fontSize: 14.sp,
-                                  color: Colors.redAccent,
-                                ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.power_settings_new,
+                                color: Colors.redAccent, size: 16.sp),
+                            SizedBox(width: 8.w),
+                            Text(
+                              'Logout Location',
+                              style: TextStyle(
+                                fontFamily: AppTheme.fontBold,
+                                fontSize: 14.sp,
+                                color: Colors.redAccent,
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                );
-              } catch (e) {
-                return const SizedBox.shrink();
-              }
+                    ),
+                  ],
+                ),
+              );
+            } catch (e) {
+              return const SizedBox.shrink();
             }
-          ),
+          }),
         ],
       ),
       body: Padding(
@@ -196,12 +213,12 @@ class StaffSelectionView extends GetView<AuthController> {
               ),
             ),
             SizedBox(height: 40.h),
-            
+
             // Search Bar
             _buildSearchBar(context),
-            
+
             SizedBox(height: 40.h),
-            
+
             // Grid of Staff
             Expanded(
               child: Obx(() {
@@ -210,7 +227,8 @@ class StaffSelectionView extends GetView<AuthController> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(CupertinoIcons.person_3, size: 60.sp, color: AppTheme.borderColor(context)),
+                        Icon(CupertinoIcons.person_3,
+                            size: 60.sp, color: AppTheme.borderColor(context)),
                         SizedBox(height: 16.h),
                         Text(
                           'No users found',
@@ -234,9 +252,13 @@ class StaffSelectionView extends GetView<AuthController> {
                     childAspectRatio: 0.85,
                   ),
                   itemCount: controller.filteredStaff.length +
-                      (controller.userService.getRole().toLowerCase() == 'owner' ? 1 : 0),
+                      (controller.userService.getRole().toLowerCase() == 'owner'
+                          ? 1
+                          : 0),
                   itemBuilder: (context, index) {
-                    final isOwner = controller.userService.getRole().toLowerCase() == 'owner';
+                    final isOwner =
+                        controller.userService.getRole().toLowerCase() ==
+                            'owner';
                     // Last slot for owner = Add Staff card
                     if (isOwner && index == controller.filteredStaff.length) {
                       return _buildAddStaffCard(context);
@@ -247,11 +269,11 @@ class StaffSelectionView extends GetView<AuthController> {
                 );
               }),
             ),
-            
+
             Padding(
               padding: EdgeInsets.symmetric(vertical: 24.h),
               child: Text(
-                'Powered by Semesta POS',
+                'Powered by Flink POS',
                 style: TextStyle(
                   fontFamily: AppTheme.fontMedium,
                   fontSize: 12.sp,
@@ -274,7 +296,10 @@ class StaffSelectionView extends GetView<AuthController> {
         border: Border.all(color: AppTheme.borderColor(context)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.2 : 0.03),
+            color: Colors.black.withValues(
+                alpha: Theme.of(context).brightness == Brightness.dark
+                    ? 0.2
+                    : 0.03),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -289,7 +314,8 @@ class StaffSelectionView extends GetView<AuthController> {
             fontSize: 15.sp,
             color: AppTheme.secondaryTextColor(context),
           ),
-          prefixIcon: Icon(CupertinoIcons.search, color: AppTheme.secondaryTextColor(context), size: 20.sp),
+          prefixIcon: Icon(CupertinoIcons.search,
+              color: AppTheme.secondaryTextColor(context), size: 20.sp),
           border: InputBorder.none,
           contentPadding: EdgeInsets.symmetric(vertical: 18.h),
         ),
@@ -312,7 +338,7 @@ class StaffSelectionView extends GetView<AuthController> {
       const Color(0xFF1D3557),
       const Color(0xFF457B9D),
     ];
-    
+
     final Color avatarColor = colors[staff.fullName.hashCode % colors.length];
 
     return GestureDetector(
@@ -324,7 +350,10 @@ class StaffSelectionView extends GetView<AuthController> {
           border: Border.all(color: AppTheme.borderColor(context)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.2 : 0.05),
+              color: Colors.black.withValues(
+                  alpha: Theme.of(context).brightness == Brightness.dark
+                      ? 0.2
+                      : 0.05),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -339,7 +368,8 @@ class StaffSelectionView extends GetView<AuthController> {
               decoration: BoxDecoration(
                 color: avatarColor,
                 shape: BoxShape.circle,
-                border: Border.all(color: AppTheme.cardColor(context), width: 4.w),
+                border:
+                    Border.all(color: AppTheme.cardColor(context), width: 4.w),
                 boxShadow: [
                   BoxShadow(
                     color: avatarColor.withValues(alpha: 0.4),
@@ -454,7 +484,8 @@ class StaffSelectionView extends GetView<AuthController> {
           ),
           boxShadow: [
             BoxShadow(
-              color: AppTheme.primaryColor.withValues(alpha: isDark ? 0.08 : 0.05),
+              color:
+                  AppTheme.primaryColor.withValues(alpha: isDark ? 0.08 : 0.05),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -470,7 +501,8 @@ class StaffSelectionView extends GetView<AuthController> {
                 color: AppTheme.primaryColor.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.person_add_rounded, size: 36.sp, color: AppTheme.primaryColor),
+              child: Icon(Icons.person_add_rounded,
+                  size: 36.sp, color: AppTheme.primaryColor),
             ),
             SizedBox(height: 24.h),
             Text(
@@ -509,7 +541,12 @@ class StaffSelectionView extends GetView<AuthController> {
     final lastnameCtrl = TextEditingController();
     final pinCtrl = TextEditingController();
     final selectedRole = '2'.obs; // Default: Cashier
-    final roleLabels = {'1': 'Owner', '2': 'Cashier', '3': 'Kitchen', '4': 'Supervisor'};
+    final roleLabels = {
+      '1': 'Owner',
+      '2': 'Cashier',
+      '3': 'Kitchen',
+      '4': 'Supervisor'
+    };
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     Get.dialog(
@@ -518,7 +555,8 @@ class StaffSelectionView extends GetView<AuthController> {
         insetPadding: EdgeInsets.symmetric(horizontal: 60.w, vertical: 24.h),
         child: Container(
           width: 520.w,
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+          constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.85),
           decoration: BoxDecoration(
             color: AppTheme.cardColor(context),
             borderRadius: BorderRadius.circular(28.r),
@@ -548,7 +586,8 @@ class StaffSelectionView extends GetView<AuthController> {
                           color: AppTheme.primaryColor.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(14.r),
                         ),
-                        child: Icon(Icons.person_add_alt_1_rounded, color: AppTheme.primaryColor, size: 24.sp),
+                        child: Icon(Icons.person_add_alt_1_rounded,
+                            color: AppTheme.primaryColor, size: 24.sp),
                       ),
                       SizedBox(width: 16.w),
                       Expanded(
@@ -577,10 +616,14 @@ class StaffSelectionView extends GetView<AuthController> {
                       ),
                       IconButton(
                         onPressed: () => Get.back(),
-                        icon: Icon(Icons.close_rounded, color: AppTheme.secondaryTextColor(context), size: 20.sp),
+                        icon: Icon(Icons.close_rounded,
+                            color: AppTheme.secondaryTextColor(context),
+                            size: 20.sp),
                         style: IconButton.styleFrom(
-                          backgroundColor: AppTheme.borderColor(context).withValues(alpha: 0.5),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.r)),
+                          backgroundColor: AppTheme.borderColor(context)
+                              .withValues(alpha: 0.5),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10.r)),
                         ),
                       ),
                     ],
@@ -633,35 +676,43 @@ class StaffSelectionView extends GetView<AuthController> {
                   _buildDialogFieldLabel(context, 'Role', required: false),
                   SizedBox(height: 8.h),
                   Obx(() => Container(
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(14.r),
-                      border: Border.all(color: AppTheme.borderColor(context)),
-                    ),
-                    child: DropdownButtonFormField<String>(
-                      initialValue: selectedRole.value,
-                      decoration: InputDecoration(
-                        prefixIcon: Icon(CupertinoIcons.shield, size: 18.sp, color: AppTheme.secondaryTextColor(context)),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(vertical: 14.h),
-                      ),
-                      style: TextStyle(
-                        fontFamily: AppTheme.fontMedium,
-                        fontSize: 14.sp,
-                        color: AppTheme.textColor(context),
-                      ),
-                      dropdownColor: AppTheme.cardColor(context),
-                      items: roleLabels.entries
-                          .map((e) => DropdownMenuItem(
-                                value: e.key,
-                                child: Text(e.value, style: TextStyle(fontFamily: AppTheme.fontMedium)),
-                              ))
-                          .toList(),
-                      onChanged: (val) {
-                        if (val != null) selectedRole.value = val;
-                      },
-                    ),
-                  )),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.05)
+                              : Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(14.r),
+                          border:
+                              Border.all(color: AppTheme.borderColor(context)),
+                        ),
+                        child: DropdownButtonFormField<String>(
+                          initialValue: selectedRole.value,
+                          decoration: InputDecoration(
+                            prefixIcon: Icon(CupertinoIcons.shield,
+                                size: 18.sp,
+                                color: AppTheme.secondaryTextColor(context)),
+                            border: InputBorder.none,
+                            contentPadding:
+                                EdgeInsets.symmetric(vertical: 14.h),
+                          ),
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontMedium,
+                            fontSize: 14.sp,
+                            color: AppTheme.textColor(context),
+                          ),
+                          dropdownColor: AppTheme.cardColor(context),
+                          items: roleLabels.entries
+                              .map((e) => DropdownMenuItem(
+                                    value: e.key,
+                                    child: Text(e.value,
+                                        style: TextStyle(
+                                            fontFamily: AppTheme.fontMedium)),
+                                  ))
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) selectedRole.value = val;
+                          },
+                        ),
+                      )),
 
                   SizedBox(height: 32.h),
 
@@ -672,14 +723,19 @@ class StaffSelectionView extends GetView<AuthController> {
                         child: OutlinedButton(
                           onPressed: () => Get.back(),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: AppTheme.secondaryTextColor(context),
-                            side: BorderSide(color: AppTheme.borderColor(context)),
+                            foregroundColor:
+                                AppTheme.secondaryTextColor(context),
+                            side: BorderSide(
+                                color: AppTheme.borderColor(context)),
                             padding: EdgeInsets.symmetric(vertical: 14.h),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14.r)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14.r)),
                           ),
                           child: Text(
                             'Cancel',
-                            style: TextStyle(fontFamily: AppTheme.fontMedium, fontSize: 15.sp),
+                            style: TextStyle(
+                                fontFamily: AppTheme.fontMedium,
+                                fontSize: 15.sp),
                           ),
                         ),
                       ),
@@ -687,51 +743,64 @@ class StaffSelectionView extends GetView<AuthController> {
                       Expanded(
                         flex: 2,
                         child: Obx(() => ElevatedButton(
-                          onPressed: controller.isAddingStaff.value
-                              ? null
-                              : () async {
-                                  if (firstnameCtrl.text.trim().isEmpty) {
-                                    Get.snackbar(
-                                      'Required Field',
-                                      'First name is required.',
-                                      backgroundColor: Colors.orange.shade600,
-                                      colorText: Colors.white,
-                                    );
-                                    return;
-                                  }
-                                  await controller.addStaff(
-                                    firstname: firstnameCtrl.text.trim(),
-                                    lastname: lastnameCtrl.text.trim().isEmpty ? null : lastnameCtrl.text.trim(),
-                                    roleId: selectedRole.value,
-                                    pin: pinCtrl.text.isEmpty ? '0000' : pinCtrl.text,
-                                  );
-                                },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.primaryColor,
-                            foregroundColor: Colors.white,
-                            disabledBackgroundColor: AppTheme.primaryColor.withValues(alpha: 0.5),
-                            padding: EdgeInsets.symmetric(vertical: 14.h),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14.r)),
-                          ),
-                          child: controller.isAddingStaff.value
-                              ? SizedBox(
-                                  width: 20.w,
-                                  height: 20.w,
-                                  child: const CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                                )
-                              : Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.person_add_alt_1_rounded, size: 18.sp),
-                                    SizedBox(width: 8.w),
-                                    Text(
-                                      'Add Staff',
-                                      style: TextStyle(fontFamily: AppTheme.fontBold, fontSize: 15.sp),
+                              onPressed: controller.isAddingStaff.value
+                                  ? null
+                                  : () async {
+                                      if (firstnameCtrl.text.trim().isEmpty) {
+                                        Get.snackbar(
+                                          'Required Field',
+                                          'First name is required.',
+                                          backgroundColor:
+                                              Colors.orange.shade600,
+                                          colorText: Colors.white,
+                                        );
+                                        return;
+                                      }
+                                      await controller.addStaff(
+                                        firstname: firstnameCtrl.text.trim(),
+                                        lastname:
+                                            lastnameCtrl.text.trim().isEmpty
+                                                ? null
+                                                : lastnameCtrl.text.trim(),
+                                        roleId: selectedRole.value,
+                                        pin: pinCtrl.text.isEmpty
+                                            ? '0000'
+                                            : pinCtrl.text,
+                                      );
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primaryColor,
+                                foregroundColor: Colors.white,
+                                disabledBackgroundColor: AppTheme.primaryColor
+                                    .withValues(alpha: 0.5),
+                                padding: EdgeInsets.symmetric(vertical: 14.h),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14.r)),
+                              ),
+                              child: controller.isAddingStaff.value
+                                  ? SizedBox(
+                                      width: 20.w,
+                                      height: 20.w,
+                                      child: const CircularProgressIndicator(
+                                          color: Colors.white, strokeWidth: 2),
+                                    )
+                                  : Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.person_add_alt_1_rounded,
+                                            size: 18.sp),
+                                        SizedBox(width: 8.w),
+                                        Text(
+                                          'Add Staff',
+                                          style: TextStyle(
+                                              fontFamily: AppTheme.fontBold,
+                                              fontSize: 15.sp),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                        )),
+                            )),
                       ),
                     ],
                   ),
@@ -745,7 +814,8 @@ class StaffSelectionView extends GetView<AuthController> {
     );
   }
 
-  Widget _buildDialogFieldLabel(BuildContext context, String label, {bool required = false}) {
+  Widget _buildDialogFieldLabel(BuildContext context, String label,
+      {bool required = false}) {
     return Row(
       children: [
         Text(
@@ -779,7 +849,8 @@ class StaffSelectionView extends GetView<AuthController> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade50,
+        color:
+            isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(14.r),
         border: Border.all(color: AppTheme.borderColor(context)),
       ),
@@ -800,7 +871,8 @@ class StaffSelectionView extends GetView<AuthController> {
             fontSize: 14.sp,
             color: AppTheme.secondaryTextColor(context),
           ),
-          prefixIcon: Icon(icon, size: 18.sp, color: AppTheme.secondaryTextColor(context)),
+          prefixIcon: Icon(icon,
+              size: 18.sp, color: AppTheme.secondaryTextColor(context)),
           border: InputBorder.none,
           counterText: '',
           contentPadding: EdgeInsets.symmetric(vertical: 14.h),
@@ -809,4 +881,3 @@ class StaffSelectionView extends GetView<AuthController> {
     );
   }
 }
-
