@@ -1342,7 +1342,8 @@ class HomeController extends GetxController {
         await _dbService.delete(
             'transaction_details', 'id_penjualan = ?', [idPenjualanLocal]);
       } else {
-        // INSERT new transaction
+        // INSERT new transaction — atomically assigns and increments queue number
+        final int newQueue = await appService.getAndIncrementQueue();
         idPenjualanLocal = await _dbService.insert('transactions', {
           'id_user': map['id_user'],
           'id_member': map['id_member'],
@@ -1359,6 +1360,7 @@ class HomeController extends GetxController {
           'label': customerLabel.value,
           'discount_type': manualDiscountIsPercent.value ? 'percent' : 'fixed',
           'manual_discount_value': manualDiscountValue.value,
+          'queue_number': newQueue,
           'is_synced': 0,
         });
       }
@@ -1432,6 +1434,10 @@ class HomeController extends GetxController {
           'sync_queue',
           '(local_id = ? OR body LIKE ?) AND endpoint LIKE ?',
           [idPenjualanLocal.toString(), '%${map['id_pos']}%', '%pos_order%']);
+
+      // Fetch queue_number from local DB so it can be saved in adminnote
+      final localTx = await _dbService.query('transactions', where: 'id_penjualan = ?', whereArgs: [idPenjualanLocal]);
+      final queueNum = localTx.isNotEmpty ? (localTx.first['queue_number'] as int? ?? 0) : 0;
 
       if (isNew || existingRemoteId == null) {
         // POST: newitems is an Array. Used for totally new orders OR un-synced offline orders
@@ -1509,6 +1515,7 @@ class HomeController extends GetxController {
           'discount_type': discountType,
           'clientnote': mergedNote,
           'terms': selectedOrderType.value,
+          'adminnote': queueNum > 0 ? queueNum.toString() : '',
         };
 
         await syncService.enqueueCommand(
@@ -1647,6 +1654,7 @@ class HomeController extends GetxController {
           'discount_type': discountType,
           'clientnote': mergedNote,
           'terms': selectedOrderType.value,
+          'adminnote': queueNum > 0 ? queueNum.toString() : '',
           // NOTE: 'status' is intentionally omitted — Perfex rejects PUT with status field.
           // Payment status is updated via the /api/pos_transaction endpoint instead.
         };
@@ -1827,10 +1835,6 @@ class HomeController extends GetxController {
     currentRemoteNumber.value = '';
     totalTransaction.value = 0;
     totalHarga = 0;
-
-    // Increment queue number for next order
-    final appService = Get.find<AppService>();
-    await appService.incrementQueue();
 
     penjualanDetailModelList.refresh();
   }
@@ -2049,7 +2053,7 @@ class HomeController extends GetxController {
         String name = item.productName ?? "Item";
         
         if (name.length > maxNameLen) {
-          name = name.substring(0, maxNameLen - 3) + '..';
+          name = '${name.substring(0, maxNameLen - 3)}..';
         }
         
         final String itemName = '$prefix$name';
@@ -2298,7 +2302,7 @@ class HomeController extends GetxController {
         String name = item.productName ?? "Item";
         
         if (name.length > maxNameLen) {
-          name = name.substring(0, maxNameLen - 3) + '..';
+          name = '${name.substring(0, maxNameLen - 3)}..';
         }
         
         final String itemLabel = '$prefix$name';
@@ -2561,6 +2565,11 @@ class HomeController extends GetxController {
       int? existingRemoteId;
       String? existingRemoteNumber;
 
+      // Determine queue number: assign a new one for new orders, preserve for updates
+      final int queueNum = isNewRecord
+          ? await appService.getAndIncrementQueue()
+          : (existing.first['queue_number'] as int? ?? 0);
+
       final Map<String, dynamic> txData = {
         'id_user': map['id_user'],
         'id_member': map['id_member'], // Use derived id from map
@@ -2573,7 +2582,7 @@ class HomeController extends GetxController {
         'label': customerName,
         'discount_type': manualDiscountIsPercent.value ? 'percent' : 'fixed',
         'manual_discount_value': manualDiscountValue.value,
-        'queue_number': Get.find<AppService>().getTodayQueueNumber(),
+        'queue_number': queueNum,
       };
 
       if (!isNewRecord) {
@@ -2757,6 +2766,7 @@ class HomeController extends GetxController {
           'clientnote': mergedNote,
           'terms': selectedOrderType.value,
           'status': 1, // Required by backend to prevent 404 on update
+          'adminnote': queueNum > 0 ? queueNum.toString() : '',
         };
         print("POS_LOG: syncOrderBeforePayment (PUT) Body: ${jsonEncode(putBody)}");
         resp = await apiService.updatePosOrder(existingRemoteId, putBody);

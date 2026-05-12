@@ -219,7 +219,7 @@ class HomeScreen extends StatelessWidget {
                                                 borderRadius: BorderRadius.circular(12.r),
                                                 border: Border.all(color: AppTheme.borderColor(context)),
                                               ),
-                                              child: Icon(Icons.arrow_back, color: AppTheme.primaryColor),
+                                              child: const Icon(Icons.arrow_back, color: AppTheme.primaryColor),
                                             ),
                                           )
                                         : const SizedBox.shrink()),

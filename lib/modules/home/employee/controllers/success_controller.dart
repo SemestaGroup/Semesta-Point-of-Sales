@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:semesta_pos/core/services/app_service.dart';
-import 'package:semesta_pos/core/services/local/database_service.dart';
 import 'package:semesta_pos/core/services/remote/end_point.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
 import 'package:semesta_pos/modules/home/employee/controllers/home_controller.dart';
@@ -17,10 +16,8 @@ class SuccessController extends GetxController {
     if (Get.arguments != null) {
       penjualanId = Get.arguments['penjualan_id'];
 
-      // QUEUE LOGIC & AUTO-PRINT
+      // AUTO-PRINT
       final appService = Get.find<AppService>();
-      
-      _assignQueueAndIncrement(appService);
 
       final printingSettings = appService.posSettings['printing'] ?? {};
       final isAutoPrint = printingSettings['auto_print'] as bool? ?? false;
@@ -32,25 +29,6 @@ class SuccessController extends GetxController {
       }
     }
     super.onInit();
-  }
-
-  Future<void> _assignQueueAndIncrement(AppService appService) async {
-    if (penjualanId == 0) return;
-    
-    try {
-      final dbService = Get.find<DatabaseService>();
-      final currentQueue = appService.getTodayQueueNumber();
-      
-      // Save queue number to the transaction record
-      await dbService.update('transactions', 
-          {'queue_number': currentQueue}, 
-          'id_penjualan = ?', [penjualanId]);
-          
-      // Increment and sync for next transaction
-      await appService.incrementQueue();
-    } catch (e) {
-      debugPrint("SuccessController: Failed to assign queue: $e");
-    }
   }
 
   void printToThermal() async {

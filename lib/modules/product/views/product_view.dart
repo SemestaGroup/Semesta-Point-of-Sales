@@ -67,7 +67,7 @@ class ProductScreen extends StatelessWidget {
                             borderSide: BorderSide.none,
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.blue, width: 1.5),
+                            borderSide: const BorderSide(color: Colors.blue, width: 1.5),
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
@@ -139,13 +139,13 @@ class ProductScreen extends StatelessWidget {
                                     await controller
                                         .destroy(productList.idProduk);
                                   },
-                                  child: ClipRRect(
-                                    borderRadius: const BorderRadius.all(
+                                  child: const ClipRRect(
+                                    borderRadius: BorderRadius.all(
                                         Radius.circular(10)),
                                     child: SizedBox(
                                       // Replaced Container with SizedBox
                                       // color: Colors.red[50], // Removed color property as SizedBox does not have it
-                                      child: const Padding(
+                                      child: Padding(
                                         padding: EdgeInsets.all(8.0),
                                         child: Icon(
                                           CupertinoIcons.delete,
@@ -218,7 +218,7 @@ class ProductScreen extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
+                                      borderSide: const BorderSide(
                                           color: Colors.blue, width: 2.0),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
@@ -322,7 +322,7 @@ class ProductScreen extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
+                                      borderSide: const BorderSide(
                                           color: Colors.blue, width: 2.0),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
@@ -355,7 +355,7 @@ class ProductScreen extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
+                                      borderSide: const BorderSide(
                                           color: Colors.blue, width: 2.0),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
@@ -388,7 +388,7 @@ class ProductScreen extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
+                                      borderSide: const BorderSide(
                                           color: Colors.blue, width: 2.0),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
@@ -414,7 +414,7 @@ class ProductScreen extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
+                                      borderSide: const BorderSide(
                                           color: Colors.blue, width: 2.0),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
@@ -439,7 +439,7 @@ class ProductScreen extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
+                                      borderSide: const BorderSide(
                                           color: Colors.blue, width: 2.0),
                                       borderRadius: BorderRadius.circular(10),
                                     ),

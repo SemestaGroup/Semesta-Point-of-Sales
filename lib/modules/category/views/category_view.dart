@@ -91,10 +91,10 @@ class CategoryView extends StatelessWidget {
                                 },
                                 child: ClipRRect(
                                   borderRadius:
-                                      BorderRadius.all(Radius.circular(10)),
+                                      const BorderRadius.all(Radius.circular(10)),
                                   child: Container(
                                     color: Colors.red[50],
-                                    child: Padding(
+                                    child: const Padding(
                                       padding: EdgeInsets.all(8.0),
                                       child: Icon(
                                         CupertinoIcons.delete,
@@ -144,7 +144,7 @@ class CategoryView extends StatelessWidget {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderSide:
-                                BorderSide(color: Colors.blue, width: 2.0),
+                                const BorderSide(color: Colors.blue, width: 2.0),
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),

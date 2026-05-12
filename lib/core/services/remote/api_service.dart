@@ -91,7 +91,7 @@ class ApiService extends GetxService {
       } catch (e) {
         debugPrint('ApiService: Failed to decode JSON response: $e');
         if (responseApi.statusCode == 401) {
-           return ResponseApiModel(
+           return const ResponseApiModel(
              responsestate: Constants.errorState,
              message: 'Email atau password salah. (401)',
              data: null,
@@ -279,7 +279,7 @@ class ApiService extends GetxService {
               return BrandModel.fromJson(item);
             }).toList());
       }
-      return ResponseApiModel(
+      return const ResponseApiModel(
           responsestate: Constants.errorState, message: 'Server Error');
     } catch (e) {
       debugPrint('Error getBrand: $e');
@@ -301,7 +301,7 @@ class ApiService extends GetxService {
           data: responseJson is Map ? (responseJson['data'] ?? responseJson) : responseJson,
         );
       }
-      return ResponseApiModel(
+      return const ResponseApiModel(
           responsestate: Constants.errorState, message: 'Gagal memuat mode pembayaran');
     } catch (e) {
       return ResponseApiModel(
@@ -351,7 +351,7 @@ class ApiService extends GetxService {
           data: null);
     } catch (e) {
       if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
-        throw e;
+        rethrow;
       }
       return ResponseApiModel(
           responsestate: Constants.errorState,
@@ -1183,7 +1183,7 @@ class ApiService extends GetxService {
       if (responseApi.statusCode == 200) {
         return ResponseApiModel(responsestate: Constants.successState, message: 'Success', data: responseJson);
       }
-      return ResponseApiModel(responsestate: Constants.errorState, message: 'Gagal memuat transaksi', data: null);
+      return const ResponseApiModel(responsestate: Constants.errorState, message: 'Gagal memuat transaksi', data: null);
     } catch (e) {
       debugPrint('getPosTransaction Error: $e');
       if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {

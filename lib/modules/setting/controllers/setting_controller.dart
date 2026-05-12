@@ -479,6 +479,8 @@ class SettingController extends GetxController {
     final profile = await CapabilityProfile.load();
     final paper = paperSize == '80mm' ? PaperSize.mm80 : PaperSize.mm58;
     final generator = Generator(paper, profile);
+    final int maxChars = paperSize == '80mm' ? 48 : 32;
+    final String lineSeparator = '-' * maxChars;
     List<int> bytes = [];
 
     for (int i = 0; i < copies; i++) {
@@ -486,7 +488,7 @@ class SettingController extends GetxController {
         line1,
         styles: const PosStyles(align: PosAlign.center),
       );
-      bytes += generator.text('------------------------------------------',
+      bytes += generator.text(lineSeparator,
           styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text(
         line2,
@@ -496,10 +498,14 @@ class SettingController extends GetxController {
         line3,
         styles: const PosStyles(align: PosAlign.center),
       );
-      bytes += generator.text('------------------------------------------',
+      bytes += generator.text(lineSeparator,
           styles: const PosStyles(align: PosAlign.left));
+      String displayText = line4;
+      if (copies > 1) {
+        displayText += " (${i + 1}/$copies)";
+      }
       bytes += generator.text(
-        line4,
+        displayText,
         styles: const PosStyles(align: PosAlign.center, bold: true),
       );
       bytes += generator.feed(2);
@@ -544,7 +550,7 @@ class SettingController extends GetxController {
 
     final isKitchen = printer.role == 'kitchen';
     final title = isKitchen ? 'KITCHEN TEST' : 'TEST PRINT';
-    final lineSep = '------------------------------------------';
+    const lineSep = '------------------------------------------';
 
     bytes += generator.text(isKitchen ? '*** KITCHEN ***' : companyName.toUpperCase(),
         styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
@@ -651,7 +657,7 @@ class SettingController extends GetxController {
 
     void printRow(String label, String value, {bool bold = false, bool fontB = false}) {
       String lab = label;
-      if (lab.length > labelWidth) lab = lab.substring(0, labelWidth - 2) + '..';
+      if (lab.length > labelWidth) lab = '${lab.substring(0, labelWidth - 2)}..';
       bytes += generator.text(
         lab.padRight(labelWidth) + value.padLeft(valueWidth),
         styles: PosStyles(bold: bold, fontType: fontB ? PosFontType.fontB : PosFontType.fontA),
@@ -719,7 +725,7 @@ class SettingController extends GetxController {
         // Style: [qty]x [name] [price] [total]
         // Following receipt: qty x name ... total
         String lab = '${qty}x $name';
-        if (lab.length > 25) lab = lab.substring(0, 23) + '..';
+        if (lab.length > 25) lab = '${lab.substring(0, 23)}..';
         printRow(lab, f(total).replaceAll('Rp. ', ''), fontB: true);
         if (price > 0 && qty > 1) {
            bytes += generator.text('   @ ${f(price).replaceAll('Rp. ', '')}', 

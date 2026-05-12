@@ -263,7 +263,9 @@ class _AuditKeypadDialogState extends State<AuditKeypadDialog> {
     if (n.contains('edc') ||
         n.contains('card') ||
         n.contains('debit') ||
-        n.contains('kredit')) return CupertinoIcons.creditcard_fill;
+        n.contains('kredit')) {
+      return CupertinoIcons.creditcard_fill;
+    }
     if (n.contains('shopee')) return CupertinoIcons.bag_fill;
     if (n.contains('grab')) return CupertinoIcons.car_fill;
     if (n.contains('gofood') || n.contains('go-food')) {

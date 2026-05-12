@@ -585,7 +585,7 @@ class ReportController extends GetxController {
         final int maxNameLen = (is80mm ? 32 : 24) - prefix.length;
         String displayName = name;
         if (displayName.length > maxNameLen) {
-          displayName = displayName.substring(0, maxNameLen - 3) + '..';
+          displayName = '${displayName.substring(0, maxNameLen - 3)}..';
         }
         
         final String itemLabel = '$prefix$displayName';

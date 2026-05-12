@@ -288,6 +288,9 @@ class SyncService extends GetxService {
                 fullOrderData['discount_total']?.toString() ?? '0') ??
             0;
 
+        final adminNoteStr = fullOrderData['adminnote']?.toString() ?? '';
+        final queueNumRemote = int.tryParse(adminNoteStr) ?? 0;
+
         await _dbService.transaction((txn) async {
           // Insert or Update Header
           final headerMap = {
@@ -314,6 +317,10 @@ class SyncService extends GetxService {
             'label': fullOrderData['label']?.toString() ?? '',
             'status': _toInt(fullOrderData['status']),
           };
+
+          if (queueNumRemote > 0) {
+            headerMap['queue_number'] = queueNumRemote;
+          }
 
           if (localIdPenjualan != null) {
             await txn.update('transactions', headerMap,
@@ -473,6 +480,55 @@ class SyncService extends GetxService {
     // DO NOT call processQueue() here — it will run on the background 30s timer
     // or when internet reconnects. This keeps all POS operations instant (SQLite-only).
     debugPrint("SyncService: Queued [$method] $endpoint for background sync.");
+  }
+
+  /// Like enqueueCommand but for idempotent updates (e.g. pos_options queue counter).
+  /// Instead of inserting a duplicate row every time, it UPDATES the body of the
+  /// existing pending command for this [localId] + [endpoint]. Inserts if none exists.
+  /// This prevents the sync_queue from accumulating hundreds of identical PUT requests.
+  Future<void> upsertQueueSync({
+    required String method,
+    required String endpoint,
+    required String localId,
+    Map<String, dynamic>? body,
+  }) async {
+    final baseUrl = _userService.getBaseUrl();
+    final bodyJson = body != null ? jsonEncode(body) : null;
+
+    // Check for an existing pending/failed command for this localId + endpoint
+    final existing = await _dbService.rawQuery(
+        "SELECT id FROM sync_queue WHERE method = ? AND endpoint = ? AND local_id = ? AND status IN ('pending', 'failed')",
+        [method, endpoint, localId]);
+
+    if (existing.isNotEmpty) {
+      // Update the body with the latest value — only the most recent state matters
+      final existingId = existing.first['id'];
+      await _dbService.update(
+        'sync_queue',
+        {
+          'body': bodyJson,
+          'status': 'pending',     // reset failed → pending with fresh data
+          'retry_count': 0,
+          'last_error': null,
+          'created_at': DateTime.now().toIso8601String(),
+        },
+        'id = ?',
+        [existingId],
+      );
+      debugPrint("SyncService: Updated existing sync command for $endpoint ($localId).");
+    } else {
+      await _dbService.insert('sync_queue', {
+        'method': method,
+        'base_url': baseUrl,
+        'endpoint': endpoint,
+        'body': bodyJson,
+        'is_form_data': 0,
+        'status': 'pending',
+        'created_at': DateTime.now().toIso8601String(),
+        'local_id': localId,
+      });
+      debugPrint("SyncService: Inserted new sync command for $endpoint ($localId).");
+    }
   }
 
   Future<void> processQueue() async {
@@ -727,12 +783,21 @@ class SyncService extends GetxService {
 
       // Perfex API workaround: PUT to pos_order often returns 404 'Invoice Update Fail'
       // when the server can't match the update due to status, items, or timing issues.
-      // Since payment is handled by pos_transaction endpoint separately, we treat this as success.
       if (method == 'PUT' && endpoint.contains('pos_order') &&
           (response.statusCode == 404 || response.statusCode == 422) &&
           response.body.contains('Invoice Update Fail')) {
         isTreatedAsSuccess = true;
         debugPrint("SyncService: Ignored Perfex ${response.statusCode} 'Invoice Update Fail' — order data is already saved locally.");
+      }
+
+      // Perfex API workaround: PUT to pos_options returns 500 'Failed to update data'
+      // when the submitted value is identical to what is already on the server (no-op update).
+      // This is safe to treat as success — the server already has the correct value.
+      if (method == 'PUT' && endpoint.contains('pos_options') &&
+          response.statusCode == 500 &&
+          response.body.contains('Failed to update data')) {
+        isTreatedAsSuccess = true;
+        debugPrint("SyncService: Ignored pos_options 500 'Failed to update data' — server already has the current value.");
       }
 
       if (isTreatedAsSuccess) {
@@ -992,20 +1057,26 @@ class SyncService extends GetxService {
 
       // Only wipe old cache if we ACTUALLY got new valid options mapped.
       if (options.isNotEmpty) {
-        batch.rawDelete("DELETE FROM pos_options WHERE option_name NOT IN ('pos_active_session', 'pos_shift_config', 'pos_active_staff')");
+        // IMPORTANT: Exclude queue keys and session keys from the wipe.
+        // ps_next_queue / ps_last_queue_date are local-authoritative — the device
+        // is the only one incrementing them. Wiping them causes queue to reset to 1.
+        batch.rawDelete(
+          "DELETE FROM pos_options WHERE option_name NOT IN ("
+          "'pos_active_session', 'pos_shift_config', 'pos_active_staff', "
+          "'${Constants.psNextQueue}', '${Constants.psLastQueueDate}')"
+        );
+
         options.forEach((key, value) {
           final serverVal = value?.toString() ?? '';
-          
+
           if (key == 'pos_active_session' || key == 'pos_active_staff') {
             // ONLY overwrite local device session if the server has an active session AND local does NOT.
-            // The local device is the master of its own shift. Overwriting it from the server can corrupt startTime.
             if (serverVal.isNotEmpty && serverVal.length > 5) {
               try {
                 final decoded = jsonDecode(serverVal);
                 if (decoded is Map<String, dynamic>) {
                   if (key == 'pos_active_session' && Get.isRegistered<ShiftController>()) {
                     final shiftCtrl = Get.find<ShiftController>();
-                    // Only apply if we don't have an active shift locally
                     if (shiftCtrl.activeShift.value == null) {
                       batch.insert('pos_options', {
                         'option_name': key,
@@ -1014,27 +1085,60 @@ class SyncService extends GetxService {
                       shiftCtrl.activeShift.value = ShiftSessionModel.fromJson(decoded);
                     }
                   } else if (key == 'pos_active_staff') {
-                     // Can safely overwrite staff if needed, but safer to only do if missing
-                     batch.insert('pos_options', {
-                        'option_name': key,
-                        'option_value': serverVal,
-                      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+                    batch.insert('pos_options', {
+                      'option_name': key,
+                      'option_value': serverVal,
+                    }, conflictAlgorithm: ConflictAlgorithm.ignore);
                   }
                 }
-              } catch(e) {
+              } catch (e) {
                 debugPrint('SyncService: Invalid JSON for $key: $e');
               }
             }
             return;
           }
-          
+
+          // Queue counter protection: only accept server value if it is NEWER than local.
+          // This prevents stale server data from overwriting a fresh local counter after
+          // coming back online (e.g. server still has yesterday's date).
+          if (key == Constants.psNextQueue || key == Constants.psLastQueueDate) {
+            if (Get.isRegistered<AppService>()) {
+              final appSvc = Get.find<AppService>();
+              final today = DateTime.now().toIso8601String().split('T').first;
+              final localDate = appSvc.lastQueueDate.value;
+              final serverDate = key == Constants.psLastQueueDate
+                  ? serverVal
+                  : options[Constants.psLastQueueDate]?.toString() ?? '';
+
+              // Skip if local date is today (device has authoritative data for today)
+              if (localDate == today) {
+                debugPrint(
+                    'SyncService: Skipping server $key — local queue is current for today ($today).');
+                return;
+              }
+              // If server date is newer, allow it to restore the counter
+              if (serverDate.isNotEmpty && serverDate.compareTo(localDate) > 0) {
+                debugPrint(
+                    'SyncService: Applying server $key — server date ($serverDate) is newer than local ($localDate).');
+              } else {
+                // Server data is same or older; keep local
+                return;
+              }
+            } else {
+              return; // AppService not ready; skip
+            }
+          }
+
           batch.insert('pos_options', {
             'option_name': key,
             'option_value': serverVal,
           }, conflictAlgorithm: ConflictAlgorithm.replace);
         });
+
         await batch.commit(noResult: true);
-        // CRITICAL: Refresh AppService so UI components can react to new data
+
+        // Refresh AppService so UI components can react to new data.
+        // loadLocalSettings will now correctly restore the protected queue counter.
         if (Get.isRegistered<AppService>()) {
           await Get.find<AppService>().loadLocalSettings();
         }

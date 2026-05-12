@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
@@ -6,6 +7,7 @@ import 'package:semesta_pos/core/services/remote/api_service.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
 import 'package:semesta_pos/core/util/constans.dart';
 import 'package:semesta_pos/core/services/local/database_service.dart';
+import 'package:semesta_pos/core/services/sync_service.dart';
 import 'package:sqflite/sqflite.dart';
 
 class AppService extends GetxService {
@@ -278,6 +280,14 @@ class AppService extends GetxService {
       }
     }
     
+    // Restore queue counter from SQLite
+    if (options.containsKey(Constants.psNextQueue)) {
+      queueNumber.value = int.tryParse(options[Constants.psNextQueue].toString()) ?? 1;
+    }
+    if (options.containsKey(Constants.psLastQueueDate)) {
+      lastQueueDate.value = options[Constants.psLastQueueDate]?.toString() ?? "";
+    }
+
     String name = (options['pos_tenant_name'] ?? options['pos_company_name'] ?? options['company_name'])?.toString().trim() ?? userService.getPrefString(Constants.posCompanyName);
     String address = (options['pos_address'] ?? options['company_address'] ?? options['address'])?.toString().trim() ?? userService.getPrefString(Constants.posAddress);
     String phone = (options['pos_phone'] ?? options['pos_phone_number'] ?? options['company_phone'])?.toString().trim() ?? userService.getPrefString(Constants.posPhoneNumber);
@@ -293,36 +303,82 @@ class AppService extends GetxService {
     );
   }
 
+  /// Atomically gets the current queue number for today AND increments the counter.
+  /// Non-blocking: returns the assigned number instantly; all I/O is fire-and-forget.
+  Future<int> getAndIncrementQueue() async {
+    final today = DateTime.now().toIso8601String().split('T').first;
+
+    if (lastQueueDate.value != today) {
+      // New day: reset counter to 1
+      queueNumber.value = 1;
+      lastQueueDate.value = today;
+    }
+
+    final int assignedQueue = queueNumber.value;
+
+    // Increment in memory for the NEXT transaction
+    queueNumber.value++;
+
+    // Fire-and-forget: persist to SQLite + enqueue server sync.
+    // We do NOT await these — the number is already safe in memory.
+    // Using unawaited so the payment flow is not blocked.
+    unawaited(_persistQueueToSQLite());
+
+    return assignedQueue;
+  }
+
+  /// Saves the current queue state to SQLite and enqueues a server sync.
+  /// Runs in background — never await this directly.
+  Future<void> _persistQueueToSQLite() async {
+    try {
+      final db = Get.find<DatabaseService>();
+      await db.insert('pos_options', {
+        'option_name': Constants.psNextQueue,
+        'option_value': queueNumber.value.toString(),
+      });
+      await db.insert('pos_options', {
+        'option_name': Constants.psLastQueueDate,
+        'option_value': lastQueueDate.value,
+      });
+    } catch (e) {
+      debugPrint("AppService: Failed to persist queue to SQLite: $e");
+    }
+
+    // Upsert: update the existing pending pos_options sync command body instead of
+    // adding a new one. Uses localId='queue_counter' so deduplication works
+    // (SQL '= null' never matches, so without a fixed localId every call adds a duplicate).
+    try {
+      final syncService = Get.find<SyncService>();
+      await syncService.upsertQueueSync(
+        method: 'PUT',
+        endpoint: '/api/pos_options',
+        localId: 'queue_counter',
+        body: {
+          Constants.psNextQueue: queueNumber.value,
+          Constants.psLastQueueDate: lastQueueDate.value,
+          'version': appModel.value.version, // Keep version intact
+        },
+      );
+    } catch (e) {
+      debugPrint("AppService: Failed to upsert queue sync: $e");
+    }
+  }
+
+  /// Deprecated: Use getAndIncrementQueue() instead.
+  /// Kept for any legacy calls — redirects to the atomic version synchronously
+  /// but cannot actually increment; call getAndIncrementQueue() for correct behavior.
   int getTodayQueueNumber() {
     final today = DateTime.now().toIso8601String().split('T').first;
     if (lastQueueDate.value != today) {
-      // It's a new day, reset to 1
       queueNumber.value = 1;
       lastQueueDate.value = today;
-      // Note: we don't sync immediately, incrementQueue will handle it
     }
     return queueNumber.value;
   }
 
+  /// Deprecated: Use getAndIncrementQueue() instead.
   Future<void> incrementQueue() async {
-    final today = DateTime.now().toIso8601String().split('T').first;
-    
-    // Ensure date is correct (safe reset)
-    if (lastQueueDate.value != today) {
-      queueNumber.value = 1;
-      lastQueueDate.value = today;
-    } else {
-      queueNumber.value++;
-    }
-
-    // Sync to backend pos_options
-    try {
-      await apiService.updatePosOptions({
-        Constants.psNextQueue: queueNumber.value,
-        Constants.psLastQueueDate: lastQueueDate.value,
-      });
-    } catch (e) {
-      debugPrint("AppService: Failed to sync next queue: $e");
-    }
+    // This is now a no-op redirect — getAndIncrementQueue handles everything atomically
+    debugPrint("AppService: incrementQueue() called — use getAndIncrementQueue() instead.");
   }
 }

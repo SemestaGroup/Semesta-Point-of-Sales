@@ -322,7 +322,7 @@ class HomeAdminScreen extends GetView<HomeAdminController> {
       SizedBox(height: 3.h),
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
         Expanded(
-          child: Text('$name',
+          child: Text(name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -330,7 +330,7 @@ class HomeAdminScreen extends GetView<HomeAdminController> {
                   fontFamily: AppTheme.fontMedium,
                   color: AppTheme.textColor(context))),
         ),
-        Text('${qty} pcs',
+        Text('$qty pcs',
             style: TextStyle(
                 fontSize: 12.sp,
                 fontFamily: AppTheme.fontBold,

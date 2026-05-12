@@ -704,7 +704,7 @@ class StaffSelectionView extends GetView<AuthController> {
                               .map((e) => DropdownMenuItem(
                                     value: e.key,
                                     child: Text(e.value,
-                                        style: TextStyle(
+                                        style: const TextStyle(
                                             fontFamily: AppTheme.fontMedium)),
                                   ))
                               .toList(),

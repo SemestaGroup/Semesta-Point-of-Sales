@@ -3,20 +3,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
-import 'package:semesta_pos/core/models/shared_user_model.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
 import 'package:semesta_pos/routes/app_pages.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:semesta_pos/core/services/remote/api_service.dart';
 import 'package:semesta_pos/core/services/sync_service.dart';
-import 'package:semesta_pos/core/services/app_service.dart';
 import 'package:semesta_pos/core/services/theme_service.dart';
 import 'package:semesta_pos/core/services/local/database_service.dart';
 import 'package:semesta_pos/styles/app_theme.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:semesta_pos/modules/setting/controllers/setting_controller.dart';
-import 'package:semesta_pos/modules/home/employee/controllers/shift_controller.dart';
 import 'package:semesta_pos/core/services/service_dependency.dart';
 
 @pragma('vm:entry-point')
