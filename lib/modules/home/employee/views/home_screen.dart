@@ -2789,7 +2789,7 @@ class HomeScreen extends StatelessWidget {
                         CupertinoIcons.creditcard_fill,
                         onTap: () async {
                           if (controller.penjualanDetailModelList.isEmpty) return;
-                          bool success = await controller.syncOrderBeforePayment();
+                          bool success = await controller.saveOrderLocally();
                           if (success) {
                             Get.to(() => const PaymentScreen(),
                                 transition: Transition.cupertino);

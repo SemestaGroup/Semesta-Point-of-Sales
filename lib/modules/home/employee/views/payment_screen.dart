@@ -28,7 +28,7 @@ class PaymentScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<HomeController>();
-    final selectedPaymentMethod = "Cash".obs;
+    final selectedPaymentMethod = formatRupiah(controller.totalTransaction.value).obs;
 
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBackgroundColor(context),

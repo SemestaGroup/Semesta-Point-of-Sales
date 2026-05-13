@@ -64,11 +64,6 @@ void main() async {
 
   final sharedUserData = await userService.getSharedUserModel();
 
-  // Trigger startup synchronization if logged in
-  if (sharedUserData.isLogin) {
-    syncService.pullMasterData();
-  }
-
   debugPrint(sharedUserData.toString());
   initializeDateFormatting('id_ID', null);
 

@@ -576,8 +576,8 @@ class _OrderScreenState extends State<OrderScreen> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          if (queueNo > 0)
-                            Container(
+                          // Selalu tampilkan label antrian sesuai permintaan
+                          Container(
                               padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
                               margin: EdgeInsets.only(right: 12.w),
                               decoration: BoxDecoration(

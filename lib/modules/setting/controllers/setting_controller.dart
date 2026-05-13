@@ -32,6 +32,7 @@ class SettingController extends GetxController {
     }
     return Get.find<ApiService>();
   }
+
   RxBool isLoading = false.obs;
   Rx<AppModel> appModel = const AppModel().obs;
   TextEditingController companyNameFieldController = TextEditingController();
@@ -39,14 +40,15 @@ class SettingController extends GetxController {
   TextEditingController companyTelpFieldController = TextEditingController();
   TextEditingController companyDiscFieldController = TextEditingController();
   TextEditingController companyVersionFieldController = TextEditingController();
-  TextEditingController labelOffsetXFieldController = TextEditingController(text: "20");
+  TextEditingController labelOffsetXFieldController =
+      TextEditingController(text: "20");
   RxBool isLoadingStore = false.obs;
 
   // Printer Management
   blue.BlueThermalPrinter bluetooth = blue.BlueThermalPrinter.instance;
   RxList<PrinterDevice> assignedPrinters = <PrinterDevice>[].obs;
   Map<String, Socket?> networkSockets = {}; // IP -> Socket
-  
+
   // Scanning State (for Add Printer dialog)
   RxList<blue.BluetoothDevice> discoveredDevices = <blue.BluetoothDevice>[].obs;
   RxBool isScanning = false.obs;
@@ -71,22 +73,26 @@ class SettingController extends GetxController {
   void onInit() {
     super.onInit();
     final appService = Get.find<AppService>();
-    
+
     // 1. Load local settings immediately
     _loadLocalSettings();
-    
+
     // 2. Reactively update text controllers if background sync finishes
     ever(appService.appModel, (AppModel model) {
-      if (companyNameFieldController.text.isEmpty || companyNameFieldController.text == 'Guest') {
+      if (companyNameFieldController.text.isEmpty ||
+          companyNameFieldController.text == 'Guest') {
         companyNameFieldController.text = model.namaPerusahaan;
       }
-      if (companyAddressFieldController.text.isEmpty || companyAddressFieldController.text == 'Guest') {
+      if (companyAddressFieldController.text.isEmpty ||
+          companyAddressFieldController.text == 'Guest') {
         companyAddressFieldController.text = model.alamat;
       }
-      if (companyTelpFieldController.text.isEmpty || companyTelpFieldController.text == 'Guest') {
+      if (companyTelpFieldController.text.isEmpty ||
+          companyTelpFieldController.text == 'Guest') {
         companyTelpFieldController.text = model.telepon;
       }
-      if (companyDiscFieldController.text == '0' || companyDiscFieldController.text.isEmpty) {
+      if (companyDiscFieldController.text == '0' ||
+          companyDiscFieldController.text.isEmpty) {
         companyDiscFieldController.text = model.diskon.toString();
       }
     });
@@ -99,26 +105,27 @@ class SettingController extends GetxController {
     isLoading.value = true;
     try {
       final appService = Get.find<AppService>();
-      
+
       // 1. Load Printers from Prefs (as they are complex objects usually kept in prefs)
       final localPrinters = userService.getPrefString('pos_printer_configs');
       if (localPrinters.isNotEmpty && localPrinters != "Guest") {
         try {
           final List<dynamic> list = jsonDecode(localPrinters);
-          assignedPrinters.value = list.map((e) => PrinterDevice.fromJson(e)).toList();
+          assignedPrinters.value =
+              list.map((e) => PrinterDevice.fromJson(e)).toList();
         } catch (_) {}
       }
-      
+
       // 2. Load Company Info from AppService (Source of Truth)
       // AppService already handles the SQLite fallback in its onInit
       final model = appService.appModel.value;
-      
+
       companyNameFieldController.text = model.namaPerusahaan;
       companyAddressFieldController.text = model.alamat;
       companyTelpFieldController.text = model.telepon;
       companyDiscFieldController.text = model.diskon.toString();
       companyVersionFieldController.text = model.version;
-      
+
       final localLabelOffsetX = userService.getPrefString('pos_label_offset_x');
       if (localLabelOffsetX.isNotEmpty && localLabelOffsetX != "Guest") {
         labelOffsetXFieldController.text = localLabelOffsetX;
@@ -149,41 +156,74 @@ class SettingController extends GetxController {
           final list = optionsApi.data as List;
           for (var item in list) {
             if (item is Map) {
-              if (item.containsKey('option_name') && item.containsKey('option_value')) {
-                rawOptions[item['option_name'].toString()] = item['option_value'];
+              if (item.containsKey('option_name') &&
+                  item.containsKey('option_value')) {
+                rawOptions[item['option_name'].toString()] =
+                    item['option_value'];
               } else {
                 rawOptions.addAll(Map<String, dynamic>.from(item));
               }
             }
           }
         }
-        
+
         // Sanitize keys
-        final options = rawOptions.map((key, value) => MapEntry(key.trim(), value));
+        final options =
+            rawOptions.map((key, value) => MapEntry(key.trim(), value));
 
         // Sync to AppService
         final appService = Get.find<AppService>();
-        
+
         // Extract values using keys from API_DOCS.md
-        String name = (options['pos_tenant_name'] ?? options['pos_company_name'] ?? options['company_name'])?.toString().trim() ?? "";
-        if (name.isEmpty || name == 'Guest') name = appService.appModel.value.namaPerusahaan;
-        if (name.isEmpty || name == 'Guest') name = userService.getPrefString(Constants.posCompanyName);
+        String name = (options['pos_tenant_name'] ??
+                    options['pos_company_name'] ??
+                    options['company_name'])
+                ?.toString()
+                .trim() ??
+            "";
+        if (name.isEmpty || name == 'Guest')
+          name = appService.appModel.value.namaPerusahaan;
+        if (name.isEmpty || name == 'Guest')
+          name = userService.getPrefString(Constants.posCompanyName);
         if (name == 'Guest') name = '';
 
-        String address = (options['pos_address'] ?? options['company_address'] ?? options['address'])?.toString().trim() ?? "";
-        if (address.isEmpty || address == 'Guest') address = appService.appModel.value.alamat;
-        if (address.isEmpty || address == 'Guest') address = userService.getPrefString(Constants.posAddress);
+        String address = (options['pos_address'] ??
+                    options['company_address'] ??
+                    options['address'])
+                ?.toString()
+                .trim() ??
+            "";
+        if (address.isEmpty || address == 'Guest')
+          address = appService.appModel.value.alamat;
+        if (address.isEmpty || address == 'Guest')
+          address = userService.getPrefString(Constants.posAddress);
         if (address == 'Guest') address = '';
 
-        String phone = (options['pos_phone'] ?? options['pos_phone_number'] ?? options['company_phone'])?.toString().trim() ?? "";
-        if (phone.isEmpty || phone == 'Guest') phone = appService.appModel.value.telepon;
-        if (phone.isEmpty || phone == 'Guest') phone = userService.getPrefString(Constants.posPhoneNumber);
+        String phone = (options['pos_phone'] ??
+                    options['pos_phone_number'] ??
+                    options['company_phone'])
+                ?.toString()
+                .trim() ??
+            "";
+        if (phone.isEmpty || phone == 'Guest')
+          phone = appService.appModel.value.telepon;
+        if (phone.isEmpty || phone == 'Guest')
+          phone = userService.getPrefString(Constants.posPhoneNumber);
         if (phone == 'Guest') phone = '';
 
-        String discount = (options['pos_default_discount'] ?? options['default_discount'])?.toString().trim() ?? "0";
-        if (discount == "0" || discount.isEmpty) discount = appService.appModel.value.diskon.toString();
+        String discount =
+            (options['pos_default_discount'] ?? options['default_discount'])
+                    ?.toString()
+                    .trim() ??
+                "0";
+        if (discount == "0" || discount.isEmpty)
+          discount = appService.appModel.value.diskon.toString();
 
-        String version = (options['pos_version'] ?? options['version'] ?? options['app_version'] ?? appService.appModel.value.version).toString();
+        String version = (options['pos_version'] ??
+                options['version'] ??
+                options['app_version'] ??
+                appService.appModel.value.version)
+            .toString();
         if (version.isEmpty || version == "null") version = "1.0.0";
 
         // Always update text controllers
@@ -194,27 +234,35 @@ class SettingController extends GetxController {
         companyVersionFieldController.text = version;
 
         // Persist to SharedPreferences via UserService if they exist (only not null ones)
-        if (name.isNotEmpty) userService.saveString(Constants.posCompanyName, name);
-        if (phone.isNotEmpty) userService.saveString(Constants.posPhoneNumber, phone);
-        if (address.isNotEmpty) userService.saveString(Constants.posAddress, address);
-        if (discount.isNotEmpty) userService.saveString(Constants.posDefaultDiscount, discount);
+        if (name.isNotEmpty)
+          userService.saveString(Constants.posCompanyName, name);
+        if (phone.isNotEmpty)
+          userService.saveString(Constants.posPhoneNumber, phone);
+        if (address.isNotEmpty)
+          userService.saveString(Constants.posAddress, address);
+        if (discount.isNotEmpty)
+          userService.saveString(Constants.posDefaultDiscount, discount);
         if (version.isNotEmpty) userService.saveString('pos_version', version);
 
         // Update AppService model
         appService.appModel.value = appService.appModel.value.copyWith(
-          namaPerusahaan: name.isNotEmpty ? name : appService.appModel.value.namaPerusahaan,
-          alamat: address.isNotEmpty ? address : appService.appModel.value.alamat,
+          namaPerusahaan:
+              name.isNotEmpty ? name : appService.appModel.value.namaPerusahaan,
+          alamat:
+              address.isNotEmpty ? address : appService.appModel.value.alamat,
           telepon: phone.isNotEmpty ? phone : appService.appModel.value.telepon,
           diskon: int.tryParse(discount) ?? appService.appModel.value.diskon,
-          version: version.isNotEmpty ? version : appService.appModel.value.version,
+          version:
+              version.isNotEmpty ? version : appService.appModel.value.version,
         );
-        
+
         // Cache detailed options to SQLite for offline use
         final db = Get.find<DatabaseService>();
         for (var entry in options.entries) {
           final serverVal = entry.value?.toString() ?? "";
-          
-          if (entry.key == 'pos_active_session' || entry.key == 'pos_active_staff') {
+
+          if (entry.key == 'pos_active_session' ||
+              entry.key == 'pos_active_staff') {
             if (serverVal.isNotEmpty && serverVal.length > 5) {
               try {
                 final decoded = jsonDecode(serverVal);
@@ -223,18 +271,21 @@ class SettingController extends GetxController {
                     'option_name': entry.key,
                     'option_value': serverVal,
                   });
-                  
-                  if (entry.key == 'pos_active_session' && Get.isRegistered<ShiftController>()) {
-                    Get.find<ShiftController>().activeShift.value = ShiftSessionModel.fromJson(decoded);
+
+                  if (entry.key == 'pos_active_session' &&
+                      Get.isRegistered<ShiftController>()) {
+                    Get.find<ShiftController>().activeShift.value =
+                        ShiftSessionModel.fromJson(decoded);
                   }
                 }
-              } catch(e) {
-                debugPrint('SettingController: Error parsing pos_active_session, ignoring server value: $e');
+              } catch (e) {
+                debugPrint(
+                    'SettingController: Error parsing pos_active_session, ignoring server value: $e');
               }
             }
             continue;
           }
-          
+
           await db.insert('pos_options', {
             'option_name': entry.key,
             'option_value': serverVal,
@@ -244,10 +295,12 @@ class SettingController extends GetxController {
         // 1. Process Printer Configs
         if (options.containsKey('pos_printer_configs')) {
           try {
-            final String printerJson = options['pos_printer_configs']?.toString() ?? "";
+            final String printerJson =
+                options['pos_printer_configs']?.toString() ?? "";
             if (printerJson.isNotEmpty && printerJson != "null") {
               final List<dynamic> list = jsonDecode(printerJson);
-              assignedPrinters.value = list.map((e) => PrinterDevice.fromJson(e)).toList();
+              assignedPrinters.value =
+                  list.map((e) => PrinterDevice.fromJson(e)).toList();
               // Persist locally
               userService.saveString('pos_printer_configs', printerJson);
             }
@@ -313,19 +366,22 @@ class SettingController extends GetxController {
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         debugPrint('BT Connect Attempt $attempt for ${device.name}');
-        
+
         // Step 1: Handle existing connections gracefully
         final bool? isCurrentlyConnected = await bluetooth.isConnected;
-        
+
         if (isCurrentlyConnected == true) {
           if (connectedBluetoothAddress == device.address) {
             // Already connected to the target! Skip connect overhead.
-            debugPrint('BT Already connected to target (${device.name}). Skipping connect.');
+            debugPrint(
+                'BT Already connected to target (${device.name}). Skipping connect.');
             _updatePrinterStatus(device.id, true);
             return true;
           } else {
             // Connected to a DIFFERENT device, so disconnect first.
-            try { await bluetooth.disconnect(); } catch (_) {}
+            try {
+              await bluetooth.disconnect();
+            } catch (_) {}
             await Future.delayed(const Duration(milliseconds: 1000));
             connectedBluetoothAddress = null;
           }
@@ -333,9 +389,11 @@ class SettingController extends GetxController {
 
         // Step 2: Find the specific target in bonded list
         List<blue.BluetoothDevice> bonded = await bluetooth.getBondedDevices();
-        final target = bonded.firstWhereOrNull((d) => d.address == device.address);
+        final target =
+            bonded.firstWhereOrNull((d) => d.address == device.address);
         if (target == null) {
-          debugPrint('BT device not found in paired list: ${device.name} (${device.address})');
+          debugPrint(
+              'BT device not found in paired list: ${device.name} (${device.address})');
           if (attempt == maxRetries) {
             _updatePrinterStatus(device.id, false);
             return false;
@@ -347,10 +405,12 @@ class SettingController extends GetxController {
         await bluetooth.connect(target);
 
         // Step 4: VERIFY — library may not throw even if printer is off
-        await Future.delayed(const Duration(milliseconds: 1000)); // Wait for socket to stabilize
+        await Future.delayed(
+            const Duration(milliseconds: 1000)); // Wait for socket to stabilize
         final bool? isConnected = await bluetooth.isConnected;
         if (isConnected != true) {
-          debugPrint('BT connect() returned but isConnected=false for ${device.name}. Printer may be off.');
+          debugPrint(
+              'BT connect() returned but isConnected=false for ${device.name}. Printer may be off.');
           if (attempt == maxRetries) {
             _updatePrinterStatus(device.id, false);
             return false;
@@ -369,11 +429,13 @@ class SettingController extends GetxController {
           ErrorLogService.log(
             category: 'printer',
             errCode: 'BT_CONNECT_FAIL',
-            errMsg: 'Device: ${device.name} (${device.address}) | Attempt $attempt | $e',
+            errMsg:
+                'Device: ${device.name} (${device.address}) | Attempt $attempt | $e',
           );
           return false;
         }
-        await Future.delayed(const Duration(milliseconds: 1500)); // Cool down before retry
+        await Future.delayed(
+            const Duration(milliseconds: 1500)); // Cool down before retry
       }
     }
     return false;
@@ -389,9 +451,9 @@ class SettingController extends GetxController {
         networkSockets.remove(device.address);
       }
 
-      final socket = await Socket.connect(device.address, device.port, 
+      final socket = await Socket.connect(device.address, device.port,
           timeout: const Duration(seconds: 3));
-      
+
       // Handle socket errors/closure in background
       socket.done.then((_) {
         networkSockets.remove(device.address);
@@ -411,7 +473,8 @@ class SettingController extends GetxController {
       ErrorLogService.log(
         category: 'printer',
         errCode: 'NETWORK_CONNECT_FAIL',
-        errMsg: 'Device: ${device.name} (${device.address}:${device.port}) | $e',
+        errMsg:
+            'Device: ${device.name} (${device.address}:${device.port}) | $e',
       );
     }
   }
@@ -419,7 +482,8 @@ class SettingController extends GetxController {
   void _updatePrinterStatus(String id, bool connected) {
     int idx = assignedPrinters.indexWhere((p) => p.id == id);
     if (idx != -1) {
-      assignedPrinters[idx] = assignedPrinters[idx].copyWith(isConnected: connected);
+      assignedPrinters[idx] =
+          assignedPrinters[idx].copyWith(isConnected: connected);
     }
   }
 
@@ -455,7 +519,8 @@ class SettingController extends GetxController {
   }
 
   Future<void> _savePrinterConfigs() async {
-    final String printerJson = jsonEncode(assignedPrinters.map((e) => e.toJson()).toList());
+    final String printerJson =
+        jsonEncode(assignedPrinters.map((e) => e.toJson()).toList());
     await userService.saveString('pos_printer_configs', printerJson);
     try {
       await apiService.updatePosOptions({'pos_printer_configs': printerJson});
@@ -512,11 +577,8 @@ class SettingController extends GetxController {
       bytes += generator.cut();
     }
 
-
     return bytes;
   }
-
-
 
   /// Builds ESC/POS bytes for a test page, role-aware.
   Future<List<int>> _buildTestBytes(PrinterDevice printer) async {
@@ -552,41 +614,62 @@ class SettingController extends GetxController {
     final title = isKitchen ? 'KITCHEN TEST' : 'TEST PRINT';
     const lineSep = '------------------------------------------';
 
-    bytes += generator.text(isKitchen ? '*** KITCHEN ***' : companyName.toUpperCase(),
-        styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
-    
+    bytes += generator.text(
+        isKitchen ? '*** KITCHEN ***' : companyName.toUpperCase(),
+        styles: const PosStyles(
+            align: PosAlign.center, bold: true, height: PosTextSize.size2));
+
     if (!isKitchen) {
-      if (address.isNotEmpty) bytes += generator.text(address, styles: const PosStyles(align: PosAlign.center));
-      if (phone.isNotEmpty) bytes += generator.text('Tel: $phone', styles: const PosStyles(align: PosAlign.center));
+      if (address.isNotEmpty)
+        bytes += generator.text(address,
+            styles: const PosStyles(align: PosAlign.center));
+      if (phone.isNotEmpty)
+        bytes += generator.text('Tel: $phone',
+            styles: const PosStyles(align: PosAlign.center));
     }
-    
-    bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.center));
-    bytes += generator.text(title, styles: const PosStyles(align: PosAlign.center, bold: true));
-    
+
+    bytes += generator.text(lineSep,
+        styles: const PosStyles(align: PosAlign.center));
+    bytes += generator.text(title,
+        styles: const PosStyles(align: PosAlign.center, bold: true));
+
     if (isKitchen) {
-       bytes += generator.text('Role: KITCHEN PREPARATION', styles: const PosStyles(align: PosAlign.center));
-       bytes += generator.text('Receipt No: #TEST-KITCHEN', styles: const PosStyles(align: PosAlign.left));
-       bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.center));
-       bytes += generator.text('1x TEST PRODUCT NAME', styles: const PosStyles(align: PosAlign.left, bold: true));
-       bytes += generator.text('   * Test Note/Instruction', styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
-       bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text('Role: KITCHEN PREPARATION',
+          styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text('Receipt No: #TEST-KITCHEN',
+          styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text('1x TEST PRODUCT NAME',
+          styles: const PosStyles(align: PosAlign.left, bold: true));
+      bytes += generator.text('   * Test Note/Instruction',
+          styles: const PosStyles(
+              align: PosAlign.left, fontType: PosFontType.fontB));
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.center));
     } else {
-       bytes += generator.text('Role: ${printer.role.toUpperCase()}', styles: const PosStyles(align: PosAlign.center));
-       bytes += generator.text('Connection: ${printer.type}', styles: const PosStyles(align: PosAlign.center));
-       bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.center));
-       bytes += generator.text('Printer connected successfully!', styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text('Role: ${printer.role.toUpperCase()}',
+          styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text('Connection: ${printer.type}',
+          styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text('Printer connected successfully!',
+          styles: const PosStyles(align: PosAlign.center));
     }
-    
+
     bytes += generator.feed(2);
     bytes += generator.cut();
     return bytes;
   }
 
   /// Prints a comprehensive Z-Report (Shift Summary) for a closed shift.
-  Future<void> printZReport(ShiftSessionModel shift, Map<String, int> recap) async {
+  Future<void> printZReport(
+      ShiftSessionModel shift, Map<String, int> recap) async {
     final printer = getPrinterForRole('cashier');
     if (printer == null) {
-      Get.snackbar('Printer Error', 'No active Cashier printer found for Z-Report.',
+      Get.snackbar(
+          'Printer Error', 'No active Cashier printer found for Z-Report.',
           backgroundColor: Colors.red.withValues(alpha: 0.1),
           icon: const Icon(Icons.print_disabled, color: Colors.orange));
       return;
@@ -606,11 +689,12 @@ class SettingController extends GetxController {
     }
   }
 
-  Future<List<int>> _buildZReportBytes(PrinterDevice printer, ShiftSessionModel shift, Map<String, int> recap) async {
+  Future<List<int>> _buildZReportBytes(PrinterDevice printer,
+      ShiftSessionModel shift, Map<String, int> recap) async {
     final profile = await CapabilityProfile.load();
     final is80mm = printer.paperSize == '80mm';
     final paperSize = is80mm ? PaperSize.mm80 : PaperSize.mm58;
-    
+
     final int maxChars = is80mm ? 48 : 33;
     final int labelWidth = is80mm ? 30 : 21;
     final int valueWidth = maxChars - labelWidth;
@@ -637,30 +721,41 @@ class SettingController extends GetxController {
 
     // Header
     bytes += generator.text(companyName.toUpperCase(),
-        styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2, width: PosTextSize.size2));
-    bytes += generator.text('Z-REPORT / SHIFT RECAP', styles: const PosStyles(align: PosAlign.center, bold: true));
+        styles: const PosStyles(
+            align: PosAlign.center,
+            bold: true,
+            height: PosTextSize.size2,
+            width: PosTextSize.size2));
+    bytes += generator.text('Z-REPORT / SHIFT RECAP',
+        styles: const PosStyles(align: PosAlign.center, bold: true));
     bytes += generator.hr();
-    
+
     // Financials
     // Parse detailed reconciliation data if available
     List<dynamic>? txDataList;
     Map<String, dynamic>? txData;
-    if (shift.reconciliationData != null && shift.reconciliationData!.isNotEmpty) {
+    if (shift.reconciliationData != null &&
+        shift.reconciliationData!.isNotEmpty) {
       try {
         txDataList = jsonDecode(shift.reconciliationData!);
         if (txDataList != null && txDataList.isNotEmpty) {
           txData = txDataList.first;
         }
-      } catch(e) { debugPrint("Error parsing reconciliationData for print: $e"); }
+      } catch (e) {
+        debugPrint("Error parsing reconciliationData for print: $e");
+      }
     }
 
-
-    void printRow(String label, String value, {bool bold = false, bool fontB = false}) {
+    void printRow(String label, String value,
+        {bool bold = false, bool fontB = false}) {
       String lab = label;
-      if (lab.length > labelWidth) lab = '${lab.substring(0, labelWidth - 2)}..';
+      if (lab.length > labelWidth)
+        lab = '${lab.substring(0, labelWidth - 2)}..';
       bytes += generator.text(
         lab.padRight(labelWidth) + value.padLeft(valueWidth),
-        styles: PosStyles(bold: bold, fontType: fontB ? PosFontType.fontB : PosFontType.fontA),
+        styles: PosStyles(
+            bold: bold,
+            fontType: fontB ? PosFontType.fontB : PosFontType.fontA),
       );
     }
 
@@ -671,18 +766,25 @@ class SettingController extends GetxController {
 
     // 1. Header (Nota Style)
     bytes += generator.text(companyName.toUpperCase(),
-        styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
-    if (address.isNotEmpty) bytes += generator.text(address, styles: const PosStyles(align: PosAlign.center));
-    if (phone.isNotEmpty) bytes += generator.text('Tel: $phone', styles: const PosStyles(align: PosAlign.center));
-    
+        styles: const PosStyles(
+            align: PosAlign.center, bold: true, height: PosTextSize.size2));
+    if (address.isNotEmpty)
+      bytes += generator.text(address,
+          styles: const PosStyles(align: PosAlign.center));
+    if (phone.isNotEmpty)
+      bytes += generator.text('Tel: $phone',
+          styles: const PosStyles(align: PosAlign.center));
+
     bytes += generator.hr();
-    bytes += generator.text('Z-REPORT / SHIFT RECAP', styles: const PosStyles(align: PosAlign.center, bold: true));
+    bytes += generator.text('Z-REPORT / SHIFT RECAP',
+        styles: const PosStyles(align: PosAlign.center, bold: true));
     bytes += generator.hr();
-    
+
     // 2. Shift Info
     printRow('Shift:', shift.shiftName);
     printRow('Staff:', shift.userId);
-    printRow('Start:', shift.startTime.toString().split('.')[0].substring(0, 16));
+    printRow(
+        'Start:', shift.startTime.toString().split('.')[0].substring(0, 16));
     if (shift.endTime != null) {
       printRow('End:', shift.endTime.toString().split('.')[0].substring(0, 16));
     }
@@ -691,14 +793,16 @@ class SettingController extends GetxController {
     if (txData != null) {
       // 3. Initial Balance & Sales Summary
       printRow('Starting Balance:', f(shift.startingBalance), bold: true);
-      
+
       final modes = txData['payment_modes'] as List<dynamic>? ?? [];
       int cashSales = 0;
       int nonCashSales = 0;
       for (var mode in modes) {
         final name = (mode['name'] ?? '').toString().toLowerCase();
         final amount = (mode['recorded'] ?? 0) as int;
-        if (name.contains('cash') || name.contains('tunai') || mode['id'] == '1') {
+        if (name.contains('cash') ||
+            name.contains('tunai') ||
+            mode['id'] == '1') {
           // cashSales = amount; // Wait, recorded cash might ALREADY include starting balance depending on controller
           // For the report, we usually want "Sales" only.
           // But our getRecordedAmount for cash includes starting balance.
@@ -713,23 +817,25 @@ class SettingController extends GetxController {
       bytes += generator.hr();
 
       // 4. Products Sold (List Items)
-      bytes += generator.text('ITEM SALES', styles: const PosStyles(align: PosAlign.center, bold: true));
-      bytes += generator.text('------------------------------------------', styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text('ITEM SALES',
+          styles: const PosStyles(align: PosAlign.center, bold: true));
+      bytes += generator.text('------------------------------------------',
+          styles: const PosStyles(align: PosAlign.center));
       final products = txData['products_sold'] as List<dynamic>? ?? [];
       for (var product in products) {
         final qty = product['qty'] ?? 0;
         final name = product['name'] ?? 'Item';
         final total = product['total'] ?? 0;
         final price = product['price'] ?? 0;
-        
+
         // Style: [qty]x [name] [price] [total]
         // Following receipt: qty x name ... total
         String lab = '${qty}x $name';
         if (lab.length > 25) lab = '${lab.substring(0, 23)}..';
         printRow(lab, f(total).replaceAll('Rp. ', ''), fontB: true);
         if (price > 0 && qty > 1) {
-           bytes += generator.text('   @ ${f(price).replaceAll('Rp. ', '')}', 
-             styles: const PosStyles(fontType: PosFontType.fontB));
+          bytes += generator.text('   @ ${f(price).replaceAll('Rp. ', '')}',
+              styles: const PosStyles(fontType: PosFontType.fontB));
         }
       }
       bytes += generator.hr();
@@ -739,9 +845,12 @@ class SettingController extends GetxController {
       final cnList = creditNotes['list'] as List<dynamic>? ?? [];
       final cnTotal = creditNotes['total'] ?? 0;
       if (cnList.isNotEmpty) {
-        bytes += generator.text('CREDIT NOTES (REFUNDS)', styles: const PosStyles(align: PosAlign.center, bold: true));
+        bytes += generator.text('CREDIT NOTES (REFUNDS)',
+            styles: const PosStyles(align: PosAlign.center, bold: true));
         for (var cn in cnList) {
-          printRow(cn['number'] ?? 'CN', '-${f(cn['total']).replaceAll('Rp. ', '')}', fontB: true);
+          printRow(
+              cn['number'] ?? 'CN', '-${f(cn['total']).replaceAll('Rp. ', '')}',
+              fontB: true);
         }
         printRow('TOTAL REFUNDS:', f(cnTotal), bold: true);
         bytes += generator.hr();
@@ -752,9 +861,14 @@ class SettingController extends GetxController {
       final prodDisc = discounts['product'] ?? 0;
       final transDisc = discounts['transaction'] ?? 0;
       if (prodDisc > 0 || transDisc > 0) {
-        bytes += generator.text('DISCOUNTS', styles: const PosStyles(align: PosAlign.center, bold: true));
-        if (prodDisc > 0) printRow('Product Discounts:', '-${f(prodDisc).replaceAll('Rp. ', '')}');
-        if (transDisc > 0) printRow('Trans. Discounts:', '-${f(transDisc).replaceAll('Rp. ', '')}');
+        bytes += generator.text('DISCOUNTS',
+            styles: const PosStyles(align: PosAlign.center, bold: true));
+        if (prodDisc > 0)
+          printRow(
+              'Product Discounts:', '-${f(prodDisc).replaceAll('Rp. ', '')}');
+        if (transDisc > 0)
+          printRow(
+              'Trans. Discounts:', '-${f(transDisc).replaceAll('Rp. ', '')}');
         bytes += generator.hr();
       }
 
@@ -768,14 +882,16 @@ class SettingController extends GetxController {
       // 7. Final Reconciliation
       final summary = txData['summary'] ?? {};
       final expectedTotal = (summary['expected_cash'] as num?)?.toInt() ?? 0;
-      
+
       printRow('EXPECTED CASH:', f(expectedTotal), bold: true);
-      if (shift.status == 1) { // 1 = Closed
+      if (shift.status == 1) {
+        // 1 = Closed
         printRow('ACTUAL CASH:', f(shift.closingBalance), bold: true);
         final diff = shift.closingBalance - expectedTotal;
         printRow('DIFFERENCE:', f(diff), bold: true);
         if (shift.note.isNotEmpty) {
-           bytes += generator.text('Note: ${shift.note}', styles: const PosStyles(bold: true));
+          bytes += generator.text('Note: ${shift.note}',
+              styles: const PosStyles(bold: true));
         }
       }
     } else {
@@ -784,7 +900,7 @@ class SettingController extends GetxController {
       printRow('Cash Sales:', f(recap['cash'] ?? 0));
       printRow('Non-Cash Sales:', f(recap['nonCash'] ?? 0));
       bytes += generator.hr();
-      
+
       final expectedTotal = shift.startingBalance + (recap['cash'] ?? 0);
       printRow('EXPECTED CASH:', f(expectedTotal), bold: true);
       if (shift.status == 1) {
@@ -793,19 +909,22 @@ class SettingController extends GetxController {
         printRow('DIFFERENCE:', f(diff), bold: true);
       }
     }
-    
+
     bytes += generator.hr();
-    bytes += generator.text('Printed on: ${DateTime.now().toString().split('.')[0]}', styles: const PosStyles(align: PosAlign.center));
+    bytes += generator.text(
+        'Printed on: ${DateTime.now().toString().split('.')[0]}',
+        styles: const PosStyles(align: PosAlign.center));
     bytes += generator.feed(3);
     bytes += generator.cut();
 
     return bytes;
   }
 
-  /// Core print method: connect → send bytes. 
+  /// Core print method: connect → send bytes.
   /// DOES NOT DISCONNECT immediately anymore to preserve socket stability across quick successive prints.
   /// For network printers, reuses socket or reconnects.
-  Future<void> printToTarget(PrinterDevice printer, {bool isTestPrint = false, List<int>? prebuiltBytes}) async {
+  Future<void> printToTarget(PrinterDevice printer,
+      {bool isTestPrint = false, List<int>? prebuiltBytes}) async {
     try {
       final List<int> bytes = prebuiltBytes ?? await _buildTestBytes(printer);
 
@@ -813,16 +932,20 @@ class SettingController extends GetxController {
         // Step 1: Connect
         final connected = await _connectToBluetooth(printer);
         if (!connected) {
-          Get.snackbar('Printer Error', 'Could not connect to "${printer.name}". Make sure it is powered on and paired.');
+          Get.snackbar('Printer Error',
+              'Could not connect to "${printer.name}". Make sure it is powered on and paired.');
           return;
         }
         // Step 2: Send bytes
-        await Future.delayed(const Duration(milliseconds: 300)); // Small settle time
+        await Future.delayed(
+            const Duration(milliseconds: 300)); // Small settle time
         await bluetooth.writeBytes(Uint8List.fromList(bytes));
-        await Future.delayed(const Duration(milliseconds: 500)); // Wait for data to flush
+        await Future.delayed(
+            const Duration(milliseconds: 500)); // Wait for data to flush
         // Release the printer so other tablets/devices can connect.
         // Most Bluetooth thermal printers only support one active connection.
-        await Future.delayed(const Duration(seconds: 1)); // Give time to finish printing
+        await Future.delayed(
+            const Duration(seconds: 1)); // Give time to finish printing
         try {
           await bluetooth.disconnect();
           connectedBluetoothAddress = null;
@@ -833,9 +956,10 @@ class SettingController extends GetxController {
         try {
           Socket? socket = networkSockets[printer.address];
           if (socket == null) {
-            socket = await Socket.connect(printer.address, printer.port, timeout: const Duration(seconds: 4));
+            socket = await Socket.connect(printer.address, printer.port,
+                timeout: const Duration(seconds: 4));
             networkSockets[printer.address] = socket;
-            
+
             // Background listener
             socket.done.then((_) {
               networkSockets.remove(printer.address);
@@ -849,16 +973,19 @@ class SettingController extends GetxController {
         } catch (e) {
           // IMPORTANT: Remove broken socket so next attempt starts fresh
           final socket = networkSockets.remove(printer.address);
-          try { socket?.destroy(); } catch (_) {}
-          
+          try {
+            socket?.destroy();
+          } catch (_) {}
+
           _updatePrinterStatus(printer.id, false);
           ErrorLogService.log(
             category: 'printer',
             errCode: 'NETWORK_PRINT_FAIL',
-            errMsg: 'Printer: ${printer.name} (${printer.address}:${printer.port}) | isTestPrint=$isTestPrint | $e',
+            errMsg:
+                'Printer: ${printer.name} (${printer.address}:${printer.port}) | isTestPrint=$isTestPrint | $e',
           );
           Get.snackbar(
-            'Printer Offline', 
+            'Printer Offline',
             'Failed to send to ${printer.address}:${printer.port}: $e',
             backgroundColor: Colors.red.withValues(alpha: 0.1),
             icon: const Icon(Icons.print_disabled, color: Colors.red),
@@ -871,7 +998,8 @@ class SettingController extends GetxController {
       ErrorLogService.log(
         category: 'printer',
         errCode: 'PRINT_TO_TARGET_FAIL',
-        errMsg: 'Printer: ${printer.name} (${printer.type}/${printer.role}) | isTestPrint=$isTestPrint | $e',
+        errMsg:
+            'Printer: ${printer.name} (${printer.type}/${printer.role}) | isTestPrint=$isTestPrint | $e',
       );
       Get.snackbar('Print Error', 'Failed to print on "${printer.name}": $e');
     }
@@ -892,7 +1020,8 @@ class SettingController extends GetxController {
   }
 
   PrinterDevice? getPrinterForRole(String role) {
-    return assignedPrinters.firstWhereOrNull((p) => p.role == role && p.isActive);
+    return assignedPrinters
+        .firstWhereOrNull((p) => p.role == role && p.isActive);
   }
 
   void formValidate() async {
@@ -937,42 +1066,74 @@ class SettingController extends GetxController {
 
     try {
       final appService = Get.find<AppService>();
-      final optionsMap = {
-        'version': data['versi'] ?? appModel.value.version,
+
+      // Ensure we never send an empty version which would wipe it out on the server
+      String finalVersion = (data['versi']?.toString() ?? '').trim();
+      if (finalVersion.isEmpty) finalVersion = appModel.value.version;
+      if (finalVersion.isEmpty) finalVersion = '1.0.0';
+
+      // Build payload. Also include current queue state so we absorb any
+      // pending queue_counter sync — preventing a second PUT to the same endpoint.
+      final dbService = Get.find<DatabaseService>();
+      final optionsMap = <String, dynamic>{
+        'version': finalVersion,
         'pos_tenant_name': data['nama_perusahaan'],
         'pos_phone': data['telepon'],
         'pos_address': data['alamat'],
         'pos_default_discount': data['diskon'],
-        'pos_label_offset_x': data['label_offset_x'],
-        // FIXED: Ensure we encode the plain Map value of RxMap
-        'pos_app_settings': jsonEncode(appService.posSettings),
+        // Piggy-back the current queue state to avoid a second separate PUT
+        Constants.psNextQueue: appService.queueNumber.value,
+        Constants.psLastQueueDate: appService.lastQueueDate.value,
       };
 
+      // Cancel any pending queue_counter sync so SyncService doesn't fire
+      // a duplicate request to /api/pos_options right after this one.
+      try {
+        await dbService.rawQuery(
+          "UPDATE sync_queue SET status = 'done' "
+          "WHERE endpoint = '/api/pos_options' AND local_id = 'queue_counter' "
+          "AND status IN ('pending', 'failed')",
+          [],
+        );
+        debugPrint(
+            'SettingController: Absorbed pending queue_counter sync into settings payload.');
+      } catch (e) {
+        debugPrint(
+            'SettingController: Could not absorb queue_counter sync: \$e');
+      }
+
       // Always save locally first to ensure offline persistence
-      await userService.saveString(Constants.posCompanyName, data['nama_perusahaan']);
+      await userService.saveString(
+          Constants.posCompanyName, data['nama_perusahaan']);
       await userService.saveString(Constants.posPhoneNumber, data['telepon']);
       await userService.saveString(Constants.posAddress, data['alamat']);
-      await userService.saveString(Constants.posDefaultDiscount, data['diskon']);
-      await userService.saveString('pos_label_offset_x', data['label_offset_x']);
-      await userService.saveString('pos_app_settings', jsonEncode(appService.posSettings));
+      await userService.saveString(
+          Constants.posDefaultDiscount, data['diskon']);
+      await userService.saveString(
+          'pos_label_offset_x', data['label_offset_x']);
+      await userService.saveString(
+          'pos_app_settings', jsonEncode(appService.posSettings));
 
       final responseApi = await apiService.updatePosOptions(optionsMap);
 
       if (responseApi.responsestate == Constants.successState) {
-        // Success: Silently updated on server
+        Get.snackbar('Berhasil', 'Pengaturan berhasil disimpan.',
+            backgroundColor: Colors.green.withValues(alpha: 0.1),
+            icon: const Icon(Icons.check_circle, color: Colors.green));
       } else {
         // API error but local save succeeded
-        Get.snackbar('Attention', 'Settings saved locally, but failed to sync to server: ${responseApi.message}',
+        Get.snackbar('Attention',
+            'Settings saved locally, but failed to sync to server: ${responseApi.message}',
             backgroundColor: Colors.orange.withValues(alpha: 0.1),
             icon: const Icon(Icons.warning, color: Colors.orange));
       }
     } catch (e) {
       debugPrint("SettingController: Update failed: $e");
       // Local save already happened above the API call
-      String errorMsg = e is SocketException 
-          ? 'No internet connection. Settings saved on this device.' 
+      String errorMsg = e is SocketException
+          ? 'No internet connection. Settings saved on this device.'
           : 'Sync failed ($e). Settings saved locally.';
-          
+
       Get.snackbar('Info', errorMsg,
           backgroundColor: Colors.blue.withValues(alpha: 0.1),
           icon: const Icon(Icons.info, color: Colors.blue),
@@ -987,7 +1148,7 @@ class SettingController extends GetxController {
     isCheckingUpdate.value = true;
     try {
       final masterResponse = await http.get(
-        Uri.parse('https://manajemenpondok.com/api/pos_options'),
+        Uri.parse('https://flinkaja.com/api/pos_options'),
         headers: {'authtoken': userService.getAuthToken()},
       );
       if (masterResponse.statusCode == 200) {
@@ -1004,9 +1165,11 @@ class SettingController extends GetxController {
           if (optionsApi.responsestate == Constants.successState &&
               optionsApi.data != null) {
             final options = optionsApi.data as Map<String, dynamic>;
-            tenantVersion = options['version']?.toString() ?? options['pos_version']?.toString() ?? "";
+            tenantVersion = options['version']?.toString() ??
+                options['pos_version']?.toString() ??
+                "";
           }
-          
+
           if (tenantVersion.isEmpty) {
             tenantVersion = companyVersionFieldController.text.trim();
           }
@@ -1039,7 +1202,7 @@ class SettingController extends GetxController {
   Future<void> checkUpdateBackground() async {
     try {
       final masterResponse = await http.get(
-        Uri.parse('https://manajemenpondok.com/api/pos_options'),
+        Uri.parse('https://flinkaja.com/api/pos_options'),
         headers: {'authtoken': userService.getAuthToken()},
       ).timeout(const Duration(seconds: 15));
       if (masterResponse.statusCode == 200) {
@@ -1062,23 +1225,30 @@ class SettingController extends GetxController {
               final list = optionsApi.data as List;
               for (var item in list) {
                 if (item is Map) {
-                  if (item.containsKey('option_name') && item.containsKey('option_value')) {
-                    rawOptions[item['option_name'].toString()] = item['option_value'];
+                  if (item.containsKey('option_name') &&
+                      item.containsKey('option_value')) {
+                    rawOptions[item['option_name'].toString()] =
+                        item['option_value'];
                   } else {
                     rawOptions.addAll(Map<String, dynamic>.from(item));
                   }
                 }
               }
             }
-            final options = rawOptions.map((key, value) => MapEntry(key.trim(), value));
-            tenantVersion = options['version']?.toString() ?? options['pos_version']?.toString() ?? "";
+            final options =
+                rawOptions.map((key, value) => MapEntry(key.trim(), value));
+            tenantVersion = options['version']?.toString() ??
+                options['pos_version']?.toString() ??
+                "";
           }
-          
+
           if (tenantVersion.isEmpty) {
             tenantVersion = companyVersionFieldController.text.trim();
           }
 
-          if (tenantVersion.isNotEmpty && masterVersion.isNotEmpty && tenantVersion != masterVersion) {
+          if (tenantVersion.isNotEmpty &&
+              masterVersion.isNotEmpty &&
+              tenantVersion != masterVersion) {
             hasUpdateAvailable.value = true;
             cachedMasterVersion = masterVersion;
             cachedMasterApkUrl = masterPosPath;
@@ -1111,7 +1281,8 @@ class SettingController extends GetxController {
                     color: AppTheme.textColor(Get.context!))),
           ],
         ),
-        content: Text('A new update ($cachedMasterVersion) is available. Do you want to go to settings to update?',
+        content: Text(
+            'A new update ($cachedMasterVersion) is available. Do you want to go to settings to update?',
             style: TextStyle(color: AppTheme.textColor(Get.context!))),
         actions: [
           TextButton(
@@ -1126,9 +1297,12 @@ class SettingController extends GetxController {
             onPressed: () {
               Get.back();
               if (Get.isRegistered<DashboardEmployeeController>()) {
-                Get.find<DashboardEmployeeController>().stateSelectedIndex.value = 6;
+                Get.find<DashboardEmployeeController>()
+                    .stateSelectedIndex
+                    .value = 6;
               } else if (Get.isRegistered<DashboardAdminController>()) {
-                Get.find<DashboardAdminController>().stateSelectedIndex.value = 6;
+                Get.find<DashboardAdminController>().stateSelectedIndex.value =
+                    6;
               } else {
                 Get.toNamed('/setting');
               }
@@ -1253,7 +1427,7 @@ class SettingController extends GetxController {
       }, onDone: () async {
         await sink.close();
         downloadProgress.value = 1.0;
-        
+
         // Memperbarui versi di server tenant
         try {
           final optionsMap = {
@@ -1291,6 +1465,7 @@ class SettingController extends GetxController {
       Get.snackbar('Error', 'Gagal memulai proses download.');
     }
   }
+
   String _truncateProductName(String text, int maxLength) {
     if (text.length <= maxLength) return text;
     return '${text.substring(0, maxLength - 2)}..';

@@ -1,7 +1,7 @@
 # API Documentation: pos semesta
 
 ## Konfigurasi Dasar
-* **Base URL (pos perfex local)**: `http://manajemenpondok.com/`
+* **Base URL (pos perfex local)**: `http://flinkaja.com/`
 * **Header Autentikasi**: Semua *request* (kecuali `pos_auth`) mewajibkan pengiriman header `authtoken`.
 
 path: api/
@@ -1338,6 +1338,24 @@ path: api/
 }
 ```
 
+### `pos_options put`
+* **Method**: `PUT`
+* **URL**: `{{base_url + path}}pos_options`
+
+**Example body Request:**
+```
+{
+    "version": "1.1.1"
+}
+```
+**Example Success Response:**
+```json
+{
+    "status": true,
+    "message": "Data updated successfully"
+}
+```
+
 
 ### `pos_payment_modes get`
 * **Method**: `GET`
@@ -1744,3 +1762,78 @@ lastname wajib: kalau kosong default "-"
 }
 ```
 
+### `pos_promotions GET`
+* **Method**: `GET`
+* **URL**: `{{Base URL (pos perfex local) + path}}pos_promotions?id_location=[:id]`
+* **PARAMS**: 
+- id_location : id lokasi dari data saat login berhasil
+- status : 0 -> tidak aktif | 1 -> aktif
+
+**Example Success Response:**
+```json
+[
+    {
+        "id": "4",
+        "name": "PROMO GO",
+        "promo_type": "discount",
+        "brands": [
+            "30",
+            "32"
+        ],
+        "locations": [
+            "1071"
+        ],
+        "description": "",
+        "terms_conditions": "",
+        "items": {
+            "items": [
+                {
+                    "item_id": "31",
+                    "discount_type": "percent",
+                    "discount": "100",
+                    "discount_value": "8000"
+                },
+                {
+                    "item_id": "79",
+                    "discount_type": "fixed",
+                    "discount": "0",
+                    "discount_value": "0"
+                },
+                {
+                    "item_id": "80",
+                    "discount_type": "fixed",
+                    "discount": "4000",
+                    "discount_value": "4000"
+                },
+                {
+                    "item_id": "81",
+                    "discount_type": "fixed",
+                    "discount": "4000",
+                    "discount_value": "4000"
+                },
+                {
+                    "item_id": "82",
+                    "discount_type": "fixed",
+                    "discount": "4000",
+                    "discount_value": "4000"
+                },
+                {
+                    "item_id": "144",
+                    "discount_type": "fixed",
+                    "discount": "7000",
+                    "discount_value": "7000"
+                }
+            ]
+        },
+        "order_types": [
+            "dinein"
+        ],
+        "start_date": "2026-05-13",
+        "end_date": "2026-05-16",
+        "is_multiplied": "0",
+        "is_stackable": "0",
+        "status": "1",
+        "created_at": "2026-05-13 15:55:31"
+    }
+]
+```

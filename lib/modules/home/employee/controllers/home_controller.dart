@@ -240,10 +240,10 @@ class HomeController extends GetxController {
       final List<Map<String, dynamic>> results = await dbService
           .query('payment_modes', where: 'active = ?', whereArgs: ['1']);
       allPaymentModes.value = results;
-      cashlessPaymentModes.value = results
-          .where(
-              (mode) => (mode['name'] ?? '').toString().toLowerCase() != 'cash')
-          .toList();
+      cashlessPaymentModes.value = results.where((mode) {
+        final n = (mode['name'] ?? '').toString().toLowerCase();
+        return n != 'cash' && n != 'tunai' && n != 'cash/tunai';
+      }).toList();
     } catch (e) {
       debugPrint('HomeController: Error fetching payment modes: $e');
     }
@@ -290,7 +290,8 @@ class HomeController extends GetxController {
         if (selectedCategoryId.value != 0) {
           if (selectedBrandId.value == 0) {
             final cat = await _dbService.query('categories',
-                where: 'id_kategori = ?', whereArgs: [selectedCategoryId.value]);
+                where: 'id_kategori = ?',
+                whereArgs: [selectedCategoryId.value]);
             if (cat.isNotEmpty) {
               final catName = cat[0]['nama_kategori'];
               table =
@@ -382,7 +383,7 @@ class HomeController extends GetxController {
   String getProductImageUrl(String imgPath) {
     String base = userService.getBaseUrl();
     if (base == 'Guest' || base.isEmpty) {
-      base = 'https://manajemenpondok.com/';
+      base = 'https://flinkaja.com/';
     }
     if (!base.endsWith('/')) base += '/';
     // Strip leading slash from imgPath to avoid double-slash
@@ -482,12 +483,12 @@ class HomeController extends GetxController {
 
   void handleProductTap(ProductModel productModel) {
     searchFocusNode.unfocus();
-    
-    bool hasChildren = productModel.children != null && 
-                       productModel.children != "[]" && 
-                       productModel.children != "null" && 
-                       productModel.children!.isNotEmpty;
-    
+
+    bool hasChildren = productModel.children != null &&
+        productModel.children != "[]" &&
+        productModel.children != "null" &&
+        productModel.children!.isNotEmpty;
+
     if (hasChildren) {
       currentParentId.value = productModel.idProduk.toString();
       searchQuery.value = "";
@@ -1436,8 +1437,10 @@ class HomeController extends GetxController {
           [idPenjualanLocal.toString(), '%${map['id_pos']}%', '%pos_order%']);
 
       // Fetch queue_number from local DB so it can be saved in adminnote
-      final localTx = await _dbService.query('transactions', where: 'id_penjualan = ?', whereArgs: [idPenjualanLocal]);
-      final queueNum = localTx.isNotEmpty ? (localTx.first['queue_number'] as int? ?? 0) : 0;
+      final localTx = await _dbService.query('transactions',
+          where: 'id_penjualan = ?', whereArgs: [idPenjualanLocal]);
+      final queueNum =
+          localTx.isNotEmpty ? (localTx.first['queue_number'] as int? ?? 0) : 0;
 
       if (isNew || existingRemoteId == null) {
         // POST: newitems is an Array. Used for totally new orders OR un-synced offline orders
@@ -1680,7 +1683,8 @@ class HomeController extends GetxController {
 
     try {
       isProcessingPayment.value = true;
-      isSyncingDirectly.value = true; // Guard background sync during payment flow
+      isSyncingDirectly.value =
+          true; // Guard background sync during payment flow
 
       // 1. Safety: Ensure we have a valid order ID before proceeding
       if (currentIdPos == null) {
@@ -1758,9 +1762,14 @@ class HomeController extends GetxController {
       // Map the paymentMode string to its dynamic ID from the database
       String paymentModeId = '7'; // fallback
       final modeMatch = allPaymentModes.firstWhere(
-        (m) =>
-            (m['name'] ?? '').toString().toLowerCase() ==
-            paymentMode.toLowerCase(),
+        (m) {
+          final n = (m['name'] ?? '').toString().toLowerCase();
+          final q = paymentMode.toLowerCase();
+          if (q == 'cash' || q == 'tunai') {
+            return n == 'cash' || n == 'tunai' || n == 'cash/tunai';
+          }
+          return n == q;
+        },
         orElse: () => <String, dynamic>{},
       );
       if (modeMatch.isNotEmpty) {
@@ -1777,6 +1786,36 @@ class HomeController extends GetxController {
         'transactionid': '',
         'note': note ?? orderNote.value,
       };
+
+      // Enqueue the pos_order FIRST so the server only creates the invoice and awards points at payment time.
+      if (localTxId != null) {
+        final subtotalVal = subtotalRaw.value;
+        final Map<String, dynamic> localData = {
+          'id_user': userService.getPrefInt(Constants.userId),
+          'id_member': selectedMember.value?.idMember ?? 1,
+          'total_item': penjualanDetailModelList.length,
+          'total_harga': subtotalVal,
+          'diskon': (manualDiscountIsPercent.value
+                  ? (subtotalVal * (manualDiscountValue.value / 100))
+                  : manualDiscountValue.value)
+              .toInt(),
+          'bayar': totalTransaction.value,
+          'id_pos': currentIdPos,
+          'penjualan_detail':
+              penjualanDetailModelList.map((e) => e.toJson()).toList(),
+        };
+
+        await _pushOrderToApi(
+          map: localData,
+          isNew: currentRemoteId.value == 0,
+          idPenjualanLocal: localTxId,
+          existingRemoteId:
+              currentRemoteId.value != 0 ? currentRemoteId.value : null,
+          remoteNumber: currentRemoteNumber.value.isNotEmpty
+              ? currentRemoteNumber.value
+              : null,
+        );
+      }
 
       // Enqueue payment using the specific payment's local ID
       await Get.find<SyncService>().enqueueCommand(
@@ -1910,7 +1949,7 @@ class HomeController extends GetxController {
       final profile = await CapabilityProfile.load();
       final is80mm = cashierPrinter.paperSize == '80mm';
       final paperSize = is80mm ? PaperSize.mm80 : PaperSize.mm58;
-      
+
       // Standardizing widths: 58mm -> 32 chars (Font A), 80mm -> 48 chars
       final int maxChars = is80mm ? 48 : 32;
       final String lineSeparator = '-' * maxChars;
@@ -2007,7 +2046,10 @@ class HomeController extends GetxController {
             : (selectedMember.value!.nama ?? 'Customer');
       }
 
-      final queueNoStr = (penjualan?.queueNumber ?? appService.queueNumber.value).toString().padLeft(3, '0');
+      final queueNoStr =
+          (penjualan?.queueNumber ?? appService.queueNumber.value)
+              .toString()
+              .padLeft(3, '0');
 
       bytes += generator.row([
         PosColumn(
@@ -2047,21 +2089,27 @@ class HomeController extends GetxController {
       for (var item in itemsToPrint) {
         final int subtotal = item.subtotal;
         final String prefix = '${item.jumlah.toInt()}x ';
-        
+
         // 8/12 of the line is for the item name, 4/12 is for the price.
         final int maxNameLen = (is80mm ? 32 : 24) - prefix.length;
         String name = item.productName ?? "Item";
-        
+
         if (name.length > maxNameLen) {
           name = '${name.substring(0, maxNameLen - 3)}..';
         }
-        
+
         final String itemName = '$prefix$name';
         final String itemPrice = formatRupiah(subtotal).replaceAll('Rp. ', '');
-        
+
         bytes += generator.row([
-          PosColumn(text: itemName, width: 9, styles: const PosStyles(align: PosAlign.left)),
-          PosColumn(text: itemPrice, width: 3, styles: const PosStyles(align: PosAlign.right)),
+          PosColumn(
+              text: itemName,
+              width: 9,
+              styles: const PosStyles(align: PosAlign.left)),
+          PosColumn(
+              text: itemPrice,
+              width: 3,
+              styles: const PosStyles(align: PosAlign.right)),
         ]);
 
         // Item-level Discount (Re-enabled)
@@ -2074,16 +2122,27 @@ class HomeController extends GetxController {
 
           if (totalNominal > 0) {
             bytes += generator.row([
-              PosColumn(text: '   disc', width: 6, styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB)),
-              PosColumn(text: '-${formatRupiah(totalNominal).replaceAll('Rp. ', '')}', width: 6, styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB)),
+              PosColumn(
+                  text: '   disc',
+                  width: 6,
+                  styles: const PosStyles(
+                      align: PosAlign.left, fontType: PosFontType.fontB)),
+              PosColumn(
+                  text: '-${formatRupiah(totalNominal).replaceAll('Rp. ', '')}',
+                  width: 6,
+                  styles: const PosStyles(
+                      align: PosAlign.right, fontType: PosFontType.fontB)),
             ]);
           }
         }
       }
-      bytes += generator.text(lineSeparator, styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(lineSeparator,
+          styles: const PosStyles(align: PosAlign.center));
 
       // 5. Totals
-      final subtotalToPrint = details?.fold(0, (sum, item) => sum + item.subtotal) ?? subtotalRaw.value;
+      final subtotalToPrint =
+          details?.fold(0, (sum, item) => sum + item.subtotal) ??
+              subtotalRaw.value;
 
       // Calculate order-level discount
       int discountToPrint = 0;
@@ -2107,44 +2166,83 @@ class HomeController extends GetxController {
 
       final String fSub = formatRupiah(subtotalToPrint).replaceAll('Rp. ', '');
       bytes += generator.row([
-        PosColumn(text: 'Subtotal', width: 6, styles: const PosStyles(align: PosAlign.left)),
-        PosColumn(text: fSub, width: 6, styles: const PosStyles(align: PosAlign.right)),
+        PosColumn(
+            text: 'Subtotal',
+            width: 6,
+            styles: const PosStyles(align: PosAlign.left)),
+        PosColumn(
+            text: fSub,
+            width: 6,
+            styles: const PosStyles(align: PosAlign.right)),
       ]);
 
       if (discountToPrint > 0) {
-        final String fDisc = formatRupiah(discountToPrint).replaceAll('Rp. ', '');
+        final String fDisc =
+            formatRupiah(discountToPrint).replaceAll('Rp. ', '');
         bytes += generator.row([
-          PosColumn(text: 'Discount', width: 6, styles: const PosStyles(align: PosAlign.left)),
-          PosColumn(text: '-$fDisc', width: 6, styles: const PosStyles(align: PosAlign.right)),
+          PosColumn(
+              text: 'Discount',
+              width: 6,
+              styles: const PosStyles(align: PosAlign.left)),
+          PosColumn(
+              text: '-$fDisc',
+              width: 6,
+              styles: const PosStyles(align: PosAlign.right)),
         ]);
       }
 
       final fTotal = formatRupiah(total).replaceAll('Rp. ', '');
       bytes += generator.row([
-        PosColumn(text: 'Total', width: 6, styles: const PosStyles(align: PosAlign.left, bold: true)),
-        PosColumn(text: fTotal, width: 6, styles: const PosStyles(align: PosAlign.right, bold: true)),
+        PosColumn(
+            text: 'Total',
+            width: 6,
+            styles: const PosStyles(align: PosAlign.left, bold: true)),
+        PosColumn(
+            text: fTotal,
+            width: 6,
+            styles: const PosStyles(align: PosAlign.right, bold: true)),
       ]);
-      
+
       final fDiterima = formatRupiah(diterima).replaceAll('Rp. ', '');
       bytes += generator.row([
-        PosColumn(text: 'Cash', width: 6, styles: const PosStyles(align: PosAlign.left)),
-        PosColumn(text: fDiterima, width: 6, styles: const PosStyles(align: PosAlign.right)),
+        PosColumn(
+            text: 'Cash',
+            width: 6,
+            styles: const PosStyles(align: PosAlign.left)),
+        PosColumn(
+            text: fDiterima,
+            width: 6,
+            styles: const PosStyles(align: PosAlign.right)),
       ]);
-      
+
       final fKembalian = formatRupiah(kembalian).replaceAll('Rp. ', '');
       bytes += generator.row([
-        PosColumn(text: 'Change', width: 6, styles: const PosStyles(align: PosAlign.left)),
-        PosColumn(text: kembalian > 0 ? fKembalian : '0', width: 6, styles: const PosStyles(align: PosAlign.right)),
+        PosColumn(
+            text: 'Change',
+            width: 6,
+            styles: const PosStyles(align: PosAlign.left)),
+        PosColumn(
+            text: kembalian > 0 ? fKembalian : '0',
+            width: 6,
+            styles: const PosStyles(align: PosAlign.right)),
       ]);
 
-      bytes += generator.text(lineSeparator, styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(lineSeparator,
+          styles: const PosStyles(align: PosAlign.center));
 
       bytes += generator.row([
-        PosColumn(text: 'PAID', width: 6, styles: const PosStyles(align: PosAlign.left, bold: true)),
-        PosColumn(text: fTotal, width: 6, styles: const PosStyles(align: PosAlign.right, bold: true)),
+        PosColumn(
+            text: 'PAID',
+            width: 6,
+            styles: const PosStyles(align: PosAlign.left, bold: true)),
+        PosColumn(
+            text: fTotal,
+            width: 6,
+            styles: const PosStyles(align: PosAlign.right, bold: true)),
       ]);
 
-      bytes += generator.text(lineSeparator, styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(lineSeparator,
+          styles: const PosStyles(align: PosAlign.center));
 
       // 6. Points
       if (!isWalkIn) {
@@ -2253,8 +2351,10 @@ class HomeController extends GetxController {
               : '---');
 
       final now = DateTime.now();
-      final dateStr = '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
-      final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+      final dateStr =
+          '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
+      final timeStr =
+          '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
       final orderTypeStr = penjualan?.orderType ?? selectedOrderType.value;
       final queueNoStr =
@@ -2275,15 +2375,25 @@ class HomeController extends GetxController {
       bytes += generator.text('KITCHEN ORDER',
           styles: const PosStyles(
               align: PosAlign.center, bold: true, height: PosTextSize.size2));
-      bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.center));
 
       bytes += generator.row([
-        PosColumn(text: '$dateStr $timeStr', width: 7, styles: const PosStyles(align: PosAlign.left)),
-        PosColumn(text: 'Q: $queueNoStr', width: 5, styles: const PosStyles(align: PosAlign.right, bold: true)),
+        PosColumn(
+            text: '$dateStr $timeStr',
+            width: 7,
+            styles: const PosStyles(align: PosAlign.left)),
+        PosColumn(
+            text: 'Q: $queueNoStr',
+            width: 5,
+            styles: const PosStyles(align: PosAlign.right, bold: true)),
       ]);
-      bytes += generator.text('Order Type: $orderTypeStr', styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text('Receipt No: $orderCode', styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text('Customer  : $customerName', styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text('Order Type: $orderTypeStr',
+          styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text('Receipt No: $orderCode',
+          styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text('Customer  : $customerName',
+          styles: const PosStyles(align: PosAlign.left));
 
       final orderNoteStr = penjualan?.orderNote ?? orderNote.value;
       if (orderNoteStr.isNotEmpty) {
@@ -2291,27 +2401,34 @@ class HomeController extends GetxController {
             styles: const PosStyles(align: PosAlign.left));
       }
 
-      bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.center));
 
       final itemsToPrint = details ?? penjualanDetailModelList;
       for (var item in itemsToPrint) {
         final String prefix = '${item.jumlah.toInt()}x ';
-        
+
         // 9/12 of the line is for the item name, 3/12 is for the checkbox.
         final int maxNameLen = (is80mm ? 36 : 26) - prefix.length;
         String name = item.productName ?? "Item";
-        
+
         if (name.length > maxNameLen) {
           name = '${name.substring(0, maxNameLen - 3)}..';
         }
-        
+
         final String itemLabel = '$prefix$name';
-        
+
         bytes += generator.row([
-          PosColumn(text: itemLabel, width: 10, styles: const PosStyles(align: PosAlign.left)),
-          PosColumn(text: '[ ]', width: 2, styles: const PosStyles(align: PosAlign.right)),
+          PosColumn(
+              text: itemLabel,
+              width: 10,
+              styles: const PosStyles(align: PosAlign.left)),
+          PosColumn(
+              text: '[ ]',
+              width: 2,
+              styles: const PosStyles(align: PosAlign.right)),
         ]);
-        
+
         if (item.note.isNotEmpty) {
           bytes += generator.text('   * ${item.note}',
               styles: const PosStyles(
@@ -2319,7 +2436,8 @@ class HomeController extends GetxController {
         }
       }
 
-      bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.center));
       bytes += generator.feed(3);
       bytes += generator.cut();
 
@@ -2438,22 +2556,28 @@ class HomeController extends GetxController {
 
   Future<void> sendToKitchen() async {
     if (penjualanDetailModelList.isEmpty) {
-      Get.snackbar('Empty Cart', 'Please add products before sending to kitchen.',
+      Get.snackbar(
+          'Empty Cart', 'Please add products before sending to kitchen.',
           backgroundColor: Colors.orange, colorText: Colors.white);
       return;
     }
 
-    if (isProcessingPayment.value || isLoadingTransaction.value || isSyncingDirectly.value) {
+    if (isProcessingPayment.value ||
+        isLoadingTransaction.value ||
+        isSyncingDirectly.value) {
       debugPrint("HomeController: sendToKitchen early return — busy state");
-      Get.snackbar('System Busy', 'Aksi sebelumnya sedang diproses. Mohon tunggu sebentar.',
-          backgroundColor: Colors.blue.shade700, colorText: Colors.white, duration: const Duration(seconds: 2));
+      Get.snackbar('System Busy',
+          'Aksi sebelumnya sedang diproses. Mohon tunggu sebentar.',
+          backgroundColor: Colors.blue.shade700,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 2));
       return;
     }
 
     try {
       isLoadingTransaction.value = true;
-      bool synced = await syncOrderBeforePayment();
-      if (synced) {
+      bool saved = await saveOrderLocally();
+      if (saved) {
         // Find the newly saved/updated local ID
         final localRow = await _dbService.query('transactions',
             where: 'id_pos = ?', whereArgs: [currentIdPos]);
@@ -2480,13 +2604,16 @@ class HomeController extends GetxController {
         }
       } else {
         final appService = Get.find<AppService>();
-        String errorMsg = 'Gagal menyimpan pesanan. Periksa koneksi internet Anda.';
+        String errorMsg =
+            'Gagal menyimpan pesanan. Periksa koneksi internet Anda.';
         if (appService.developerMode.value && lastSyncError.value.isNotEmpty) {
           errorMsg = 'Developer Mode Error: ${lastSyncError.value}';
         }
-        
+
         Get.snackbar('Sync Failed', errorMsg,
-            backgroundColor: Colors.orange, colorText: Colors.white, duration: const Duration(seconds: 5));
+            backgroundColor: Colors.orange,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 5));
       }
     } catch (e) {
       debugPrint("HomeController: sendToKitchen error: $e");
@@ -2496,7 +2623,7 @@ class HomeController extends GetxController {
     }
   }
 
-  Future<bool> syncOrderBeforePayment() async {
+  Future<bool> saveOrderLocally() async {
     lastSyncError.value = "";
     if (penjualanDetailModelList.isEmpty) {
       lastSyncError.value = "Keranjang belanja kosong.";
@@ -2508,8 +2635,9 @@ class HomeController extends GetxController {
     }
 
     int idPenjualanLocal = 0;
+
     try {
-      print("POS_LOG: syncOrderBeforePayment started.");
+      print("POS_LOG: saveOrderLocally started.");
       isSyncingDirectly.value = true;
       isLoadingTransaction.value = true;
 
@@ -2521,7 +2649,7 @@ class HomeController extends GetxController {
             (existingTx.first['status'] == 2 ||
                 existingTx.first['status'] == '2')) {
           debugPrint(
-              "HomeController: Order already PAID ($currentIdPos). Skipping syncOrderBeforePayment.");
+              "HomeController: Order already PAID ($currentIdPos). Skipping saveOrderLocally.");
           return true;
         }
       }
@@ -2529,7 +2657,7 @@ class HomeController extends GetxController {
       await userService
           .initSharedPref(); // Ensure prefs are loaded for dynamic baseUrl
 
-      // 1. Prepare data (similar to storeTransaction / transactionValidation)
+      // 1. Prepare data
       final idPos = currentIdPos ?? const Uuid().v4();
       currentIdPos = idPos;
 
@@ -2537,7 +2665,6 @@ class HomeController extends GetxController {
       final total = totalTransaction.value;
       final disc = disscount.value;
 
-      // Derive member ID from selectedMember to handle cases where memberId wasn't explicitly updated
       final effectiveMemberId =
           selectedMember.value != null && selectedMember.value!.idMember != 0
               ? selectedMember.value!.idMember
@@ -2560,19 +2687,15 @@ class HomeController extends GetxController {
       final existing = await _dbService
           .query('transactions', where: 'id_pos = ?', whereArgs: [idPos]);
 
-      // idPenjualanLocal is declared at function level
       bool isNewRecord = existing.isEmpty;
-      int? existingRemoteId;
-      String? existingRemoteNumber;
 
-      // Determine queue number: assign a new one for new orders, preserve for updates
       final int queueNum = isNewRecord
           ? await appService.getAndIncrementQueue()
           : (existing.first['queue_number'] as int? ?? 0);
 
       final Map<String, dynamic> txData = {
         'id_user': map['id_user'],
-        'id_member': map['id_member'], // Use derived id from map
+        'id_member': map['id_member'],
         'total_item': map['total_item'],
         'total_harga': map['total_harga'],
         'diskon': map['diskon'],
@@ -2587,10 +2710,6 @@ class HomeController extends GetxController {
 
       if (!isNewRecord) {
         idPenjualanLocal = existing.first['id_penjualan'] as int;
-        final rawRemoteId = existing.first['id_penjualan_remote'];
-        existingRemoteId =
-            rawRemoteId != null ? int.tryParse(rawRemoteId.toString()) : null;
-        existingRemoteNumber = existing.first['remote_number']?.toString();
 
         await _dbService.update(
             'transactions', txData, 'id_penjualan = ?', [idPenjualanLocal]);
@@ -2626,355 +2745,14 @@ class HomeController extends GetxController {
         });
       }
 
-      // 3. Remote Sync (Immediate)
-      if (Get.isDialogOpen ?? false) {
-        Get.back();
-      }
-      Get.dialog(
-        PopScope(
-          canPop: false,
-          child: Center(
-            child: Container(
-              padding: EdgeInsets.all(24.w),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16.r),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(),
-                  SizedBox(height: 16.h),
-                  Text("Syncing Order...",
-                      style: AppTheme.bodyLarge
-                          .copyWith(fontFamily: AppTheme.fontMedium)),
-                ],
-              ),
-            ),
-          ),
-        ),
-        barrierDismissible: false,
-      );
-
-      // Prepare API body based on if it's POST or PUT
-      final List detailItems = map['penjualan_detail'];
-      final mergedNote =
-          _buildMergedClientNote(penjualanDetailModelList, orderNote.value);
-      // 1. Resolve clientId and force member sync if it's still negative
-      int rawClientId = map['id_member'] as int? ?? 1;
-      final String? memberIdPos = selectedMember.value?.idPos;
-
-      if (rawClientId < 0 && memberIdPos != null) {
-        final syncService = Get.find<SyncService>();
-        print("POS_LOG: Forcing sync of member dependency (ID: $rawClientId)...");
-        // Try to force the member sync command in the queue to run now
-        await syncService.processSpecificCommand(
-            rawClientId.toString(), '%pos_customers%');
-        print("POS_LOG: Member dependency sync attempt finished.");
-
-        // Re-check DB for the real synced ID
-        final syncedMember = await _dbService.query('members',
-            where: 'id_member > 0 AND id_pos = ?', whereArgs: [memberIdPos]);
-
-        if (syncedMember.isNotEmpty) {
-          rawClientId = syncedMember.first['id_member'] as int;
-          // Update the reactive selectedMember so UI and further logic have the real ID/Points
-          selectedMember.value = MemberModel.fromJson(syncedMember.first);
-
-          // Update local record so it doesn't stay negative
-          await _dbService.update(
-              'transactions',
-              {
-                'id_member': rawClientId,
-              },
-              'id_penjualan = ?',
-              [idPenjualanLocal]);
-        }
-      }
-
-      final clientId = (rawClientId != 0 && rawClientId != 1) ? rawClientId : 1;
-
-      // 2. DEDUPLICATION: Clear any pending sync for THIS order in the queue to avoid duplication
-      // since we are about to sync it directly.
-      await _dbService.delete(
-          'sync_queue',
-          '(local_id = ? OR body LIKE ?) AND endpoint LIKE ?',
-          [idPenjualanLocal.toString(), '%$idPos%', '%pos_order%']);
-      final billingStreet =
-          (selectedMember.value?.alamat?.trim().isNotEmpty == true)
-              ? selectedMember.value!.alamat!
-              : '-';
-      final today = DateTime.now().toIso8601String().split('T')[0];
-
-      // Calculate discount info
-      double subtotalVal = (map['total_harga'] as num).toDouble();
-      double discountAmount = 0;
-      double discountPercent = 0;
-      String discountType = manualDiscountIsPercent.value ? 'percent' : 'fixed';
-
-      if (manualDiscountValue.value > 0) {
-        if (manualDiscountIsPercent.value) {
-          discountPercent = manualDiscountValue.value.toDouble();
-          discountAmount = subtotalVal * (discountPercent / 100);
-        } else {
-          discountAmount = manualDiscountValue.value.toDouble();
-          discountPercent = 0;
-        }
-      } else if (appService.useDefaultDiscount.value) {
-        discountPercent = appService.appModel.value.diskon.toDouble();
-        discountAmount = subtotalVal * (discountPercent / 100);
-        discountType = 'percent';
-      }
-
-      ResponseApiModel resp;
-      if (existingRemoteId != null && existingRemoteId != 0) {
-        // PUT
-        final itemsArray = <Map<String, dynamic>>[];
-        for (int i = 0; i < detailItems.length; i++) {
-          final item = detailItems[i];
-          final mapItem = <String, dynamic>{
-            'description': item['productName'] ?? 'Product',
-            'long_description': item['productName'] ?? '',
-            'qty': (item['jumlah'] as num).toDouble().toStringAsFixed(2),
-            'rate': (item['harga_jual'] as num).toDouble().toStringAsFixed(2),
-            'order': (i + 1).toString(),
-            'unit': '',
-            'taxname': <String>[],
-          };
-          final rItemId = item['remote_item_id']?.toString() ?? '';
-          if (rItemId.isNotEmpty && rItemId != '0' && rItemId != 'null') {
-            mapItem['itemid'] = rItemId;
-          }
-          itemsArray.add(mapItem);
-        }
-
-        final putBody = {
-          'clientid': clientId.toString(),
-          'date': today,
-          'currency': '3',
-          'number': existingRemoteNumber ?? '',
-          'billing_street': billingStreet,
-          'allowed_payment_modes': allPaymentModes.isNotEmpty
-              ? allPaymentModes.map((e) => e['id'].toString()).toList()
-              : ['7'],
-          'items': itemsArray,
-          'subtotal': subtotalVal.toStringAsFixed(2),
-          'total': (map['bayar'] as num).toDouble().toStringAsFixed(2),
-          'discount_total': discountAmount.toStringAsFixed(2),
-          'discount_percent': discountPercent.toStringAsFixed(2),
-          'discount_type': discountType,
-          'clientnote': mergedNote,
-          'terms': selectedOrderType.value,
-          'status': 1, // Required by backend to prevent 404 on update
-          'adminnote': queueNum > 0 ? queueNum.toString() : '',
-        };
-        print("POS_LOG: syncOrderBeforePayment (PUT) Body: ${jsonEncode(putBody)}");
-        resp = await apiService.updatePosOrder(existingRemoteId, putBody);
-        print("POS_LOG: syncOrderBeforePayment (PUT) Response: ${resp.responsestate} - ${resp.message}");
-      } else {
-        // POST
-        final newitemsArray = detailItems.asMap().entries.map((entry) {
-          final item = entry.value;
-          return {
-            'description': item['productName'] ?? 'Product',
-            'long_description': item['productName'] ?? '',
-            'qty': (item['jumlah'] as num).toDouble().toStringAsFixed(2),
-            'rate': (item['harga_jual'] as num).toDouble().toStringAsFixed(2),
-            'order': (entry.key + 1).toString(),
-            'unit': '',
-            'taxname': <String>[],
-            'itemid':
-                (item['id_produk'] != 0) ? item['id_produk'].toString() : null,
-          };
-        }).toList();
-
-        final postBody = {
-          'id_pos': idPos,
-          'clientid': clientId,
-          'date': today,
-          'currency': 3,
-          'prefix': 'POS-',
-          'newitems': newitemsArray,
-          'allowed_payment_modes': allPaymentModes.isNotEmpty
-              ? allPaymentModes.map((e) => e['id'].toString()).toList()
-              : ['7'],
-          'billing_street': billingStreet,
-          'subtotal': subtotalVal.toStringAsFixed(2),
-          'total': (map['bayar'] as num).toDouble().toStringAsFixed(2),
-          'discount_total': discountAmount.toStringAsFixed(2),
-          'discount_percent': discountPercent.toStringAsFixed(2),
-          'discount_type': discountType,
-          'clientnote': mergedNote,
-          'terms': selectedOrderType.value,
-        };
-        print("POS_LOG: syncOrderBeforePayment (POST) Body: ${jsonEncode(postBody)}");
-        resp = await apiService.storePosOrder(postBody);
-        print("POS_LOG: syncOrderBeforePayment (POST) Response: ${resp.responsestate} - ${resp.message}");
-      }
-
-      // Close loading dialog safely
-      if (Get.isDialogOpen == true) {
-        Get.back();
-        // Allow the dialog pop animation to finish to prevent GetX race condition with Get.to()
-        await Future.delayed(const Duration(milliseconds: 300));
-      }
-
-      if (resp.responsestate == Constants.successState && resp.data != null) {
-        final rIdRaw = resp.data['id'];
-        final rId = rIdRaw != null ? int.tryParse(rIdRaw.toString()) ?? 0 : 0;
-        final rNo = resp.data['number']?.toString() ?? "";
-
-        currentRemoteId.value = rId;
-        currentRemoteNumber.value = rNo;
-
-        // Update local DB and memory with remote ID and Number
-        await _dbService.update(
-            'transactions',
-            {
-              'id_penjualan_remote': rId,
-              'remote_number': rNo,
-              'is_synced': 1,
-            },
-            'id_penjualan = ?',
-            [idPenjualanLocal]);
-
-        // Mapping returned item IDs
-        final List? remoteItems = resp.data['items'];
-        if (remoteItems != null && remoteItems.isNotEmpty) {
-          for (int i = 0; i < remoteItems.length; i++) {
-            final String? serverItemId = remoteItems[i]['itemid']?.toString() ??
-                remoteItems[i]['id']?.toString();
-            if (serverItemId != null && i < penjualanDetailModelList.length) {
-              final itemIdVal = int.tryParse(serverItemId);
-              penjualanDetailModelList[i] =
-                  penjualanDetailModelList[i].copyWith(remoteItemId: itemIdVal);
-
-              final localItems = await _dbService.query('transaction_details',
-                  where: 'id_penjualan = ?', whereArgs: [idPenjualanLocal]);
-              if (i < localItems.length) {
-                await _dbService.update(
-                    'transaction_details',
-                    {'remote_item_id': itemIdVal},
-                    'id_penjualan_detail = ?',
-                    [localItems[i]['id_penjualan_detail']]);
-              }
-            }
-          }
-        }
-
-        return true;
-      } else if (existingRemoteId != null &&
-          existingRemoteId != 0 &&
-          resp.message?.toLowerCase().contains("invoice update fail") == true) {
-        // Backend returns "Invoice Update Fail" when no data was changed (affected_rows == 0).
-        // Since we are already synced and no changes were made, we can safely treat this as a success.
-        debugPrint(
-            "HomeController: Treating Invoice Update Fail as success because no data changed.");
-        return true;
-      } else {
-        lastSyncError.value = resp.message ?? 'Gagal sinkronisasi data ke server.';
-        Get.snackbar(
-            'Sync Error', lastSyncError.value);
-        return false;
-      }
+      return true;
     } catch (e) {
-      if (Get.isDialogOpen == true) {
-        Get.back();
-        await Future.delayed(const Duration(milliseconds: 300));
-      }
-      debugPrint("HomeController: syncOrderBeforePayment error: $e");
+      debugPrint("HomeController: saveOrderLocally error: $e");
       ErrorLogService.log(
         category: 'payment_sync',
-        errCode: 'SYNC_ORDER_BEFORE_PAYMENT_FAIL',
+        errCode: 'SAVE_ORDER_LOCALLY_FAIL',
         errMsg: e.toString(),
       );
-
-      // Handle Connectivity/Offline issues
-      if (e is SocketException ||
-          e is TimeoutException ||
-          e is HttpException ||
-          e is HandshakeException ||
-          e is http.ClientException) {
-        debugPrint(
-            "HomeController: Network error detected. Proceeding Offline.");
-
-        // Ensure the order is enqueued for background sync (since it wasn't successful immediately)
-        // We re-use logic from _pushOrderToApi to prepare and enqueue the command.
-        try {
-          final subtotalVal = subtotalRaw.value;
-          final Map<String, dynamic> localData = {
-            'id_user': userService.getPrefInt(Constants.userId),
-            'id_member': selectedMember.value?.idMember ?? 1,
-            'total_item': penjualanDetailModelList.length,
-            'total_harga': subtotalVal,
-            'diskon': (manualDiscountIsPercent.value
-                    ? (subtotalVal * (manualDiscountValue.value / 100))
-                    : manualDiscountValue.value)
-                .toInt(),
-            'bayar': totalTransaction.value,
-            'id_pos': currentIdPos,
-            'penjualan_detail':
-                penjualanDetailModelList.map((e) => e.toJson()).toList(),
-          };
-
-          // Reuse the logic to push to API (which enqueues)
-          await _pushOrderToApi(
-            map: localData,
-            isNew: currentRemoteId.value == 0,
-            idPenjualanLocal: idPenjualanLocal, // FIXED: was 0
-            existingRemoteId:
-                currentRemoteId.value != 0 ? currentRemoteId.value : null,
-            remoteNumber: currentRemoteNumber.value.isNotEmpty
-                ? currentRemoteNumber.value
-                : null,
-          );
-        } catch (enqueueError) {
-          debugPrint(
-              "HomeController: Failed to enqueue order during offline fallback: $enqueueError");
-          ErrorLogService.log(
-            category: 'sync',
-            errCode: 'OFFLINE_ENQUEUE_FAIL',
-            errMsg: enqueueError.toString(),
-          );
-        }
-
-        /* Get.snackbar(
-          'Modus Offline', 
-          'Koneksi terganggu. Transaksi disimpan lokal.',
-          snackPosition: SnackPosition.TOP,
-          backgroundColor: Colors.white.withValues(alpha: 0.95),
-          colorText: AppTheme.primaryColor,
-          margin: EdgeInsets.all(16.w),
-          borderRadius: 12.r,
-          boxShadows: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            )
-          ],
-          icon: Icon(CupertinoIcons.wifi_slash, color: Colors.orange, size: 24.sp),
-          titleText: Text("Modus Offline", 
-              style: AppTheme.bodyLarge.copyWith(fontFamily: AppTheme.fontBold, color: Colors.orange.shade900)),
-          messageText: Text("Gagal terhubung ke server. Pesanan disimpan di perangkat dan akan disinkronkan nanti.", 
-              style: AppTheme.bodyMedium.copyWith(color: Colors.black87)),
-          duration: const Duration(seconds: 5),
-        ); */
-
-        return true; // ALLOW PROCEEDING
-      }
-
-      ErrorLogService.log(
-        category: 'payment',
-        errCode: 'PAYMENT_PROCESS_FAIL',
-        errMsg: e.toString(),
-      );
-      final appService = Get.find<AppService>();
-      String errorMsg = 'Gagal memproses pesanan. Silakan coba lagi.';
-      if (appService.developerMode.value) {
-        errorMsg = 'Developer Mode (Catch): ${e.toString()}';
-      }
-      Get.snackbar('Error', errorMsg, duration: const Duration(seconds: 5));
       return false;
     } finally {
       isLoadingTransaction.value = false;
@@ -3390,6 +3168,4 @@ class HomeController extends GetxController {
     searchFocusNode.dispose();
     super.onClose();
   }
-
-
 }

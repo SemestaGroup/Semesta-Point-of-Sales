@@ -62,10 +62,10 @@ class DatabaseService {
 
   Future<Database> _initDatabase() async {
     String path = join(await getDatabasesPath(), 'pos_database.db');
-    debugPrint('SQLite: Opening database at $path with version 40');
+    debugPrint('SQLite: Opening database at $path with version 41');
     return await openDatabase(
       path,
-      version: 40,
+      version: 41,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -444,20 +444,42 @@ class DatabaseService {
       try {
         await db.execute(
             'ALTER TABLE transactions ADD COLUMN payment_method TEXT DEFAULT ""');
-      } catch (e) { /* column might already exist */ }
+      } catch (e) {/* column might already exist */}
       try {
         await db.execute(
             'ALTER TABLE transactions ADD COLUMN tgl_bayar TEXT DEFAULT ""');
-      } catch (e) { /* column might already exist */ }
+      } catch (e) {/* column might already exist */}
     }
 
     if (oldVersion < 40) {
       try {
         await db.execute('ALTER TABLE products ADD COLUMN parent TEXT');
-      } catch (e) { /* column might already exist */ }
+      } catch (e) {/* column might already exist */}
       try {
         await db.execute('ALTER TABLE products ADD COLUMN children TEXT');
-      } catch (e) { /* column might already exist */ }
+      } catch (e) {/* column might already exist */}
+    }
+
+    if (oldVersion < 41) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS pos_promotions(
+          id TEXT PRIMARY KEY,
+          name TEXT,
+          promo_type TEXT,
+          brands TEXT,
+          locations TEXT,
+          description TEXT,
+          terms_conditions TEXT,
+          items TEXT,
+          order_types TEXT,
+          start_date TEXT,
+          end_date TEXT,
+          is_multiplied TEXT,
+          is_stackable TEXT,
+          status TEXT,
+          created_at TEXT
+        )
+      ''');
     }
   }
 
@@ -697,6 +719,27 @@ class DatabaseService {
         total INTEGER,
         status TEXT,
         reference_no TEXT
+      )
+    ''');
+
+    // POS Promotions Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS pos_promotions(
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        promo_type TEXT,
+        brands TEXT,
+        locations TEXT,
+        description TEXT,
+        terms_conditions TEXT,
+        items TEXT,
+        order_types TEXT,
+        start_date TEXT,
+        end_date TEXT,
+        is_multiplied TEXT,
+        is_stackable TEXT,
+        status TEXT,
+        created_at TEXT
       )
     ''');
   }

@@ -144,7 +144,10 @@ class OrderController extends GetxController {
       'allowed_payment_modes': ['4'],
       'items': itemsArray,
       'subtotal': (order['total_harga'] as num? ?? 0).toDouble().toStringAsFixed(2),
-      'total': (order['bayar'] as num? ?? 0).toDouble().toStringAsFixed(2)
+      'total': (order['bayar'] as num? ?? 0).toDouble().toStringAsFixed(2),
+      'adminnote': (int.tryParse(order['queue_number']?.toString() ?? '0') ?? 0) > 0 
+          ? order['queue_number'].toString() 
+          : '',
     };
   }
 

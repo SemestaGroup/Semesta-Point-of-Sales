@@ -44,7 +44,8 @@ class ApiService extends GetxService {
       queryParameters.forEach((key, value) {
         if (value != null) cleanParams[key] = value.toString();
       });
-      return Uri.parse(fullPath).replace(queryParameters: cleanParams.isNotEmpty ? cleanParams : null);
+      return Uri.parse(fullPath).replace(
+          queryParameters: cleanParams.isNotEmpty ? cleanParams : null);
     }
     return Uri.parse(fullPath);
   }
@@ -91,16 +92,17 @@ class ApiService extends GetxService {
       } catch (e) {
         debugPrint('ApiService: Failed to decode JSON response: $e');
         if (responseApi.statusCode == 401) {
-           return const ResponseApiModel(
-             responsestate: Constants.errorState,
-             message: 'Email atau password salah. (401)',
-             data: null,
-           );
+          return const ResponseApiModel(
+            responsestate: Constants.errorState,
+            message: 'Email atau password salah. (401)',
+            data: null,
+          );
         }
         if (responseApi.statusCode != 200) {
           return ResponseApiModel(
             responsestate: Constants.errorState,
-            message: 'Server Error (${responseApi.statusCode}). Please contact administrator.',
+            message:
+                'Server Error (${responseApi.statusCode}). Please contact administrator.',
             data: null,
           );
         }
@@ -112,7 +114,8 @@ class ApiService extends GetxService {
         if (responseJson is Map) {
           if (responseJson['status'] == true) {
             isSuccess = true;
-          } else if (responseJson.containsKey('base_url') && responseJson.containsKey('location')) {
+          } else if (responseJson.containsKey('base_url') &&
+              responseJson.containsKey('location')) {
             // Some API responses might be missing "status: true" but have the data
             isSuccess = true;
           }
@@ -126,7 +129,8 @@ class ApiService extends GetxService {
         } else {
           return ResponseApiModel(
               responsestate: Constants.errorState,
-              message: (responseJson is Map ? responseJson['message'] : null) ?? 'Invalid credentials',
+              message: (responseJson is Map ? responseJson['message'] : null) ??
+                  'Invalid credentials',
               data: null);
         }
       }
@@ -154,8 +158,8 @@ class ApiService extends GetxService {
           message: 'Koneksi ke server terputus (Timeout).',
           data: null);
     } on FormatException catch (e) {
-       debugPrint('ApiService Login Format Error: $e');
-       return const ResponseApiModel(
+      debugPrint('ApiService Login Format Error: $e');
+      return const ResponseApiModel(
           responsestate: Constants.errorState,
           message: 'Server memberikan respon yang tidak valid (Bukan JSON).',
           data: null);
@@ -163,21 +167,23 @@ class ApiService extends GetxService {
       debugPrint('ApiService Login Error: $e');
       return ResponseApiModel(
           responsestate: Constants.serverErrState,
-          message:
-              'Terjadi kesalahan: ${e.toString().split(':').last.trim()}',
+          message: 'Terjadi kesalahan: ${e.toString().split(':').last.trim()}',
           data: null);
     }
   }
 
   Future<ResponseApiModel> getProfile(int userId) async {
     try {
-      final responseApi = await http.get(_getUri('${EndPoint.posProfile}/$userId'), headers: _getAuthHeaders());
-      
+      final responseApi = await http.get(
+          _getUri('${EndPoint.posProfile}/$userId'),
+          headers: _getAuthHeaders());
+
       dynamic responseJson;
       try {
         responseJson = jsonDecode(responseApi.body);
       } catch (e) {
-        debugPrint('ApiService: Invalid JSON in getProfile for location $userId. Assuming profile endpoint not supported.');
+        debugPrint(
+            'ApiService: Invalid JSON in getProfile for location $userId. Assuming profile endpoint not supported.');
         return const ResponseApiModel(
           responsestate: Constants.errorState,
           message: 'Profil tidak tersedia',
@@ -199,7 +205,11 @@ class ApiService extends GetxService {
           data: null);
     } catch (e) {
       debugPrint(e.toString());
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
       return const ResponseApiModel(
@@ -209,10 +219,12 @@ class ApiService extends GetxService {
     }
   }
 
-  Future<ResponseApiModel> updateProfile(Map<String, dynamic> map, int userId) async {
+  Future<ResponseApiModel> updateProfile(
+      Map<String, dynamic> map, int userId) async {
     try {
       final responseApi = await http.post(
-        _getUri('${EndPoint.posProfile}/update/$userId'), // Or just posProfile if REST
+        _getUri(
+            '${EndPoint.posProfile}/update/$userId'), // Or just posProfile if REST
         headers: _getAuthHeaders(),
         body: jsonEncode(map),
       );
@@ -232,7 +244,11 @@ class ApiService extends GetxService {
           data: null);
     } catch (e) {
       debugPrint(e.toString());
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
       return const ResponseApiModel(
@@ -242,7 +258,8 @@ class ApiService extends GetxService {
     }
   }
 
-  Future<ResponseApiModel> getBrand({int? id, String? name, String? code}) async {
+  Future<ResponseApiModel> getBrand(
+      {int? id, String? name, String? code}) async {
     try {
       final uri = _getUri(EndPoint.posBrands, queryParameters: {
         if (id != null) 'id': id,
@@ -258,11 +275,15 @@ class ApiService extends GetxService {
         if (dataResponse is List) {
           rawList = dataResponse;
         } else if (dataResponse is Map) {
-          if (dataResponse['status'] == true || dataResponse.containsKey('status')) {
-            dynamic brandsData = dataResponse['brands'] ?? dataResponse['data']?['brands'] ?? dataResponse['data'];
+          if (dataResponse['status'] == true ||
+              dataResponse.containsKey('status')) {
+            dynamic brandsData = dataResponse['brands'] ??
+                dataResponse['data']?['brands'] ??
+                dataResponse['data'];
             if (brandsData is List) rawList = brandsData;
           } else {
-            rawList = dataResponse['brands'] is List ? dataResponse['brands'] : [];
+            rawList =
+                dataResponse['brands'] is List ? dataResponse['brands'] : [];
           }
         }
 
@@ -273,7 +294,8 @@ class ApiService extends GetxService {
               if (item is Map<String, dynamic>) {
                 final val = item['id'];
                 if (val != null) {
-                  item['id'] = (val is int) ? val : int.tryParse(val.toString()) ?? 0;
+                  item['id'] =
+                      (val is int) ? val : int.tryParse(val.toString()) ?? 0;
                 }
               }
               return BrandModel.fromJson(item);
@@ -284,6 +306,46 @@ class ApiService extends GetxService {
     } catch (e) {
       debugPrint('Error getBrand: $e');
       rethrow;
+    }
+  }
+
+  Future<ResponseApiModel> getPosPromotions(String idLocation) async {
+    try {
+      String centralUrl = Constants.centralBaseUrl;
+      if (!centralUrl.endsWith('/')) centralUrl += '/';
+      final fullPath = '$centralUrl${EndPoint.apiPath}pos_promotions';
+      final uri = Uri.parse(fullPath).replace(queryParameters: {'id_location': idLocation});
+      
+      debugPrint('ApiService: getPosPromotions URL: $uri');
+      final responseApi = await http.get(
+        uri,
+        headers: _getAuthHeaders(),
+      );
+      debugPrint('ApiService: getPosPromotions statusCode: ${responseApi.statusCode}');
+      debugPrint('ApiService: getPosPromotions body: ${responseApi.body}');
+
+      dynamic responseJson;
+      try {
+        responseJson = jsonDecode(responseApi.body);
+      } catch (e) {
+        debugPrint('ApiService: getPosPromotions JSON parse error: $e');
+        return ResponseApiModel(
+            responsestate: Constants.errorState, message: 'Format respons bukan JSON');
+      }
+
+      if (responseApi.statusCode == 200 || responseApi.statusCode == 201) {
+        return ResponseApiModel(
+          responsestate: Constants.successState,
+          message: 'success',
+          data: responseJson is Map ? (responseJson['data'] ?? responseJson) : responseJson,
+        );
+      }
+      return ResponseApiModel(
+          responsestate: Constants.errorState, message: 'Gagal memuat promo (HTTP ${responseApi.statusCode})');
+    } catch (e) {
+      debugPrint('ApiService: getPosPromotions Exception: $e');
+      return ResponseApiModel(
+          responsestate: Constants.errorState, message: e.toString());
     }
   }
 
@@ -298,11 +360,14 @@ class ApiService extends GetxService {
         return ResponseApiModel(
           responsestate: Constants.successState,
           message: 'success',
-          data: responseJson is Map ? (responseJson['data'] ?? responseJson) : responseJson,
+          data: responseJson is Map
+              ? (responseJson['data'] ?? responseJson)
+              : responseJson,
         );
       }
       return const ResponseApiModel(
-          responsestate: Constants.errorState, message: 'Gagal memuat mode pembayaran');
+          responsestate: Constants.errorState,
+          message: 'Gagal memuat mode pembayaran');
     } catch (e) {
       return ResponseApiModel(
           responsestate: Constants.errorState, message: e.toString());
@@ -324,11 +389,16 @@ class ApiService extends GetxService {
         if (dataResponse is List) {
           rawList = dataResponse;
         } else if (dataResponse is Map) {
-          if (dataResponse['status'] == true || dataResponse.containsKey('status')) {
-            dynamic catsData = dataResponse['categories'] ?? dataResponse['data']?['categories'] ?? dataResponse['data'];
+          if (dataResponse['status'] == true ||
+              dataResponse.containsKey('status')) {
+            dynamic catsData = dataResponse['categories'] ??
+                dataResponse['data']?['categories'] ??
+                dataResponse['data'];
             if (catsData is List) rawList = catsData;
           } else {
-            rawList = dataResponse['categories'] is List ? dataResponse['categories'] : [];
+            rawList = dataResponse['categories'] is List
+                ? dataResponse['categories']
+                : [];
           }
         }
 
@@ -339,7 +409,8 @@ class ApiService extends GetxService {
               if (item is Map<String, dynamic>) {
                 final val = item['commodity_type_id'];
                 if (val != null) {
-                  item['commodity_type_id'] = (val is int) ? val : int.tryParse(val.toString()) ?? 0;
+                  item['commodity_type_id'] =
+                      (val is int) ? val : int.tryParse(val.toString()) ?? 0;
                 }
               }
               return KategoriModel.fromJson(item);
@@ -350,7 +421,11 @@ class ApiService extends GetxService {
           message: 'Gagal memuat kategori',
           data: null);
     } catch (e) {
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
       return ResponseApiModel(
@@ -362,9 +437,25 @@ class ApiService extends GetxService {
 
   Future<ResponseApiModel> getProduct() async {
     try {
-      final responseApi = await http.get(_getUri(EndPoint.posItems), headers: _getAuthHeaders());
+      final responseApi = await http.get(_getUri(EndPoint.posItems),
+          headers: _getAuthHeaders());
       if (responseApi.statusCode == 200) {
-        dynamic dataResponse; try { dataResponse = jsonDecode(responseApi.body); } catch (_) { debugPrint('storePosOrder Invalid JSON: '); String errorMsg = 'Server Error: '; if (responseApi.body.contains('<p>')) { final RegExp exp = RegExp(r'<p>(.*?)<\/p>'); final match = exp.firstMatch(responseApi.body); if (match != null) errorMsg = match.group(1) ?? errorMsg; } return ResponseApiModel(message: errorMsg, responsestate: Constants.serverErrState, data: null); }
+        dynamic dataResponse;
+        try {
+          dataResponse = jsonDecode(responseApi.body);
+        } catch (_) {
+          debugPrint('storePosOrder Invalid JSON: ');
+          String errorMsg = 'Server Error: ';
+          if (responseApi.body.contains('<p>')) {
+            final RegExp exp = RegExp(r'<p>(.*?)<\/p>');
+            final match = exp.firstMatch(responseApi.body);
+            if (match != null) errorMsg = match.group(1) ?? errorMsg;
+          }
+          return ResponseApiModel(
+              message: errorMsg,
+              responsestate: Constants.serverErrState,
+              data: null);
+        }
 
         if (dataResponse['status'] == true) {
           final dynamic data = dataResponse['data'] ?? dataResponse;
@@ -401,9 +492,25 @@ class ApiService extends GetxService {
 
   Future<ResponseApiModel> getMember() async {
     try {
-      final responseApi = await http.get(_getUri(EndPoint.posCustomers), headers: _getAuthHeaders());
+      final responseApi = await http.get(_getUri(EndPoint.posCustomers),
+          headers: _getAuthHeaders());
       if (responseApi.statusCode == 200) {
-        dynamic dataResponse; try { dataResponse = jsonDecode(responseApi.body); } catch (_) { debugPrint('storePosOrder Invalid JSON: '); String errorMsg = 'Server Error: '; if (responseApi.body.contains('<p>')) { final RegExp exp = RegExp(r'<p>(.*?)<\/p>'); final match = exp.firstMatch(responseApi.body); if (match != null) errorMsg = match.group(1) ?? errorMsg; } return ResponseApiModel(message: errorMsg, responsestate: Constants.serverErrState, data: null); }
+        dynamic dataResponse;
+        try {
+          dataResponse = jsonDecode(responseApi.body);
+        } catch (_) {
+          debugPrint('storePosOrder Invalid JSON: ');
+          String errorMsg = 'Server Error: ';
+          if (responseApi.body.contains('<p>')) {
+            final RegExp exp = RegExp(r'<p>(.*?)<\/p>');
+            final match = exp.firstMatch(responseApi.body);
+            if (match != null) errorMsg = match.group(1) ?? errorMsg;
+          }
+          return ResponseApiModel(
+              message: errorMsg,
+              responsestate: Constants.serverErrState,
+              data: null);
+        }
         debugPrint('GET Members Response: ${responseApi.body}');
 
         List data = [];
@@ -436,11 +543,27 @@ class ApiService extends GetxService {
 
   Future<ResponseApiModel> getUnpaidOrders() async {
     try {
-      final uri = _getUri(EndPoint.posOrder, queryParameters: {'search': 'unpaid'});
+      final uri =
+          _getUri(EndPoint.posOrder, queryParameters: {'search': 'unpaid'});
       final responseApi = await http.get(uri, headers: _getAuthHeaders());
 
       if (responseApi.statusCode == 200 || responseApi.statusCode == 201) {
-        dynamic dataResponse; try { dataResponse = jsonDecode(responseApi.body); } catch (_) { debugPrint('storePosOrder Invalid JSON: '); String errorMsg = 'Server Error: '; if (responseApi.body.contains('<p>')) { final RegExp exp = RegExp(r'<p>(.*?)<\/p>'); final match = exp.firstMatch(responseApi.body); if (match != null) errorMsg = match.group(1) ?? errorMsg; } return ResponseApiModel(message: errorMsg, responsestate: Constants.serverErrState, data: null); }
+        dynamic dataResponse;
+        try {
+          dataResponse = jsonDecode(responseApi.body);
+        } catch (_) {
+          debugPrint('storePosOrder Invalid JSON: ');
+          String errorMsg = 'Server Error: ';
+          if (responseApi.body.contains('<p>')) {
+            final RegExp exp = RegExp(r'<p>(.*?)<\/p>');
+            final match = exp.firstMatch(responseApi.body);
+            if (match != null) errorMsg = match.group(1) ?? errorMsg;
+          }
+          return ResponseApiModel(
+              message: errorMsg,
+              responsestate: Constants.serverErrState,
+              data: null);
+        }
 
         if (dataResponse is Map && dataResponse['status'] == false) {
           return ResponseApiModel(
@@ -456,12 +579,17 @@ class ApiService extends GetxService {
       } else {
         return ResponseApiModel(
             responsestate: Constants.errorState,
-            message: 'Gagal memuat unpaid orders (HTTP ${responseApi.statusCode})',
+            message:
+                'Gagal memuat unpaid orders (HTTP ${responseApi.statusCode})',
             data: null);
       }
     } catch (e) {
       debugPrint('getUnpaidOrders Exception: $e');
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
       return const ResponseApiModel(
@@ -473,10 +601,26 @@ class ApiService extends GetxService {
 
   Future<ResponseApiModel> getPosOrders() async {
     try {
-      final responseApi = await http.get(_getUri(EndPoint.posOrder), headers: _getAuthHeaders());
+      final responseApi = await http.get(_getUri(EndPoint.posOrder),
+          headers: _getAuthHeaders());
 
       if (responseApi.statusCode == 200 || responseApi.statusCode == 201) {
-        dynamic dataResponse; try { dataResponse = jsonDecode(responseApi.body); } catch (_) { debugPrint('storePosOrder Invalid JSON: '); String errorMsg = 'Server Error: '; if (responseApi.body.contains('<p>')) { final RegExp exp = RegExp(r'<p>(.*?)<\/p>'); final match = exp.firstMatch(responseApi.body); if (match != null) errorMsg = match.group(1) ?? errorMsg; } return ResponseApiModel(message: errorMsg, responsestate: Constants.serverErrState, data: null); }
+        dynamic dataResponse;
+        try {
+          dataResponse = jsonDecode(responseApi.body);
+        } catch (_) {
+          debugPrint('storePosOrder Invalid JSON: ');
+          String errorMsg = 'Server Error: ';
+          if (responseApi.body.contains('<p>')) {
+            final RegExp exp = RegExp(r'<p>(.*?)<\/p>');
+            final match = exp.firstMatch(responseApi.body);
+            if (match != null) errorMsg = match.group(1) ?? errorMsg;
+          }
+          return ResponseApiModel(
+              message: errorMsg,
+              responsestate: Constants.serverErrState,
+              data: null);
+        }
 
         if (dataResponse is Map && dataResponse['status'] == false) {
           return ResponseApiModel(
@@ -497,7 +641,11 @@ class ApiService extends GetxService {
       }
     } catch (e) {
       debugPrint('getPosOrders Exception: $e');
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
       return const ResponseApiModel(
@@ -509,10 +657,27 @@ class ApiService extends GetxService {
 
   Future<ResponseApiModel> getPosOrderDetails(String remoteId) async {
     try {
-      final responseApi = await http.get(_getUri('${EndPoint.posOrder}/$remoteId'), headers: _getAuthHeaders());
+      final responseApi = await http.get(
+          _getUri('${EndPoint.posOrder}/$remoteId'),
+          headers: _getAuthHeaders());
 
       if (responseApi.statusCode == 200 || responseApi.statusCode == 201) {
-        dynamic dataResponse; try { dataResponse = jsonDecode(responseApi.body); } catch (_) { debugPrint('storePosOrder Invalid JSON: '); String errorMsg = 'Server Error: '; if (responseApi.body.contains('<p>')) { final RegExp exp = RegExp(r'<p>(.*?)<\/p>'); final match = exp.firstMatch(responseApi.body); if (match != null) errorMsg = match.group(1) ?? errorMsg; } return ResponseApiModel(message: errorMsg, responsestate: Constants.serverErrState, data: null); }
+        dynamic dataResponse;
+        try {
+          dataResponse = jsonDecode(responseApi.body);
+        } catch (_) {
+          debugPrint('storePosOrder Invalid JSON: ');
+          String errorMsg = 'Server Error: ';
+          if (responseApi.body.contains('<p>')) {
+            final RegExp exp = RegExp(r'<p>(.*?)<\/p>');
+            final match = exp.firstMatch(responseApi.body);
+            if (match != null) errorMsg = match.group(1) ?? errorMsg;
+          }
+          return ResponseApiModel(
+              message: errorMsg,
+              responsestate: Constants.serverErrState,
+              data: null);
+        }
         return ResponseApiModel(
             message: 'Berhasil memuat detail order',
             responsestate: Constants.successState,
@@ -525,7 +690,11 @@ class ApiService extends GetxService {
       }
     } catch (e) {
       debugPrint('getPosOrderDetails Exception: $e');
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
       return const ResponseApiModel(
@@ -540,14 +709,17 @@ class ApiService extends GetxService {
     _logApiCall('POST', uri, data);
 
     try {
-      final responseApi = await http.post(
-        uri,
-        headers: _getAuthHeaders(),
-        body: jsonEncode(data),
-      ).timeout(const Duration(seconds: 15));
-      
-      print('POS_API_LOG: POST $uri | Status: ${responseApi.statusCode} | Body: ${responseApi.body}');
-      
+      final responseApi = await http
+          .post(
+            uri,
+            headers: _getAuthHeaders(),
+            body: jsonEncode(data),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      print(
+          'POS_API_LOG: POST $uri | Status: ${responseApi.statusCode} | Body: ${responseApi.body}');
+
       dynamic dataResponse;
       try {
         dataResponse = jsonDecode(responseApi.body);
@@ -577,7 +749,11 @@ class ApiService extends GetxService {
       }
     } catch (e) {
       debugPrint('storePosOrder Error: $e');
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
       return const ResponseApiModel(
@@ -587,19 +763,23 @@ class ApiService extends GetxService {
     }
   }
 
-  Future<ResponseApiModel> updatePosOrder(int remoteId, Map<String, dynamic> data) async {
+  Future<ResponseApiModel> updatePosOrder(
+      int remoteId, Map<String, dynamic> data) async {
     final uri = _getUri('${EndPoint.posOrder}/$remoteId');
     _logApiCall('PUT', uri, data);
 
     try {
-      final responseApi = await http.put(
-        uri,
-        headers: _getAuthHeaders(),
-        body: jsonEncode(data),
-      ).timeout(const Duration(seconds: 15));
-      
-      print('POS_API_LOG: PUT $uri | Status: ${responseApi.statusCode} | Body: ${responseApi.body}');
-      
+      final responseApi = await http
+          .put(
+            uri,
+            headers: _getAuthHeaders(),
+            body: jsonEncode(data),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      print(
+          'POS_API_LOG: PUT $uri | Status: ${responseApi.statusCode} | Body: ${responseApi.body}');
+
       dynamic dataResponse;
       try {
         dataResponse = jsonDecode(responseApi.body);
@@ -629,7 +809,11 @@ class ApiService extends GetxService {
       }
     } catch (e) {
       debugPrint('updatePosOrder Error: $e');
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
       return const ResponseApiModel(
@@ -667,7 +851,11 @@ class ApiService extends GetxService {
       }
     } catch (e) {
       debugPrint('deletePosOrder Error: $e');
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
       return const ResponseApiModel(
@@ -688,10 +876,26 @@ class ApiService extends GetxService {
         headers: _getAuthHeaders(),
         body: jsonEncode(data),
       );
-      
-      _logApiCall('POST', uri, data, response: responseApi.body, statusCode: responseApi.statusCode);
-      
-      dynamic dataResponse; try { dataResponse = jsonDecode(responseApi.body); } catch (_) { debugPrint('storePosOrder Invalid JSON: '); String errorMsg = 'Server Error: '; if (responseApi.body.contains('<p>')) { final RegExp exp = RegExp(r'<p>(.*?)<\/p>'); final match = exp.firstMatch(responseApi.body); if (match != null) errorMsg = match.group(1) ?? errorMsg; } return ResponseApiModel(message: errorMsg, responsestate: Constants.serverErrState, data: null); }
+
+      _logApiCall('POST', uri, data,
+          response: responseApi.body, statusCode: responseApi.statusCode);
+
+      dynamic dataResponse;
+      try {
+        dataResponse = jsonDecode(responseApi.body);
+      } catch (_) {
+        debugPrint('storePosOrder Invalid JSON: ');
+        String errorMsg = 'Server Error: ';
+        if (responseApi.body.contains('<p>')) {
+          final RegExp exp = RegExp(r'<p>(.*?)<\/p>');
+          final match = exp.firstMatch(responseApi.body);
+          if (match != null) errorMsg = match.group(1) ?? errorMsg;
+        }
+        return ResponseApiModel(
+            message: errorMsg,
+            responsestate: Constants.serverErrState,
+            data: null);
+      }
       if (responseApi.statusCode == 200 || responseApi.statusCode == 201) {
         return ResponseApiModel(
             message: dataResponse['message'] ?? 'Pembayaran berhasil',
@@ -705,7 +909,11 @@ class ApiService extends GetxService {
       }
     } catch (e) {
       debugPrint('storePosPayment Error: $e');
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
       return const ResponseApiModel(
@@ -722,7 +930,22 @@ class ApiService extends GetxService {
         headers: _getAuthHeaders(),
         body: jsonEncode(data),
       );
-      dynamic dataResponse; try { dataResponse = jsonDecode(responseApi.body); } catch (_) { debugPrint('storePosOrder Invalid JSON: '); String errorMsg = 'Server Error: '; if (responseApi.body.contains('<p>')) { final RegExp exp = RegExp(r'<p>(.*?)<\/p>'); final match = exp.firstMatch(responseApi.body); if (match != null) errorMsg = match.group(1) ?? errorMsg; } return ResponseApiModel(message: errorMsg, responsestate: Constants.serverErrState, data: null); }
+      dynamic dataResponse;
+      try {
+        dataResponse = jsonDecode(responseApi.body);
+      } catch (_) {
+        debugPrint('storePosOrder Invalid JSON: ');
+        String errorMsg = 'Server Error: ';
+        if (responseApi.body.contains('<p>')) {
+          final RegExp exp = RegExp(r'<p>(.*?)<\/p>');
+          final match = exp.firstMatch(responseApi.body);
+          if (match != null) errorMsg = match.group(1) ?? errorMsg;
+        }
+        return ResponseApiModel(
+            message: errorMsg,
+            responsestate: Constants.serverErrState,
+            data: null);
+      }
       if (responseApi.statusCode == 200 || responseApi.statusCode == 201) {
         return ResponseApiModel(
             message: 'Transaksi berhasil',
@@ -735,7 +958,11 @@ class ApiService extends GetxService {
             data: null);
       }
     } catch (e) {
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
       return const ResponseApiModel(
@@ -764,7 +991,22 @@ class ApiService extends GetxService {
         headers: {'authtoken': authToken},
       );
       if (responseApi.statusCode == 200) {
-        dynamic dataResponse; try { dataResponse = jsonDecode(responseApi.body); } catch (_) { debugPrint('storePosOrder Invalid JSON: '); String errorMsg = 'Server Error: '; if (responseApi.body.contains('<p>')) { final RegExp exp = RegExp(r'<p>(.*?)<\/p>'); final match = exp.firstMatch(responseApi.body); if (match != null) errorMsg = match.group(1) ?? errorMsg; } return ResponseApiModel(message: errorMsg, responsestate: Constants.serverErrState, data: null); }
+        dynamic dataResponse;
+        try {
+          dataResponse = jsonDecode(responseApi.body);
+        } catch (_) {
+          debugPrint('storePosOrder Invalid JSON: ');
+          String errorMsg = 'Server Error: ';
+          if (responseApi.body.contains('<p>')) {
+            final RegExp exp = RegExp(r'<p>(.*?)<\/p>');
+            final match = exp.firstMatch(responseApi.body);
+            if (match != null) errorMsg = match.group(1) ?? errorMsg;
+          }
+          return ResponseApiModel(
+              message: errorMsg,
+              responsestate: Constants.serverErrState,
+              data: null);
+        }
         final List items = dataResponse['data'] ?? [];
 
         final productList = items.map((item) {
@@ -788,7 +1030,11 @@ class ApiService extends GetxService {
             data: null);
       }
     } catch (e) {
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
       return const ResponseApiModel(
@@ -828,7 +1074,11 @@ class ApiService extends GetxService {
           data: null);
     } catch (e) {
       debugPrint(e.toString());
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
       return const ResponseApiModel(
@@ -866,7 +1116,11 @@ class ApiService extends GetxService {
           data: null);
     } catch (e) {
       debugPrint(e.toString());
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
       return const ResponseApiModel(
@@ -895,11 +1149,28 @@ class ApiService extends GetxService {
 
       request.fields.addAll(map);
 
-      final streamedResponse = await request.send().timeout(const Duration(seconds: 15));
-      final responseApi = await http.Response.fromStream(streamedResponse).timeout(const Duration(seconds: 15));
+      final streamedResponse =
+          await request.send().timeout(const Duration(seconds: 15));
+      final responseApi = await http.Response.fromStream(streamedResponse)
+          .timeout(const Duration(seconds: 15));
 
       if (responseApi.statusCode == 200 || responseApi.statusCode == 201) {
-        dynamic dataResponse; try { dataResponse = jsonDecode(responseApi.body); } catch (_) { debugPrint('storePosOrder Invalid JSON: '); String errorMsg = 'Server Error: '; if (responseApi.body.contains('<p>')) { final RegExp exp = RegExp(r'<p>(.*?)<\/p>'); final match = exp.firstMatch(responseApi.body); if (match != null) errorMsg = match.group(1) ?? errorMsg; } return ResponseApiModel(message: errorMsg, responsestate: Constants.serverErrState, data: null); }
+        dynamic dataResponse;
+        try {
+          dataResponse = jsonDecode(responseApi.body);
+        } catch (_) {
+          debugPrint('storePosOrder Invalid JSON: ');
+          String errorMsg = 'Server Error: ';
+          if (responseApi.body.contains('<p>')) {
+            final RegExp exp = RegExp(r'<p>(.*?)<\/p>');
+            final match = exp.firstMatch(responseApi.body);
+            if (match != null) errorMsg = match.group(1) ?? errorMsg;
+          }
+          return ResponseApiModel(
+              message: errorMsg,
+              responsestate: Constants.serverErrState,
+              data: null);
+        }
 
         List<MemberModel> members = [];
         final dynamic dataRaw = dataResponse['data'];
@@ -922,7 +1193,11 @@ class ApiService extends GetxService {
           data: null);
     } catch (e) {
       debugPrint(e.toString());
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
       return const ResponseApiModel(
@@ -932,7 +1207,8 @@ class ApiService extends GetxService {
     }
   }
 
-  Future<ResponseApiModel> updateMember(int id, Map<String, dynamic> map) async {
+  Future<ResponseApiModel> updateMember(
+      int id, Map<String, dynamic> map) async {
     try {
       if (map.containsKey('telepon')) {
         map['no_hp'] = map.remove('telepon')!;
@@ -945,7 +1221,22 @@ class ApiService extends GetxService {
       );
 
       if (responseApi.statusCode == 200) {
-        dynamic dataResponse; try { dataResponse = jsonDecode(responseApi.body); } catch (_) { debugPrint('storePosOrder Invalid JSON: '); String errorMsg = 'Server Error: '; if (responseApi.body.contains('<p>')) { final RegExp exp = RegExp(r'<p>(.*?)<\/p>'); final match = exp.firstMatch(responseApi.body); if (match != null) errorMsg = match.group(1) ?? errorMsg; } return ResponseApiModel(message: errorMsg, responsestate: Constants.serverErrState, data: null); }
+        dynamic dataResponse;
+        try {
+          dataResponse = jsonDecode(responseApi.body);
+        } catch (_) {
+          debugPrint('storePosOrder Invalid JSON: ');
+          String errorMsg = 'Server Error: ';
+          if (responseApi.body.contains('<p>')) {
+            final RegExp exp = RegExp(r'<p>(.*?)<\/p>');
+            final match = exp.firstMatch(responseApi.body);
+            if (match != null) errorMsg = match.group(1) ?? errorMsg;
+          }
+          return ResponseApiModel(
+              message: errorMsg,
+              responsestate: Constants.serverErrState,
+              data: null);
+        }
         List<MemberModel>? members;
         final dynamic dataRaw = dataResponse['data'];
 
@@ -967,7 +1258,11 @@ class ApiService extends GetxService {
           data: null);
     } catch (e) {
       debugPrint(e.toString());
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
       return const ResponseApiModel(
@@ -979,7 +1274,9 @@ class ApiService extends GetxService {
 
   Future<ResponseApiModel> destroyMember(int memberId) async {
     try {
-      final responseApi = await http.delete(_getUri('${EndPoint.posCustomers}/$memberId'), headers: _getAuthHeaders());
+      final responseApi = await http.delete(
+          _getUri('${EndPoint.posCustomers}/$memberId'),
+          headers: _getAuthHeaders());
 
       if (responseApi.statusCode == 200 || responseApi.statusCode == 204) {
         return const ResponseApiModel(
@@ -994,7 +1291,11 @@ class ApiService extends GetxService {
           data: null);
     } catch (e) {
       debugPrint(e.toString());
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
       return const ResponseApiModel(
@@ -1004,47 +1305,80 @@ class ApiService extends GetxService {
     }
   }
 
-  Future<ResponseApiModel> storeProduct(String imagePath, Map<String, String> map) async {
+  Future<ResponseApiModel> storeProduct(
+      String imagePath, Map<String, String> map) async {
     try {
       final request = http.MultipartRequest('POST', _getUri(EndPoint.posItems));
       request.headers.addAll(_getAuthHeaders(isMultipart: true));
 
       map.forEach((key, value) => request.fields[key] = value);
       if (imagePath != '') {
-        request.files.add(await http.MultipartFile.fromPath('gambar', imagePath));
+        request.files
+            .add(await http.MultipartFile.fromPath('gambar', imagePath));
       }
 
       var responseApi = await request.send();
-      if (responseApi.statusCode == 204 || responseApi.statusCode == 200 || responseApi.statusCode == 201) {
-        return const ResponseApiModel(message: 'Berhasil menyimpan data', responsestate: Constants.successState, data: null);
+      if (responseApi.statusCode == 204 ||
+          responseApi.statusCode == 200 ||
+          responseApi.statusCode == 201) {
+        return const ResponseApiModel(
+            message: 'Berhasil menyimpan data',
+            responsestate: Constants.successState,
+            data: null);
       }
-      return const ResponseApiModel(message: 'Gagal menyimpan data', responsestate: Constants.errorState, data: null);
+      return const ResponseApiModel(
+          message: 'Gagal menyimpan data',
+          responsestate: Constants.errorState,
+          data: null);
     } catch (e) {
       debugPrint(e.toString());
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
-      return const ResponseApiModel(message: 'Terjadi kesalahan sistem', responsestate: Constants.serverErrState, data: null);
+      return const ResponseApiModel(
+          message: 'Terjadi kesalahan sistem',
+          responsestate: Constants.serverErrState,
+          data: null);
     }
   }
 
   Future<ResponseApiModel> destroyProduct(int productId) async {
     try {
-      final responseApi = await http.delete(_getUri('${EndPoint.posItems}/$productId'), headers: _getAuthHeaders());
+      final responseApi = await http.delete(
+          _getUri('${EndPoint.posItems}/$productId'),
+          headers: _getAuthHeaders());
       if (responseApi.statusCode == 204 || responseApi.statusCode == 200) {
-        return const ResponseApiModel(message: 'Berhasil menghapus data', responsestate: Constants.successState, data: null);
+        return const ResponseApiModel(
+            message: 'Berhasil menghapus data',
+            responsestate: Constants.successState,
+            data: null);
       }
-      return const ResponseApiModel(message: 'Gagal menghapus data', responsestate: Constants.errorState, data: null);
+      return const ResponseApiModel(
+          message: 'Gagal menghapus data',
+          responsestate: Constants.errorState,
+          data: null);
     } catch (e) {
       debugPrint(e.toString());
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
-      return const ResponseApiModel(message: 'Terjadi kesalahan sistem', responsestate: Constants.serverErrState, data: null);
+      return const ResponseApiModel(
+          message: 'Terjadi kesalahan sistem',
+          responsestate: Constants.serverErrState,
+          data: null);
     }
   }
 
-  Future<ResponseApiModel> updateProduct(String imagePath, Map<String, String> map) async {
+  Future<ResponseApiModel> updateProduct(
+      String imagePath, Map<String, String> map) async {
     try {
       // If RESTful PUT, but Multipart usually uses POST or PUT. User said method matters.
       // Usually updating with multipart is POST with a field like _method='PUT' or just POST.
@@ -1053,26 +1387,41 @@ class ApiService extends GetxService {
 
       map.forEach((key, value) => request.fields[key] = value);
       if (imagePath != '') {
-        request.files.add(await http.MultipartFile.fromPath('gambar', imagePath));
+        request.files
+            .add(await http.MultipartFile.fromPath('gambar', imagePath));
       }
 
       var responseApi = await request.send();
       if (responseApi.statusCode == 204 || responseApi.statusCode == 200) {
-        return const ResponseApiModel(message: 'Berhasil mengubah data', responsestate: Constants.successState, data: null);
+        return const ResponseApiModel(
+            message: 'Berhasil mengubah data',
+            responsestate: Constants.successState,
+            data: null);
       }
-      return const ResponseApiModel(message: 'Gagal mengubah data', responsestate: Constants.errorState, data: null);
+      return const ResponseApiModel(
+          message: 'Gagal mengubah data',
+          responsestate: Constants.errorState,
+          data: null);
     } catch (e) {
       debugPrint(e.toString());
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
-      return const ResponseApiModel(message: 'Terjadi kesalahan sistem', responsestate: Constants.serverErrState, data: null);
+      return const ResponseApiModel(
+          message: 'Terjadi kesalahan sistem',
+          responsestate: Constants.serverErrState,
+          data: null);
     }
   }
 
   Future<ResponseApiModel> dashboard() async {
     try {
-      final responseApiModel = await http.get(_getPhpUri(EndPoint.dashboard), headers: _getAuthHeaders());
+      final responseApiModel = await http.get(_getPhpUri(EndPoint.dashboard),
+          headers: _getAuthHeaders());
 
       if (responseApiModel.statusCode == 200) {
         final dataResponse = jsonDecode(responseApiModel.body);
@@ -1081,17 +1430,28 @@ class ApiService extends GetxService {
             responsestate: Constants.successState,
             data: DashboardModel.fromJson(dataResponse['data']));
       }
-      return const ResponseApiModel(message: 'Gagal memuat data dashboard', responsestate: Constants.errorState, data: null);
+      return const ResponseApiModel(
+          message: 'Gagal memuat data dashboard',
+          responsestate: Constants.errorState,
+          data: null);
     } catch (e) {
       debugPrint('error get dashboard: ${e.toString()}');
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
-      return const ResponseApiModel(message: 'Server error', responsestate: Constants.serverErrState, data: null);
+      return const ResponseApiModel(
+          message: 'Server error',
+          responsestate: Constants.serverErrState,
+          data: null);
     }
   }
 
-  Future<ResponseApiModel> getReport(String type, String tglAwal, String tglAkhir) async {
+  Future<ResponseApiModel> getReport(
+      String type, String tglAwal, String tglAkhir) async {
     try {
       final responseApiModel = await http.get(
         _getUri(EndPoint.posReport, queryParameters: {
@@ -1104,39 +1464,64 @@ class ApiService extends GetxService {
 
       if (responseApiModel.statusCode == 200) {
         final dataResponse = jsonDecode(responseApiModel.body);
-        
+
         return ResponseApiModel(
             message: 'Berhasil memuat data report',
             responsestate: Constants.successState,
             data: dataResponse);
       }
-      return const ResponseApiModel(message: 'Gagal memuat data report', responsestate: Constants.errorState, data: null);
+      return const ResponseApiModel(
+          message: 'Gagal memuat data report',
+          responsestate: Constants.errorState,
+          data: null);
     } catch (e) {
       debugPrint('error get report: ${e.toString()}');
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
-      return const ResponseApiModel(message: 'Server error', responsestate: Constants.serverErrState, data: null);
+      return const ResponseApiModel(
+          message: 'Server error',
+          responsestate: Constants.serverErrState,
+          data: null);
     }
   }
 
   Future<ResponseApiModel> getPosOptions() async {
     try {
-      final responseApi = await http.get(_getUri(EndPoint.posOptions), headers: _getAuthHeaders());
+      final responseApi = await http.get(_getUri(EndPoint.posOptions),
+          headers: _getAuthHeaders());
       final responseJson = jsonDecode(responseApi.body);
 
-      _logApiCall('GET', _getUri(EndPoint.posOptions), null, response: responseApi.body, statusCode: responseApi.statusCode);
+      _logApiCall('GET', _getUri(EndPoint.posOptions), null,
+          response: responseApi.body, statusCode: responseApi.statusCode);
 
       if (responseApi.statusCode == 200 && responseJson['status'] == true) {
-        return ResponseApiModel(responsestate: Constants.successState, message: responseJson['message'] ?? 'Success', data: responseJson['data']);
+        return ResponseApiModel(
+            responsestate: Constants.successState,
+            message: responseJson['message'] ?? 'Success',
+            data: responseJson['data']);
       }
-      return ResponseApiModel(responsestate: Constants.errorState, message: responseJson['message'] ?? 'Gagal memuat opsi', data: null);
+      return ResponseApiModel(
+          responsestate: Constants.errorState,
+          message: responseJson['message'] ?? 'Gagal memuat opsi',
+          data: null);
     } catch (e) {
       debugPrint('getPosOptions Error: $e');
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
-      return const ResponseApiModel(responsestate: Constants.serverErrState, message: 'Server error', data: null);
+      return const ResponseApiModel(
+          responsestate: Constants.serverErrState,
+          message: 'Server error',
+          data: null);
     }
   }
 
@@ -1159,63 +1544,129 @@ class ApiService extends GetxService {
       final dynamic responseJson = jsonDecode(responseApi.body);
 
       if (responseApi.statusCode == 200) {
-        return ResponseApiModel(responsestate: Constants.successState, message: 'Success', data: responseJson);
+        return ResponseApiModel(
+            responsestate: Constants.successState,
+            message: 'Success',
+            data: responseJson);
       }
 
-      final String errMsg = (responseJson is Map && responseJson['message'] != null) ? responseJson['message'] : 'Gagal memuat pengembalian dana';
-      return ResponseApiModel(responsestate: Constants.errorState, message: errMsg, data: null);
+      final String errMsg =
+          (responseJson is Map && responseJson['message'] != null)
+              ? responseJson['message']
+              : 'Gagal memuat pengembalian dana';
+      return ResponseApiModel(
+          responsestate: Constants.errorState, message: errMsg, data: null);
     } catch (e) {
       debugPrint('getCreditNotes Error: $e');
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
-      return const ResponseApiModel(responsestate: Constants.serverErrState, message: 'Server error', data: null);
+      return const ResponseApiModel(
+          responsestate: Constants.serverErrState,
+          message: 'Server error',
+          data: null);
     }
   }
 
   Future<ResponseApiModel> getPosTransaction() async {
     try {
-      final responseApi = await http.get(_getUri(EndPoint.posTransaction), headers: _getAuthHeaders());
+      final responseApi = await http.get(_getUri(EndPoint.posTransaction),
+          headers: _getAuthHeaders());
       final responseJson = jsonDecode(responseApi.body);
 
-      _logApiCall('GET', _getUri(EndPoint.posTransaction), null, response: responseApi.body, statusCode: responseApi.statusCode);
+      _logApiCall('GET', _getUri(EndPoint.posTransaction), null,
+          response: responseApi.body, statusCode: responseApi.statusCode);
 
       if (responseApi.statusCode == 200) {
-        return ResponseApiModel(responsestate: Constants.successState, message: 'Success', data: responseJson);
+        return ResponseApiModel(
+            responsestate: Constants.successState,
+            message: 'Success',
+            data: responseJson);
       }
-      return const ResponseApiModel(responsestate: Constants.errorState, message: 'Gagal memuat transaksi', data: null);
+      return const ResponseApiModel(
+          responsestate: Constants.errorState,
+          message: 'Gagal memuat transaksi',
+          data: null);
     } catch (e) {
       debugPrint('getPosTransaction Error: $e');
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
-      return const ResponseApiModel(responsestate: Constants.serverErrState, message: 'Server error', data: null);
+      return const ResponseApiModel(
+          responsestate: Constants.serverErrState,
+          message: 'Server error',
+          data: null);
     }
   }
 
   Future<ResponseApiModel> updatePosOptions(Map<String, dynamic> data) async {
     try {
-      final responseApi = await http.put(
-        _getUri(EndPoint.posOptions),
-        headers: _getAuthHeaders(),
-        body: jsonEncode(data),
-      ).timeout(const Duration(seconds: 15));
+      final uri = _getUri(EndPoint.posOptions);
+      final bodyStr = jsonEncode(data);
+      final responseApi = await http
+          .put(
+            uri,
+            headers: _getAuthHeaders(),
+            body: bodyStr,
+          )
+          .timeout(const Duration(seconds: 15));
       final responseJson = jsonDecode(responseApi.body);
 
-      if (responseApi.statusCode == 200 && responseJson['status'] == true) {
-        return const ResponseApiModel(responsestate: Constants.successState, message: 'Berhasil menyimpan pengaturan', data: null);
+      // DEBUG LOG — cek di Flutter console / logcat
+      debugPrint('╔══════════════════════════════════════════════════');
+      debugPrint('║ [API DEBUG] PUT pos_options');
+      debugPrint('║ URL    : $uri');
+      debugPrint('║ BODY   : $bodyStr');
+      debugPrint('║ STATUS : ${responseApi.statusCode}');
+      debugPrint('║ RESP   : ${responseApi.body}');
+      debugPrint('╚══════════════════════════════════════════════════');
+
+      bool isSuccess = false;
+      if (responseApi.statusCode == 200) {
+        if (responseJson['status'] == true || responseJson['success'] == true || responseJson['message']?.toString().toLowerCase().contains('success') == true) {
+          isSuccess = true;
+        } else if (!responseJson.containsKey('status') && !responseJson.containsKey('success')) {
+          // If no status flag but 200 OK, consider it a success.
+          isSuccess = true;
+        }
       }
-      return ResponseApiModel(responsestate: Constants.errorState, message: responseJson['message'] ?? 'Gagal menyimpan pengaturan', data: null);
+
+      if (isSuccess) {
+        return const ResponseApiModel(
+            responsestate: Constants.successState,
+            message: 'Berhasil menyimpan pengaturan',
+            data: null);
+      }
+      return ResponseApiModel(
+          responsestate: Constants.errorState,
+          message: responseJson['message'] ?? 'Gagal menyimpan pengaturan',
+          data: null);
     } catch (e) {
       debugPrint('updatePosOptions Error: $e');
-      if (e is SocketException || e is TimeoutException || e is HttpException || e is HandshakeException || e is http.ClientException) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
         rethrow;
       }
-      return const ResponseApiModel(responsestate: Constants.serverErrState, message: 'Server error', data: null);
+      return const ResponseApiModel(
+          responsestate: Constants.serverErrState,
+          message: 'Server error',
+          data: null);
     }
   }
 
-  void _logApiCall(String method, Uri uri, dynamic body, {String? response, int? statusCode}) {
+  void _logApiCall(String method, Uri uri, dynamic body,
+      {String? response, int? statusCode}) {
     final timestamp = DateTime.now().toString();
     debugPrint('');
     debugPrint('=== [DEBUG API CALL] ===');
@@ -1234,9 +1685,25 @@ class ApiService extends GetxService {
 
   Future<ResponseApiModel> getStaff() async {
     try {
-      final responseApi = await http.get(_getUri(EndPoint.posStaff), headers: _getAuthHeaders());
+      final responseApi = await http.get(_getUri(EndPoint.posStaff),
+          headers: _getAuthHeaders());
       if (responseApi.statusCode == 200) {
-        dynamic dataResponse; try { dataResponse = jsonDecode(responseApi.body); } catch (_) { debugPrint('getStaff Invalid JSON: ${responseApi.body}'); String errorMsg = 'Server Error: '; if (responseApi.body.contains('<p>')) { final RegExp exp = RegExp(r'<p>(.*?)<\/p>'); final match = exp.firstMatch(responseApi.body); if (match != null) errorMsg = match.group(1) ?? errorMsg; } return ResponseApiModel(message: errorMsg, responsestate: Constants.serverErrState, data: null); }
+        dynamic dataResponse;
+        try {
+          dataResponse = jsonDecode(responseApi.body);
+        } catch (_) {
+          debugPrint('getStaff Invalid JSON: ${responseApi.body}');
+          String errorMsg = 'Server Error: ';
+          if (responseApi.body.contains('<p>')) {
+            final RegExp exp = RegExp(r'<p>(.*?)<\/p>');
+            final match = exp.firstMatch(responseApi.body);
+            if (match != null) errorMsg = match.group(1) ?? errorMsg;
+          }
+          return ResponseApiModel(
+              message: errorMsg,
+              responsestate: Constants.serverErrState,
+              data: null);
+        }
         List rawList = [];
         if (dataResponse is List) {
           rawList = dataResponse;
@@ -1273,7 +1740,8 @@ class ApiService extends GetxService {
         request.fields[key] = value.toString();
       });
 
-      final streamedResponse = await request.send().timeout(const Duration(seconds: 15));
+      final streamedResponse =
+          await request.send().timeout(const Duration(seconds: 15));
       final responseApi = await http.Response.fromStream(streamedResponse);
       dynamic dataResponse;
       try {
@@ -1286,15 +1754,19 @@ class ApiService extends GetxService {
           final match = exp.firstMatch(responseApi.body);
           if (match != null) errorMsg = match.group(1) ?? errorMsg;
         }
-        return ResponseApiModel(message: errorMsg, responsestate: Constants.serverErrState, data: null);
+        return ResponseApiModel(
+            message: errorMsg,
+            responsestate: Constants.serverErrState,
+            data: null);
       }
       if (responseApi.statusCode == 200 || responseApi.statusCode == 201) {
         bool isError = false;
         String? message;
         dynamic dataPayload;
-        
+
         if (dataResponse is Map) {
-          isError = dataResponse['status'] == false || dataResponse['status'] == 'error';
+          isError = dataResponse['status'] == false ||
+              dataResponse['status'] == 'error';
           message = dataResponse['message'];
           dataPayload = dataResponse['data'];
         }

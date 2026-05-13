@@ -575,11 +575,34 @@ class ReportScreen extends StatelessWidget {
                         fontFamily: AppTheme.fontBold))),
             Expanded(
                 flex: 2,
-                child: Text(order['order_type'] ?? "Dine In",
-                    style: TextStyle(
-                        fontSize: AppTheme.fontSizeLabelMedium,
-                        fontFamily: AppTheme.fontMedium,
-                        color: isRefund ? Colors.red.shade600 : AppTheme.textColor(context)))),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(order['order_type'] ?? "Dine In",
+                        style: TextStyle(
+                            fontSize: AppTheme.fontSizeLabelMedium,
+                            fontFamily: AppTheme.fontMedium,
+                            color: isRefund ? Colors.red.shade600 : AppTheme.textColor(context))),
+                    if ((int.tryParse(order['queue_number']?.toString() ?? '0') ?? 0) > 0)
+                      Container(
+                        margin: EdgeInsets.only(top: 4.h),
+                        padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(4.r),
+                        ),
+                        child: Text(
+                          "#${(order['queue_number']).toString().padLeft(3, '0')}",
+                          style: TextStyle(
+                            color: AppTheme.primaryColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10.sp,
+                          ),
+                        ),
+                      ),
+                  ],
+                )),
             Expanded(flex: 2, child: isRefund 
                 ? Align(
                     alignment: Alignment.centerLeft,

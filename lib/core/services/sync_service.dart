@@ -48,10 +48,11 @@ class SyncService extends GetxService {
       // Avoid starting background sync if the user is currently busy in the POS (checkout, payment, or loading)
       if (Get.isRegistered<HomeController>()) {
         final homeController = Get.find<HomeController>();
-        if (homeController.isSyncingDirectly.value || 
-            homeController.isProcessingPayment.value || 
+        if (homeController.isSyncingDirectly.value ||
+            homeController.isProcessingPayment.value ||
             homeController.isLoadingTransaction.value) {
-          debugPrint("SyncService: Deferring background sync — POS foreground operation in progress.");
+          debugPrint(
+              "SyncService: Deferring background sync — POS foreground operation in progress.");
           return;
         }
       }
@@ -69,7 +70,8 @@ class SyncService extends GetxService {
   /// Orchestrates the mandatory post-login sequence in the exact order requested
   Future<void> runPostLoginSync() async {
     if (isSyncing.value) {
-      debugPrint("SyncService: Sync already in progress, skipping redundant call.");
+      debugPrint(
+          "SyncService: Sync already in progress, skipping redundant call.");
       return;
     }
     isSyncing.value = true;
@@ -125,7 +127,11 @@ class SyncService extends GetxService {
       // 10. Staff
       syncStatus.value = "Fetching Staff...";
       await syncStaff();
-      // 11. Cleanup
+
+      // 11. Promotions
+      await syncPromotions();
+      
+      // 12. Cleanup
       syncStatus.value = "Optimizing Database...";
       await _cleanupOldOrders();
       syncProgress.value = 1.0;
@@ -202,6 +208,7 @@ class SyncService extends GetxService {
       await pushShiftLogs();
       await pullRemoteOrders();
       await syncStaff();
+      await syncPromotions();
 
       // Final cleanup
       await _cleanupOldOrders();
@@ -237,9 +244,12 @@ class SyncService extends GetxService {
       final List<int> pulledRemoteIds = [];
 
       // Fetch all pending payments once to avoid querying inside the loop (prevents query spam)
-      final pendingPayments = await _dbService.query('pos_payments', where: 'is_synced = 0');
-      final Set<String> pendingPaymentOrderIds = pendingPayments.map((p) => p['id_pos']?.toString() ?? '').toSet();
-      final Set<String> pendingPaymentInvoiceIds = pendingPayments.map((p) => p['invoiceid']?.toString() ?? '').toSet();
+      final pendingPayments =
+          await _dbService.query('pos_payments', where: 'is_synced = 0');
+      final Set<String> pendingPaymentOrderIds =
+          pendingPayments.map((p) => p['id_pos']?.toString() ?? '').toSet();
+      final Set<String> pendingPaymentInvoiceIds =
+          pendingPayments.map((p) => p['invoiceid']?.toString() ?? '').toSet();
 
       for (var orderJson in remoteOrders) {
         final remoteId = int.parse(orderJson['id'].toString());
@@ -260,7 +270,8 @@ class SyncService extends GetxService {
           if (localOrder['is_synced'] == 0) continue;
 
           // PAYMENT GUARD: If the local transaction has a pending payment
-          if (idPos != null && pendingPaymentOrderIds.contains(idPos) || pendingPaymentInvoiceIds.contains(remoteId.toString())) {
+          if (idPos != null && pendingPaymentOrderIds.contains(idPos) ||
+              pendingPaymentInvoiceIds.contains(remoteId.toString())) {
             debugPrint(
                 'SyncService: Skipping pullRemoteOrders override for id_pos=$idPos — pending local payment found.');
             continue;
@@ -414,7 +425,10 @@ class SyncService extends GetxService {
               'remote_item_id': _toInt(remoteItemId),
               'product_name': desc,
               'kitchen_status': _toInt(fullOrderData['sent']) == 1 ? 1 : 0,
-              'is_refund': item['is_refund']?.toString() == '1' || item['is_refund'] == true ? 1 : 0
+              'is_refund': item['is_refund']?.toString() == '1' ||
+                      item['is_refund'] == true
+                  ? 1
+                  : 0
             });
           }
         });
@@ -507,7 +521,7 @@ class SyncService extends GetxService {
         'sync_queue',
         {
           'body': bodyJson,
-          'status': 'pending',     // reset failed → pending with fresh data
+          'status': 'pending', // reset failed → pending with fresh data
           'retry_count': 0,
           'last_error': null,
           'created_at': DateTime.now().toIso8601String(),
@@ -515,7 +529,8 @@ class SyncService extends GetxService {
         'id = ?',
         [existingId],
       );
-      debugPrint("SyncService: Updated existing sync command for $endpoint ($localId).");
+      debugPrint(
+          "SyncService: Updated existing sync command for $endpoint ($localId).");
     } else {
       await _dbService.insert('sync_queue', {
         'method': method,
@@ -527,7 +542,8 @@ class SyncService extends GetxService {
         'created_at': DateTime.now().toIso8601String(),
         'local_id': localId,
       });
-      debugPrint("SyncService: Inserted new sync command for $endpoint ($localId).");
+      debugPrint(
+          "SyncService: Inserted new sync command for $endpoint ($localId).");
     }
   }
 
@@ -538,9 +554,10 @@ class SyncService extends GetxService {
     final hasConnection = await InternetConnectionChecker()
         .hasConnection
         .timeout(const Duration(seconds: 5), onTimeout: () => false);
-    
+
     if (!hasConnection) {
-      debugPrint("SyncService: [Background] No internet or timeout, skipping queue processing.");
+      debugPrint(
+          "SyncService: [Background] No internet or timeout, skipping queue processing.");
       return;
     }
 
@@ -734,7 +751,6 @@ class SyncService extends GetxService {
         'Accept': 'application/json',
       };
 
-
       http.Response response;
       if (method == 'POST') {
         if (isFormData) {
@@ -745,20 +761,26 @@ class SyncService extends GetxService {
               request.fields[key.toString()] = value.toString();
             });
           }
-          final streamedResponse = await request.send().timeout(const Duration(seconds: 15));
-          response = await http.Response.fromStream(streamedResponse).timeout(const Duration(seconds: 15));
+          final streamedResponse =
+              await request.send().timeout(const Duration(seconds: 15));
+          response = await http.Response.fromStream(streamedResponse)
+              .timeout(const Duration(seconds: 15));
         } else {
           headers['Content-Type'] = 'application/json';
-          response =
-              await http.post(uri, headers: headers, body: jsonEncode(body)).timeout(const Duration(seconds: 15));
+          response = await http
+              .post(uri, headers: headers, body: jsonEncode(body))
+              .timeout(const Duration(seconds: 15));
         }
       } else if (method == 'PUT') {
         headers['Content-Type'] = 'application/json';
 
-        response =
-            await http.put(uri, headers: headers, body: jsonEncode(body)).timeout(const Duration(seconds: 15));
+        response = await http
+            .put(uri, headers: headers, body: jsonEncode(body))
+            .timeout(const Duration(seconds: 15));
       } else if (method == 'DELETE') {
-        response = await http.delete(uri, headers: headers).timeout(const Duration(seconds: 15));
+        response = await http
+            .delete(uri, headers: headers)
+            .timeout(const Duration(seconds: 15));
       } else {
         return false;
       }
@@ -766,15 +788,19 @@ class SyncService extends GetxService {
       _logSyncCall(method, uri, body,
           response: response.body, statusCode: response.statusCode);
 
-      bool isTreatedAsSuccess = response.statusCode >= 200 && response.statusCode < 300;
-      
+      bool isTreatedAsSuccess =
+          response.statusCode >= 200 && response.statusCode < 300;
+
       // Check for logical API failures masked as HTTP 200 (common in Perfex CRM).
       if (isTreatedAsSuccess) {
         try {
           final respData = jsonDecode(response.body);
-          if (respData is Map && respData.containsKey('status') && respData['status'] == false) {
+          if (respData is Map &&
+              respData.containsKey('status') &&
+              respData['status'] == false) {
             isTreatedAsSuccess = false;
-            debugPrint("SyncService: Ignored HTTP ${response.statusCode} - Logical Failure: ${response.body}");
+            debugPrint(
+                "SyncService: Ignored HTTP ${response.statusCode} - Logical Failure: ${response.body}");
           }
         } catch (_) {
           // Body is not JSON or unparseable, rely on HTTP status
@@ -783,21 +809,25 @@ class SyncService extends GetxService {
 
       // Perfex API workaround: PUT to pos_order often returns 404 'Invoice Update Fail'
       // when the server can't match the update due to status, items, or timing issues.
-      if (method == 'PUT' && endpoint.contains('pos_order') &&
+      if (method == 'PUT' &&
+          endpoint.contains('pos_order') &&
           (response.statusCode == 404 || response.statusCode == 422) &&
           response.body.contains('Invoice Update Fail')) {
         isTreatedAsSuccess = true;
-        debugPrint("SyncService: Ignored Perfex ${response.statusCode} 'Invoice Update Fail' — order data is already saved locally.");
+        debugPrint(
+            "SyncService: Ignored Perfex ${response.statusCode} 'Invoice Update Fail' — order data is already saved locally.");
       }
 
       // Perfex API workaround: PUT to pos_options returns 500 'Failed to update data'
       // when the submitted value is identical to what is already on the server (no-op update).
       // This is safe to treat as success — the server already has the correct value.
-      if (method == 'PUT' && endpoint.contains('pos_options') &&
+      if (method == 'PUT' &&
+          endpoint.contains('pos_options') &&
           response.statusCode == 500 &&
           response.body.contains('Failed to update data')) {
         isTreatedAsSuccess = true;
-        debugPrint("SyncService: Ignored pos_options 500 'Failed to update data' — server already has the current value.");
+        debugPrint(
+            "SyncService: Ignored pos_options 500 'Failed to update data' — server already has the current value.");
       }
 
       if (isTreatedAsSuccess) {
@@ -942,16 +972,22 @@ class SyncService extends GetxService {
             debugPrint(
                 "SyncService: Failed to mark PUT as synced for $endpoint: $e");
           }
-        } else if (method == 'DELETE' && endpoint.contains('pos_order') && localId != null) {
-          debugPrint("SyncService: DELETE success for $endpoint. Marking as synced.");
+        } else if (method == 'DELETE' &&
+            endpoint.contains('pos_order') &&
+            localId != null) {
+          debugPrint(
+              "SyncService: DELETE success for $endpoint. Marking as synced.");
           final localIdInt = int.tryParse(localId);
           if (localIdInt != null) {
-            await _dbService.update('transactions', {'is_synced': 1}, 'id_penjualan = ?', [localIdInt]);
+            await _dbService.update('transactions', {'is_synced': 1},
+                'id_penjualan = ?', [localIdInt]);
           }
         } else {
           // Fallback: If no ID in response but endpoint is a known entity, mark it synced anyway
-          if (localId != null && (endpoint.contains('pos_transaction') || endpoint.contains('pos_shift_logs'))) {
-             await _updateLocalIdAfterSync(localId.toString(), "0", endpoint);
+          if (localId != null &&
+              (endpoint.contains('pos_transaction') ||
+                  endpoint.contains('pos_shift_logs'))) {
+            await _updateLocalIdAfterSync(localId.toString(), "0", endpoint);
           }
           debugPrint(
               "SyncService: Successful $method request to $endpoint, handled via fallback or no remapping needed.");
@@ -1044,7 +1080,6 @@ class SyncService extends GetxService {
     final response = await _apiService.getPosOptions();
     if (response.responsestate == Constants.successState &&
         response.data != null) {
-        
       Map<String, dynamic> options = {};
       if (response.data is Map) {
         options = response.data as Map<String, dynamic>;
@@ -1060,11 +1095,9 @@ class SyncService extends GetxService {
         // IMPORTANT: Exclude queue keys and session keys from the wipe.
         // ps_next_queue / ps_last_queue_date are local-authoritative — the device
         // is the only one incrementing them. Wiping them causes queue to reset to 1.
-        batch.rawDelete(
-          "DELETE FROM pos_options WHERE option_name NOT IN ("
-          "'pos_active_session', 'pos_shift_config', 'pos_active_staff', "
-          "'${Constants.psNextQueue}', '${Constants.psLastQueueDate}')"
-        );
+        batch.rawDelete("DELETE FROM pos_options WHERE option_name NOT IN ("
+            "'pos_active_session', 'pos_shift_config', 'pos_active_staff', "
+            "'${Constants.psNextQueue}', '${Constants.psLastQueueDate}')");
 
         options.forEach((key, value) {
           final serverVal = value?.toString() ?? '';
@@ -1075,20 +1108,28 @@ class SyncService extends GetxService {
               try {
                 final decoded = jsonDecode(serverVal);
                 if (decoded is Map<String, dynamic>) {
-                  if (key == 'pos_active_session' && Get.isRegistered<ShiftController>()) {
+                  if (key == 'pos_active_session' &&
+                      Get.isRegistered<ShiftController>()) {
                     final shiftCtrl = Get.find<ShiftController>();
                     if (shiftCtrl.activeShift.value == null) {
-                      batch.insert('pos_options', {
-                        'option_name': key,
-                        'option_value': serverVal,
-                      }, conflictAlgorithm: ConflictAlgorithm.replace);
-                      shiftCtrl.activeShift.value = ShiftSessionModel.fromJson(decoded);
+                      batch.insert(
+                          'pos_options',
+                          {
+                            'option_name': key,
+                            'option_value': serverVal,
+                          },
+                          conflictAlgorithm: ConflictAlgorithm.replace);
+                      shiftCtrl.activeShift.value =
+                          ShiftSessionModel.fromJson(decoded);
                     }
                   } else if (key == 'pos_active_staff') {
-                    batch.insert('pos_options', {
-                      'option_name': key,
-                      'option_value': serverVal,
-                    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+                    batch.insert(
+                        'pos_options',
+                        {
+                          'option_name': key,
+                          'option_value': serverVal,
+                        },
+                        conflictAlgorithm: ConflictAlgorithm.ignore);
                   }
                 }
               } catch (e) {
@@ -1101,7 +1142,8 @@ class SyncService extends GetxService {
           // Queue counter protection: only accept server value if it is NEWER than local.
           // This prevents stale server data from overwriting a fresh local counter after
           // coming back online (e.g. server still has yesterday's date).
-          if (key == Constants.psNextQueue || key == Constants.psLastQueueDate) {
+          if (key == Constants.psNextQueue ||
+              key == Constants.psLastQueueDate) {
             if (Get.isRegistered<AppService>()) {
               final appSvc = Get.find<AppService>();
               final today = DateTime.now().toIso8601String().split('T').first;
@@ -1117,7 +1159,8 @@ class SyncService extends GetxService {
                 return;
               }
               // If server date is newer, allow it to restore the counter
-              if (serverDate.isNotEmpty && serverDate.compareTo(localDate) > 0) {
+              if (serverDate.isNotEmpty &&
+                  serverDate.compareTo(localDate) > 0) {
                 debugPrint(
                     'SyncService: Applying server $key — server date ($serverDate) is newer than local ($localDate).');
               } else {
@@ -1129,10 +1172,13 @@ class SyncService extends GetxService {
             }
           }
 
-          batch.insert('pos_options', {
-            'option_name': key,
-            'option_value': serverVal,
-          }, conflictAlgorithm: ConflictAlgorithm.replace);
+          batch.insert(
+              'pos_options',
+              {
+                'option_name': key,
+                'option_value': serverVal,
+              },
+              conflictAlgorithm: ConflictAlgorithm.replace);
         });
 
         await batch.commit(noResult: true);
@@ -1263,8 +1309,9 @@ class SyncService extends GetxService {
   Future<void> pushLocalTransactions() async {
     // Only push unsynced orders that are NOT cancelled
     // Cancelled orders (status = 5) should be handled by PUT/DELETE, not posted as new.
-    final unsynced = await _dbService
-        .query('transactions', where: 'is_synced = ? AND (status IS NULL OR status != 5)', whereArgs: [0]);
+    final unsynced = await _dbService.query('transactions',
+        where: 'is_synced = ? AND (status IS NULL OR status != 5)',
+        whereArgs: [0]);
     for (var row in unsynced) {
       final localId = row['id_penjualan'];
       final details = await _dbService.query('transaction_details',
@@ -1407,19 +1454,25 @@ class SyncService extends GetxService {
       if (existingQueue.isNotEmpty) continue; // Already explicitly queued
 
       List<dynamic> transactions = [];
-      if (row['reconciliation_data'] != null && row['reconciliation_data'].toString().isNotEmpty) {
+      if (row['reconciliation_data'] != null &&
+          row['reconciliation_data'].toString().isNotEmpty) {
         try {
           transactions = jsonDecode(row['reconciliation_data']);
-        } catch(e) { debugPrint("SyncService: Error parsing reconciliation_data for shift: $e"); }
+        } catch (e) {
+          debugPrint(
+              "SyncService: Error parsing reconciliation_data for shift: $e");
+        }
       }
 
-      String dateStr = row['start_time'] ?? '${DateTime.now().toIso8601String().split('T')[0]} 00:00:00';
+      String dateStr = row['start_time'] ??
+          '${DateTime.now().toIso8601String().split('T')[0]} 00:00:00';
       try {
         if (dateStr.contains('T')) {
-           final dt = DateTime.parse(dateStr);
-           dateStr = "${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}";
+          final dt = DateTime.parse(dateStr);
+          dateStr =
+              "${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}";
         }
-      } catch(e){
+      } catch (e) {
         debugPrint("SyncService: Error parsing date for shift log: $e");
       }
 
@@ -1564,8 +1617,8 @@ class SyncService extends GetxService {
 
         // Also update the parent transaction status to 2 (Paid/Closed)
         // Look up id_pos from the payment row to link back to the transaction
-        final paymentRows = await _dbService.query('pos_payments',
-            where: 'id = ?', whereArgs: [localIdInt]);
+        final paymentRows = await _dbService
+            .query('pos_payments', where: 'id = ?', whereArgs: [localIdInt]);
         if (paymentRows.isNotEmpty) {
           final idPos = paymentRows.first['id_pos']?.toString();
           if (idPos != null && idPos.isNotEmpty) {
@@ -1579,8 +1632,8 @@ class SyncService extends GetxService {
         await _dbService.update(
             'pos_payments', {'is_synced': 1}, 'id_pos = ?', [localId]);
         // Update transaction status directly by id_pos
-        await _dbService.update('transactions',
-            {'status': 2, 'is_synced': 1}, 'id_pos = ?', [localId]);
+        await _dbService.update('transactions', {'status': 2, 'is_synced': 1},
+            'id_pos = ?', [localId]);
         debugPrint(
             'SyncService: pos_transaction synced — transaction $localId marked as Paid (status=2)');
       }
@@ -1591,12 +1644,12 @@ class SyncService extends GetxService {
       final remoteIdInt = int.tryParse(remoteId);
       if (localIdInt != null) {
         await _dbService.update(
-            'shift_sessions', 
-            {'is_synced': 1, 'id_remote': remoteIdInt}, 
-            'id_shift = ?', 
-            [localIdInt]
-        );
-        debugPrint('SyncService: pos_shift_logs synced — local $localId -> remote $remoteId');
+            'shift_sessions',
+            {'is_synced': 1, 'id_remote': remoteIdInt},
+            'id_shift = ?',
+            [localIdInt]);
+        debugPrint(
+            'SyncService: pos_shift_logs synced — local $localId -> remote $remoteId');
       }
     }
   }
@@ -1607,12 +1660,12 @@ class SyncService extends GetxService {
       final response = await _apiService.getPosTransaction();
       if (response.responsestate == Constants.successState &&
           response.data != null) {
-        
         List remotePayments = [];
         if (response.data is List) {
           remotePayments = response.data;
         } else if (response.data is Map) {
-          final dynamic dataRaw = response.data['data'] ?? response.data['items'];
+          final dynamic dataRaw =
+              response.data['data'] ?? response.data['items'];
           if (dataRaw is List) {
             remotePayments = dataRaw;
           }
@@ -1650,7 +1703,8 @@ class SyncService extends GetxService {
   Future<void> pullCreditNotes() async {
     syncStatus.value = "Pulling Credit Notes...";
     final response = await _apiService.getCreditNotes();
-    if (response.responsestate == Constants.successState && response.data != null) {
+    if (response.responsestate == Constants.successState &&
+        response.data != null) {
       final List creditNotes = response.data;
       final db = await _dbService.database;
       final batch = db.batch();
@@ -1664,8 +1718,10 @@ class SyncService extends GetxService {
           'formatted_number': cn['formatted_number']?.toString(),
           'datecreated': cn['datecreated']?.toString(),
           'date': cn['date']?.toString(),
-          'subtotal': double.tryParse(cn['subtotal']?.toString() ?? '0')?.toInt() ?? 0,
-          'total': double.tryParse(cn['total']?.toString() ?? '0')?.toInt() ?? 0,
+          'subtotal':
+              double.tryParse(cn['subtotal']?.toString() ?? '0')?.toInt() ?? 0,
+          'total':
+              double.tryParse(cn['total']?.toString() ?? '0')?.toInt() ?? 0,
           'status': cn['status']?.toString(),
           'reference_no': cn['reference_no']?.toString(),
         });
@@ -1703,12 +1759,12 @@ class SyncService extends GetxService {
     debugPrint('');
   }
 
-  /// Deletes orders older than 24 hours from local storage, 
+  /// Deletes orders older than 24 hours from local storage,
   /// UNLESS they are still active (not paid/cancelled).
   Future<void> _cleanupOldOrders() async {
     try {
       final db = await _dbService.database;
-      
+
       // 1. Delete transactions older than 30 days that are already Paid (2) or Cancelled (5)
       // We use datetime('now', '-30 days', 'localtime') to match the UI filter
       final deletedCount = await db.rawDelete("""
@@ -1716,7 +1772,7 @@ class SyncService extends GetxService {
         WHERE tgl_penjualan < datetime('now', '-30 days', 'localtime') 
         AND (status = 2 OR status = 5)
       """);
-      
+
       if (deletedCount > 0) {
         debugPrint("SyncService: Cleaned up $deletedCount old closed orders.");
         // 2. Orphan cleanup for transaction_details
@@ -1751,12 +1807,12 @@ class SyncService extends GetxService {
             'selected_by_default': mode['selected_by_default']?.toString(),
           });
         }
-         await batch.commit(noResult: true);
-         debugPrint("SyncService: Payment modes synchronized");
-         
-         // Notify UI if ShiftAuditController is active
-         syncStatus.value = "Payment Modes Updated";
-       }
+        await batch.commit(noResult: true);
+        debugPrint("SyncService: Payment modes synchronized");
+
+        // Notify UI if ShiftAuditController is active
+        syncStatus.value = "Payment Modes Updated";
+      }
     } catch (e) {
       debugPrint("SyncService Error in syncPaymentModes: $e");
     }
@@ -1766,7 +1822,8 @@ class SyncService extends GetxService {
     try {
       syncStatus.value = "Fetching Staff...";
       final response = await _apiService.getStaff();
-      if (response.responsestate == Constants.successState && response.data != null) {
+      if (response.responsestate == Constants.successState &&
+          response.data != null) {
         final List staffList = response.data;
         final db = await _dbService.database;
         await db.transaction((txn) async {
@@ -1787,13 +1844,66 @@ class SyncService extends GetxService {
             if (staffId != null && staffId > 0) {
               row['id'] = staffId;
             }
-            await txn.insert('staff', row, conflictAlgorithm: ConflictAlgorithm.replace);
+            await txn.insert('staff', row,
+                conflictAlgorithm: ConflictAlgorithm.replace);
           }
         });
         debugPrint("SyncService: Synced ${staffList.length} staff members.");
       }
     } catch (e) {
       debugPrint("SyncService Error in syncStaff: $e");
+    }
+  }
+
+  Future<void> syncPromotions() async {
+    try {
+      syncStatus.value = "Fetching Promotions...";
+      final db = await _dbService.database;
+
+      final session = await db.query('user_session', limit: 1);
+      debugPrint("SyncService: Checking user_session for location... session exists: ${session.isNotEmpty}");
+      if (session.isNotEmpty) {
+        final idLocation = session.first['location']?.toString() ?? '';
+        debugPrint("SyncService: Found location ID: '$idLocation'");
+        if (idLocation.isNotEmpty) {
+          final response = await _apiService.getPosPromotions(idLocation);
+          debugPrint("SyncService: getPosPromotions response status: ${response.responsestate}, message: ${response.message}");
+          if (response.responsestate == Constants.successState && response.data != null) {
+            final List promos = response.data is List ? response.data : [response.data];
+            debugPrint("SyncService: Fetched ${promos.length} promotions from API. Saving to database...");
+            await db.transaction((txn) async {
+              await txn.delete('pos_promotions');
+              for (var p in promos) {
+                await txn.insert('pos_promotions', {
+                  'id': p['id']?.toString(),
+                  'name': p['name']?.toString(),
+                  'promo_type': p['promo_type']?.toString(),
+                  'brands': p['brands'] != null ? jsonEncode(p['brands']) : null,
+                  'locations': p['locations'] != null ? jsonEncode(p['locations']) : null,
+                  'description': p['description']?.toString(),
+                  'terms_conditions': p['terms_conditions']?.toString(),
+                  'items': p['items'] != null ? jsonEncode(p['items']) : null,
+                  'order_types': p['order_types'] != null ? jsonEncode(p['order_types']) : null,
+                  'start_date': p['start_date']?.toString(),
+                  'end_date': p['end_date']?.toString(),
+                  'is_multiplied': p['is_multiplied']?.toString(),
+                  'is_stackable': p['is_stackable']?.toString(),
+                  'status': p['status']?.toString(),
+                  'created_at': p['created_at']?.toString(),
+                }, conflictAlgorithm: ConflictAlgorithm.replace);
+              }
+            });
+            debugPrint("SyncService: Successfully saved ${promos.length} promotions to database.");
+            syncStatus.value = "Promotions Updated";
+          } else {
+            debugPrint("SyncService: Failed to fetch promotions. Response data was null or error state.");
+          }
+        } else {
+          debugPrint("SyncService: location is empty in user_session");
+        }
+      }
+    } catch (e) {
+      debugPrint("SyncService Error in syncPromotions: $e");
     }
   }
 }
