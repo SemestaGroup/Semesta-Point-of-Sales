@@ -1909,10 +1909,16 @@ class HomeController extends GetxController {
               : 'Customer #${penjualan.idMember}')
           : (selectedMember.value?.nama ?? 'Walk In');
 
+      final orderTypeStr = item.orderType.isNotEmpty
+          ? item.orderType
+          : (penjualan?.orderType ?? selectedOrderType.value);
+          
+      final customerWithOrderType = '$customerName ($orderTypeStr)';
+
       // Build ESC/POS bytes via SettingController helper
       final bytes = await settingCtrl.buildLabelEscPos(
         line1: dateTimeStr,
-        line2: customerName,
+        line2: customerWithOrderType,
         line3: orderCode,
         line4: item.productName ?? '',
         paperSize: labelPrinter.paperSize,
@@ -2586,10 +2592,22 @@ class HomeController extends GetxController {
           final idLocal = localRow.first['id_penjualan'];
           final data = await _loadTransactionForPrinting(idLocal);
           if (data != null) {
+            final penjualan = data['header'] as PenjualanModel;
+            final details = data['details'] as List<PenjualanDetailModel>;
+
             await printKitchenOrder(
-              penjualan: data['header'] as PenjualanModel,
-              details: data['details'] as List<PenjualanDetailModel>,
+              penjualan: penjualan,
+              details: details,
             );
+
+            // Also print labels for each item if a label printer is configured
+            final settingCtrl = Get.find<SettingController>();
+            if (settingCtrl.hasPrinterForRole('label')) {
+              for (var item in details) {
+                await printLabel(item, copies: item.jumlah, penjualan: penjualan);
+              }
+            }
+
 
             Get.snackbar('Sent to Kitchen',
                 'Order #${currentRemoteNumber.value.isNotEmpty ? currentRemoteNumber.value : currentRemoteNumber.value} has been sent to preparation.',
