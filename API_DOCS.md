@@ -1311,6 +1311,7 @@ path: api/
 ### `pos_options get`
 * **Method**: `GET`
 * **URL**: `{{base_url + path}}pos_options`
+* **PARAMS**: `sync` --> TRUE
 
 **Example Success Response:**
 ```json

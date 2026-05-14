@@ -20,11 +20,12 @@ class SyncController extends GetxController {
     try {
       await _syncService.pullMasterData();
     } catch (e) {
-      Get.snackbar("Sync Error", "Koneksi bermasalah. Gagal melakukan sinkronisasi awal.");
+      Get.snackbar("Sync Error",
+          "Koneksi bermasalah. Gagal melakukan sinkronisasi awal.");
     } finally {
       // Check active staff to determine destination
       final hasActiveStaff = _userService.getPrefBool('has_active_staff');
-      
+
       if (!hasActiveStaff) {
         Get.offAllNamed(Routes.staffSelection);
       } else {

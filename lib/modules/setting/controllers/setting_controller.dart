@@ -542,26 +542,32 @@ class SettingController extends GetxController {
     int copies = 1,
   }) async {
     final profile = await CapabilityProfile.load();
-    final paper = paperSize == '80mm' ? PaperSize.mm80 : PaperSize.mm58;
+    final paper = PaperSize.mm58;
     final generator = Generator(paper, profile);
-    final int maxChars = paperSize == '80mm' ? 48 : 32;
+    final int maxChars = 32;
     final String lineSeparator = '-' * maxChars;
     List<int> bytes = [];
 
+    String padCenter(String text) {
+      if (text.length >= maxChars) return text;
+      int padding = ((maxChars - text.length) / 2).floor();
+      return (' ' * padding) + text;
+    }
+
     for (int i = 0; i < copies; i++) {
       bytes += generator.text(
-        line1,
-        styles: const PosStyles(align: PosAlign.center),
+        padCenter(line1),
+        styles: const PosStyles(align: PosAlign.left),
       );
       bytes += generator.text(lineSeparator,
           styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text(
-        line2,
-        styles: const PosStyles(align: PosAlign.center),
+        padCenter(line2),
+        styles: const PosStyles(align: PosAlign.left),
       );
       bytes += generator.text(
-        line3,
-        styles: const PosStyles(align: PosAlign.center),
+        padCenter(line3),
+        styles: const PosStyles(align: PosAlign.left),
       );
       bytes += generator.text(lineSeparator,
           styles: const PosStyles(align: PosAlign.left));
@@ -570,8 +576,8 @@ class SettingController extends GetxController {
         displayText += " (${i + 1}/$copies)";
       }
       bytes += generator.text(
-        displayText,
-        styles: const PosStyles(align: PosAlign.center, bold: true),
+        padCenter(displayText),
+        styles: const PosStyles(align: PosAlign.left, bold: true),
       );
       bytes += generator.feed(2);
       bytes += generator.cut();

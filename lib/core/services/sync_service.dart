@@ -130,7 +130,7 @@ class SyncService extends GetxService {
 
       // 11. Promotions
       await syncPromotions();
-      
+
       // 12. Cleanup
       syncStatus.value = "Optimizing Database...";
       await _cleanupOldOrders();
@@ -887,8 +887,17 @@ class SyncService extends GetxService {
                       : null);
               debugPrint(
                   "SyncService: Found remote ID $remoteId ${remoteNumber != null ? '(Number $remoteNumber)' : ''} for local ID $localId. Updating...");
+              
+              // 1. Remap using the local numeric ID
               await _remapLocalIdInQueue(
                   localId.toString(), remoteId.toString());
+                  
+              // 2. Remap using the UUID (id_pos) placeholder to catch dependent pos_transactions
+              final requestUuid = (body is Map) ? body['id_pos']?.toString() : null;
+              if (requestUuid != null && requestUuid.isNotEmpty) {
+                await _remapLocalIdInQueue(requestUuid, remoteId.toString());
+              }
+
               await _updateLocalIdAfterSync(
                   localId.toString(), remoteId.toString(), endpoint,
                   remoteNumber: remoteNumber);
@@ -1405,15 +1414,17 @@ class SyncService extends GetxService {
           whereArgs: [localPaymentId.toString(), '%pos_transaction%']);
       if (existingQueue.isNotEmpty) continue; // Already explicitly queued
 
-      // Retrieve InvoiceID if needed
+      // Retrieve InvoiceID if needed or if it's currently a UUID placeholder
       String invoiceIdStr = row['invoiceid']?.toString() ?? '';
-      if (invoiceIdStr.isEmpty) {
+      if (invoiceIdStr.isEmpty || invoiceIdStr.contains('-') || invoiceIdStr.length > 20) {
         final tx = await _dbService.query('transactions',
             where: 'id_pos = ?', whereArgs: [row['id_pos']]);
         if (tx.isNotEmpty) {
           final localTxId = tx.first['id_penjualan'] as int;
-          if (tx.first['id_penjualan_remote'] != null) {
+          if (tx.first['id_penjualan_remote'] != null && tx.first['id_penjualan_remote'].toString() != '0') {
             invoiceIdStr = tx.first['id_penjualan_remote'].toString();
+            // Automatically clean up the SQLite table since we found the real remote ID
+            await _dbService.update('pos_payments', {'invoiceid': invoiceIdStr}, 'id = ?', [localPaymentId]);
           } else {
             invoiceIdStr = localTxId.toString(); // Placeholder!
           }
@@ -1598,12 +1609,22 @@ class SyncService extends GetxService {
 
         // Handle both numeric ID and UUID (id_pos)
         final localIdInt = int.tryParse(localId);
+        String? idPosForPayment;
+
         if (localIdInt != null) {
           await _dbService.update(
               'transactions', updateData, 'id_penjualan = ?', [localIdInt]);
+          final txs = await _dbService.query('transactions', columns: ['id_pos'], where: 'id_penjualan = ?', whereArgs: [localIdInt]);
+          if (txs.isNotEmpty) idPosForPayment = txs.first['id_pos']?.toString();
         } else {
           await _dbService
               .update('transactions', updateData, 'id_pos = ?', [localId]);
+          idPosForPayment = localId;
+        }
+
+        // Clean up pos_payments in SQLite so it looks correct in Inspector
+        if (idPosForPayment != null && idPosForPayment.isNotEmpty) {
+           await _dbService.update('pos_payments', {'invoiceid': remoteId}, 'id_pos = ?', [idPosForPayment]);
         }
         debugPrint(
             'SyncService: pos_order synced — local $localId → remote #$remoteId ${remoteNumber ?? ''}');
@@ -1861,42 +1882,58 @@ class SyncService extends GetxService {
       final db = await _dbService.database;
 
       final session = await db.query('user_session', limit: 1);
-      debugPrint("SyncService: Checking user_session for location... session exists: ${session.isNotEmpty}");
+      debugPrint(
+          "SyncService: Checking user_session for location... session exists: ${session.isNotEmpty}");
       if (session.isNotEmpty) {
         final idLocation = session.first['location']?.toString() ?? '';
         debugPrint("SyncService: Found location ID: '$idLocation'");
         if (idLocation.isNotEmpty) {
           final response = await _apiService.getPosPromotions(idLocation);
-          debugPrint("SyncService: getPosPromotions response status: ${response.responsestate}, message: ${response.message}");
-          if (response.responsestate == Constants.successState && response.data != null) {
-            final List promos = response.data is List ? response.data : [response.data];
-            debugPrint("SyncService: Fetched ${promos.length} promotions from API. Saving to database...");
+          debugPrint(
+              "SyncService: getPosPromotions response status: ${response.responsestate}, message: ${response.message}");
+          if (response.responsestate == Constants.successState &&
+              response.data != null) {
+            final List promos =
+                response.data is List ? response.data : [response.data];
+            debugPrint(
+                "SyncService: Fetched ${promos.length} promotions from API. Saving to database...");
             await db.transaction((txn) async {
               await txn.delete('pos_promotions');
               for (var p in promos) {
-                await txn.insert('pos_promotions', {
-                  'id': p['id']?.toString(),
-                  'name': p['name']?.toString(),
-                  'promo_type': p['promo_type']?.toString(),
-                  'brands': p['brands'] != null ? jsonEncode(p['brands']) : null,
-                  'locations': p['locations'] != null ? jsonEncode(p['locations']) : null,
-                  'description': p['description']?.toString(),
-                  'terms_conditions': p['terms_conditions']?.toString(),
-                  'items': p['items'] != null ? jsonEncode(p['items']) : null,
-                  'order_types': p['order_types'] != null ? jsonEncode(p['order_types']) : null,
-                  'start_date': p['start_date']?.toString(),
-                  'end_date': p['end_date']?.toString(),
-                  'is_multiplied': p['is_multiplied']?.toString(),
-                  'is_stackable': p['is_stackable']?.toString(),
-                  'status': p['status']?.toString(),
-                  'created_at': p['created_at']?.toString(),
-                }, conflictAlgorithm: ConflictAlgorithm.replace);
+                await txn.insert(
+                    'pos_promotions',
+                    {
+                      'id': p['id']?.toString(),
+                      'name': p['name']?.toString(),
+                      'promo_type': p['promo_type']?.toString(),
+                      'brands':
+                          p['brands'] != null ? jsonEncode(p['brands']) : null,
+                      'locations': p['locations'] != null
+                          ? jsonEncode(p['locations'])
+                          : null,
+                      'description': p['description']?.toString(),
+                      'terms_conditions': p['terms_conditions']?.toString(),
+                      'items':
+                          p['items'] != null ? jsonEncode(p['items']) : null,
+                      'order_types': p['order_types'] != null
+                          ? jsonEncode(p['order_types'])
+                          : null,
+                      'start_date': p['start_date']?.toString(),
+                      'end_date': p['end_date']?.toString(),
+                      'is_multiplied': p['is_multiplied']?.toString(),
+                      'is_stackable': p['is_stackable']?.toString(),
+                      'status': p['status']?.toString(),
+                      'created_at': p['created_at']?.toString(),
+                    },
+                    conflictAlgorithm: ConflictAlgorithm.replace);
               }
             });
-            debugPrint("SyncService: Successfully saved ${promos.length} promotions to database.");
+            debugPrint(
+                "SyncService: Successfully saved ${promos.length} promotions to database.");
             syncStatus.value = "Promotions Updated";
           } else {
-            debugPrint("SyncService: Failed to fetch promotions. Response data was null or error state.");
+            debugPrint(
+                "SyncService: Failed to fetch promotions. Response data was null or error state.");
           }
         } else {
           debugPrint("SyncService: location is empty in user_session");

@@ -314,14 +314,16 @@ class ApiService extends GetxService {
       String centralUrl = Constants.centralBaseUrl;
       if (!centralUrl.endsWith('/')) centralUrl += '/';
       final fullPath = '$centralUrl${EndPoint.apiPath}pos_promotions';
-      final uri = Uri.parse(fullPath).replace(queryParameters: {'id_location': idLocation});
-      
+      final uri = Uri.parse(fullPath)
+          .replace(queryParameters: {'id_location': idLocation});
+
       debugPrint('ApiService: getPosPromotions URL: $uri');
       final responseApi = await http.get(
         uri,
         headers: _getAuthHeaders(),
       );
-      debugPrint('ApiService: getPosPromotions statusCode: ${responseApi.statusCode}');
+      debugPrint(
+          'ApiService: getPosPromotions statusCode: ${responseApi.statusCode}');
       debugPrint('ApiService: getPosPromotions body: ${responseApi.body}');
 
       dynamic responseJson;
@@ -330,18 +332,22 @@ class ApiService extends GetxService {
       } catch (e) {
         debugPrint('ApiService: getPosPromotions JSON parse error: $e');
         return ResponseApiModel(
-            responsestate: Constants.errorState, message: 'Format respons bukan JSON');
+            responsestate: Constants.errorState,
+            message: 'Format respons bukan JSON');
       }
 
       if (responseApi.statusCode == 200 || responseApi.statusCode == 201) {
         return ResponseApiModel(
           responsestate: Constants.successState,
           message: 'success',
-          data: responseJson is Map ? (responseJson['data'] ?? responseJson) : responseJson,
+          data: responseJson is Map
+              ? (responseJson['data'] ?? responseJson)
+              : responseJson,
         );
       }
       return ResponseApiModel(
-          responsestate: Constants.errorState, message: 'Gagal memuat promo (HTTP ${responseApi.statusCode})');
+          responsestate: Constants.errorState,
+          message: 'Gagal memuat promo (HTTP ${responseApi.statusCode})');
     } catch (e) {
       debugPrint('ApiService: getPosPromotions Exception: $e');
       return ResponseApiModel(
@@ -1631,9 +1637,16 @@ class ApiService extends GetxService {
 
       bool isSuccess = false;
       if (responseApi.statusCode == 200) {
-        if (responseJson['status'] == true || responseJson['success'] == true || responseJson['message']?.toString().toLowerCase().contains('success') == true) {
+        if (responseJson['status'] == true ||
+            responseJson['success'] == true ||
+            responseJson['message']
+                    ?.toString()
+                    .toLowerCase()
+                    .contains('success') ==
+                true) {
           isSuccess = true;
-        } else if (!responseJson.containsKey('status') && !responseJson.containsKey('success')) {
+        } else if (!responseJson.containsKey('status') &&
+            !responseJson.containsKey('success')) {
           // If no status flag but 200 OK, consider it a success.
           isSuccess = true;
         }
