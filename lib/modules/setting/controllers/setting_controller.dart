@@ -362,30 +362,21 @@ class SettingController extends GetxController {
   /// Verifies connection actually succeeded AFTER connect() — library may not throw on failure.
   /// Returns true only if printer is confirmed connected.
   Future<bool> _connectToBluetooth(PrinterDevice device) async {
-    const int maxRetries = 2;
+    const int maxRetries = 3;
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         debugPrint('BT Connect Attempt $attempt for ${device.name}');
 
-        // Step 1: Handle existing connections gracefully
-        final bool? isCurrentlyConnected = await bluetooth.isConnected;
-
-        if (isCurrentlyConnected == true) {
-          if (connectedBluetoothAddress == device.address) {
-            // Already connected to the target! Skip connect overhead.
-            debugPrint(
-                'BT Already connected to target (${device.name}). Skipping connect.');
-            _updatePrinterStatus(device.id, true);
-            return true;
-          } else {
-            // Connected to a DIFFERENT device, so disconnect first.
-            try {
-              await bluetooth.disconnect();
-            } catch (_) {}
-            await Future.delayed(const Duration(milliseconds: 1000));
-            connectedBluetoothAddress = null;
-          }
-        }
+        // Step 1: Always force-disconnect any existing connection first.
+        // This prevents "zombie socket" where library thinks it's connected but
+        // the underlying TCP/RFCOMM channel is dead after idle or printer restart.
+        try {
+          await bluetooth.disconnect();
+        } catch (_) {}
+        connectedBluetoothAddress = null;
+        // Android BT stack needs time to fully release the RFCOMM socket.
+        // 800ms is not enough on many devices — use 2000ms to be safe.
+        await Future.delayed(const Duration(milliseconds: 2000));
 
         // Step 2: Find the specific target in bonded list
         List<blue.BluetoothDevice> bonded = await bluetooth.getBondedDevices();
@@ -419,7 +410,6 @@ class SettingController extends GetxController {
         }
 
         connectedBluetoothAddress = device.address;
-
         _updatePrinterStatus(device.id, true);
         return true;
       } catch (e) {
@@ -945,7 +935,42 @@ class SettingController extends GetxController {
         // Step 2: Send bytes
         await Future.delayed(
             const Duration(milliseconds: 300)); // Small settle time
-        await bluetooth.writeBytes(Uint8List.fromList(bytes));
+
+        // Write bytes with a one-time retry on failure (handles zombie socket)
+        bool writeSuccess = false;
+        for (int writeAttempt = 1; writeAttempt <= 2; writeAttempt++) {
+          try {
+            await bluetooth.writeBytes(Uint8List.fromList(bytes));
+            writeSuccess = true;
+            break;
+          } catch (writeErr) {
+            debugPrint('BT writeBytes ATTEMPT $writeAttempt failed for ${printer.name}: $writeErr');
+            if (writeAttempt < 2) {
+              // Force a fresh reconnect and retry once
+              connectedBluetoothAddress = null;
+              try { await bluetooth.disconnect(); } catch (_) {}
+              await Future.delayed(const Duration(milliseconds: 1500));
+              final reconnected = await _connectToBluetooth(printer);
+              if (!reconnected) break;
+            }
+          }
+        }
+
+        if (!writeSuccess) {
+          Get.snackbar(
+            'Printer Tidak Merespon',
+            '⚠️ Pembayaran BERHASIL, tapi struk gagal dicetak.\nCoba tekan tombol "Cetak Ulang" atau restart printer.',
+            backgroundColor: Colors.orange.shade800,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 6),
+            snackPosition: SnackPosition.TOP,
+            icon: const Icon(Icons.print_disabled, color: Colors.white),
+          );
+          connectedBluetoothAddress = null;
+          try { await bluetooth.disconnect(); } catch (_) {}
+          return;
+        }
+
         await Future.delayed(
             const Duration(milliseconds: 500)); // Wait for data to flush
         // Release the printer so other tablets/devices can connect.
