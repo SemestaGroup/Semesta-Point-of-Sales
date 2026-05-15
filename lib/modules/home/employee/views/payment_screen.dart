@@ -800,12 +800,9 @@ class PaymentScreen extends StatelessWidget {
                 children: [
                   OutlinedButton(
                       onPressed: () async {
-                        // Create a snapshot to avoid ConcurrentModificationError if cart is cleared during loop
-                        final items = List.from(controller.penjualanDetailModelList);
-                        for (var item in items) {
-                          await controller.printLabel(item, copies: item.jumlah);
-                          await Future.delayed(const Duration(seconds: 2));
-                        }
+                        // Create a snapshot to avoid ConcurrentModificationError if cart is cleared
+                        final items = controller.penjualanDetailModelList.toList();
+                        await controller.printLabels(items);
                       },
                     style: OutlinedButton.styleFrom(
                       padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),

@@ -1878,10 +1878,11 @@ class HomeController extends GetxController {
     penjualanDetailModelList.refresh();
   }
 
-  /// Print Label/Sticker for an item.
-  /// Uses TSPL (label language) for XP-D4601B — not ESC/POS.
-  Future<void> printLabel(PenjualanDetailModel item,
-      {int copies = 1, PenjualanModel? penjualan}) async {
+  /// Print Labels/Stickers for multiple items in an order.
+  /// Combines all items into a single Bluetooth payload to avoid connecting/disconnecting
+  /// multiple times per order.
+  Future<void> printLabels(List<PenjualanDetailModel> items,
+      {PenjualanModel? penjualan}) async {
     try {
       final settingCtrl = Get.find<SettingController>();
       final labelPrinter = settingCtrl.getPrinterForRole('label');
@@ -1909,26 +1910,32 @@ class HomeController extends GetxController {
               : 'Customer #${penjualan.idMember}')
           : (selectedMember.value?.nama ?? 'Walk In');
 
-      final orderTypeStr = item.orderType.isNotEmpty
-          ? item.orderType
-          : (penjualan?.orderType ?? selectedOrderType.value);
-          
-      final customerWithOrderType = '$customerName ($orderTypeStr)';
+      List<int> allBytes = [];
 
-      // Build ESC/POS bytes via SettingController helper
-      final bytes = await settingCtrl.buildLabelEscPos(
-        line1: dateTimeStr,
-        line2: customerWithOrderType,
-        line3: orderCode,
-        line4: item.productName ?? '',
-        paperSize: labelPrinter.paperSize,
-        copies: copies,
-      );
+      for (var item in items) {
+        final orderTypeStr = item.orderType.isNotEmpty
+            ? item.orderType
+            : (penjualan?.orderType ?? selectedOrderType.value);
+            
+        final customerWithOrderType = '$customerName ($orderTypeStr)';
 
-      // Delegate to SettingController for sequential BT connect→print→disconnect
-      await settingCtrl.printToTarget(labelPrinter, prebuiltBytes: bytes);
+        // Build ESC/POS bytes via SettingController helper
+        final bytes = await settingCtrl.buildLabelEscPos(
+          line1: dateTimeStr,
+          line2: customerWithOrderType,
+          line3: orderCode,
+          line4: item.productName ?? '',
+          productNote: item.note,
+          paperSize: labelPrinter.paperSize,
+          copies: item.jumlah, // Use item quantity for copies
+        );
+        allBytes.addAll(bytes);
+      }
+
+      // Delegate to SettingController for sequential BT connect→print→disconnect (once per order)
+      await settingCtrl.printToTarget(labelPrinter, prebuiltBytes: allBytes);
     } catch (e) {
-      Get.snackbar('Print Label Error', 'Failed to print label: $e');
+      Get.snackbar('Print Label Error', 'Failed to print labels: $e');
     }
   }
 
@@ -2490,12 +2497,10 @@ class HomeController extends GetxController {
         details: details,
       );
 
-      // 3. Print Labels for each item
+      // 3. Print Labels for all items in one batch
       final settingCtrl = Get.find<SettingController>();
       if (settingCtrl.hasPrinterForRole('label')) {
-        for (var item in details) {
-          await printLabel(item, copies: item.jumlah, penjualan: penjualan);
-        }
+        await printLabels(details, penjualan: penjualan);
       }
     } catch (e) {
       debugPrint('HomeController: printTransactionSession error: $e');
@@ -2603,11 +2608,8 @@ class HomeController extends GetxController {
             // Also print labels for each item if a label printer is configured
             final settingCtrl = Get.find<SettingController>();
             if (settingCtrl.hasPrinterForRole('label')) {
-              for (var item in details) {
-                await printLabel(item, copies: item.jumlah, penjualan: penjualan);
-              }
+              await printLabels(details, penjualan: penjualan);
             }
-
 
             Get.snackbar('Sent to Kitchen',
                 'Order #${currentRemoteNumber.value.isNotEmpty ? currentRemoteNumber.value : currentRemoteNumber.value} has been sent to preparation.',

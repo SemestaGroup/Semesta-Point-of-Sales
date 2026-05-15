@@ -530,6 +530,7 @@ class SettingController extends GetxController {
     required String line4, // row 4: product name
     String paperSize = '58mm',
     int copies = 1,
+    String? productNote,
   }) async {
     final profile = await CapabilityProfile.load();
     final paper = PaperSize.mm58;
@@ -538,38 +539,45 @@ class SettingController extends GetxController {
     final String lineSeparator = '-' * maxChars;
     List<int> bytes = [];
 
-    String padCenter(String text) {
-      if (text.length >= maxChars) return text;
-      int padding = ((maxChars - text.length) / 2).floor();
-      return (' ' * padding) + text;
-    }
-
     for (int i = 0; i < copies; i++) {
-      bytes += generator.text(
-        padCenter(line1),
-        styles: const PosStyles(align: PosAlign.left),
-      );
-      bytes += generator.text(lineSeparator,
+      // Row 1: Date/Time
+      bytes += generator.text(line1,
           styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text(
-        padCenter(line2),
-        styles: const PosStyles(align: PosAlign.left),
-      );
-      bytes += generator.text(
-        padCenter(line3),
-        styles: const PosStyles(align: PosAlign.left),
-      );
-      bytes += generator.text(lineSeparator,
+      
+      // bytes += generator.text(lineSeparator,
+      //     styles: const PosStyles(align: PosAlign.left));
+      // bytes += generator.feed(1);
+
+      // Row 2: Customer Name
+      bytes += generator.text(line2,
           styles: const PosStyles(align: PosAlign.left));
+      
+      // Row 3: Order Code
+      bytes += generator.text(line3,
+          styles: const PosStyles(align: PosAlign.left));
+      
+      // bytes += generator.feed(1);
+      // bytes += generator.text(lineSeparator,
+      //     styles: const PosStyles(align: PosAlign.left));
+
+      // Row 4: Product Name (Bold)
       String displayText = line4;
       if (copies > 1) {
         displayText += " (${i + 1}/$copies)";
       }
       bytes += generator.text(
-        padCenter(displayText),
+        displayText,
         styles: const PosStyles(align: PosAlign.left, bold: true),
       );
-      bytes += generator.feed(2);
+
+      if (productNote != null && productNote.trim().isNotEmpty) {
+        bytes += generator.text(
+          "Note: ${productNote.trim()}",
+          styles: const PosStyles(align: PosAlign.left, bold: true), //fontType: PosFontType.fontB
+        );
+      }
+      
+      bytes += generator.feed(1);
       bytes += generator.cut();
     }
 

@@ -11,12 +11,11 @@ class DashboardEmployeeScreen extends StatelessWidget {
   DashboardEmployeeScreen({super.key});
   final controller = Get.put(DashboardEmployeeController());
 
-
-
   void _showLogout() {
     Get.dialog(
       Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
         backgroundColor: Colors.white,
         child: Container(
           padding: EdgeInsets.all(24.w),
@@ -30,7 +29,8 @@ class DashboardEmployeeScreen extends StatelessWidget {
                   color: Colors.red.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.logout_rounded, color: Colors.red, size: 32.sp),
+                child:
+                    Icon(Icons.logout_rounded, color: Colors.red, size: 32.sp),
               ),
               SizedBox(height: 20.h),
               Text(
@@ -172,14 +172,14 @@ class DashboardEmployeeScreen extends StatelessWidget {
       ));
     }
 
-    if (role == 'owner' || role == 'supervisor') {
-      items.add(SidebarItemData(
-        title: 'Report',
-        icon: CupertinoIcons.chart_bar_alt_fill,
-        index: 5,
-        onTap: () => controller.stateSelectedIndex.value = 5,
-      ));
-    }
+    // if (role == 'owner' || role == 'supervisor') {
+    items.add(SidebarItemData(
+      title: 'Report',
+      icon: CupertinoIcons.chart_bar_alt_fill,
+      index: 5,
+      onTap: () => controller.stateSelectedIndex.value = 5,
+    ));
+    // }
 
     if (role == 'kitchen' || role == 'owner' || role == 'supervisor') {
       items.add(SidebarItemData(
@@ -221,8 +221,6 @@ class DashboardEmployeeScreen extends StatelessWidget {
         onTap: () => controller.stateSelectedIndex.value = 9,
       ));
     }
-
-
 
     if (role == 'owner') {
       items.add(SidebarItemData(

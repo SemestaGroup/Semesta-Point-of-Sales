@@ -22,7 +22,6 @@ class _AddPrinterDialogState extends State<AddPrinterDialog> {
 
   String selectedType = 'bluetooth';
   String selectedRole = 'cashier';
-  String selectedPaperSize = '58mm';
   String? selectedBtAddress;
   String? selectedBtName;
 
@@ -112,19 +111,8 @@ class _AddPrinterDialogState extends State<AddPrinterDialog> {
               ),
               SizedBox(height: 16.h),
 
-              // Paper Size (only for label role)
-              if (selectedRole == 'label') ...[
-                _buildLabel('Paper Size'),
-                Row(
-                  children: [
-                    _buildPaperSizeChip('58 mm', '58mm'),
-                    SizedBox(width: 8.w),
-                    _buildPaperSizeChip('80 mm', '80mm'),
-                  ],
-                ),
-                SizedBox(height: 16.h),
-              ] else
-                SizedBox(height: 16.h),
+
+
 
               // Conditional Address Input
               if (selectedType == 'network') ...[
@@ -278,7 +266,7 @@ class _AddPrinterDialogState extends State<AddPrinterDialog> {
       address: address,
       port: port,
       role: selectedRole,
-      paperSize: selectedPaperSize,
+      paperSize: '58mm',
     );
 
     controller.addPrinter(newPrinter);
@@ -359,22 +347,5 @@ class _AddPrinterDialogState extends State<AddPrinterDialog> {
     );
   }
 
-  Widget _buildPaperSizeChip(String label, String value) {
-    bool isSelected = selectedPaperSize == value;
-    return ChoiceChip(
-      label: Text(label, style: TextStyle(fontSize: 11.sp)),
-      selected: isSelected,
-      onSelected: (_) => setState(() => selectedPaperSize = value),
-      selectedColor: AppTheme.primaryColor.withValues(alpha: 0.08),
-      side: BorderSide(
-        color: isSelected ? AppTheme.primaryColor : AppTheme.borderColor(context),
-      ),
-      labelStyle: TextStyle(
-        color: isSelected ? AppTheme.primaryColor : AppTheme.textColor(context),
-        fontFamily: isSelected ? AppTheme.fontMedium : AppTheme.fontRegular,
-        fontSize: 11.sp,
-      ),
-      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
-    );
-  }
+
 }

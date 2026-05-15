@@ -719,6 +719,62 @@ class ReportController extends GetxController {
     }
   }
 
+  Future<void> printLabelsOnly(Map<String, dynamic> order, List<dynamic> items, {Map<String, dynamic>? member}) async {
+    isPrinting.value = true;
+    try {
+      final settingCtrl = Get.find<SettingController>();
+      final labelPrinter = settingCtrl.getPrinterForRole('label');
+      if (labelPrinter == null) {
+        Get.snackbar('No Label Printer', 'Please configure a printer with the Label role in Settings.');
+        return;
+      }
+
+      final dateStr = order['tgl_penjualan'] != null
+          ? DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.parse(order['tgl_penjualan'].toString()).toLocal())
+          : DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
+
+      final String idPos = order['id_pos']?.toString() ?? order['id_penjualan']?.toString() ?? '---';
+      final orderCode = '#${idPos.length >= 8 ? idPos.substring(idPos.length - 8).toUpperCase() : idPos.toUpperCase()}';
+
+      final int idMember = int.tryParse(order['id_member']?.toString() ?? "0") ?? 0;
+      final isWalkIn = idMember == 0 || idMember == 1;
+      final customerName = isWalkIn ? "Walk In" : (member?['nama']?.toString() ?? 'Customer #$idMember');
+      final orderTypeStr = order['order_type']?.toString() ?? "Dine In";
+      final customerWithOrderType = '$customerName ($orderTypeStr)';
+
+      List<int> allBytes = [];
+
+      for (var item in items) {
+        final double qtyDouble = double.tryParse(item['jumlah']?.toString() ?? "1") ?? 1;
+        final int qty = qtyDouble.toInt();
+        final String name = item['nama_produk']?.toString() ?? "Item";
+        final String note = item['note']?.toString() ?? '';
+
+        final bytes = await settingCtrl.buildLabelEscPos(
+          line1: dateStr,
+          line2: customerWithOrderType,
+          line3: orderCode,
+          line4: name,
+          productNote: note,
+          paperSize: labelPrinter.paperSize,
+          copies: qty,
+        );
+        allBytes.addAll(bytes);
+      }
+
+      await settingCtrl.printToTarget(labelPrinter, prebuiltBytes: allBytes);
+    } catch (e) {
+      ErrorLogService.log(
+        category: 'printer',
+        errCode: 'REPRINT_LABEL_FAIL',
+        errMsg: 'orderId=${order['id_penjualan']} | remoteNo=${order['remote_number']} | $e',
+      );
+      Get.snackbar('Print Error', 'Failed to reprint label: $e');
+    } finally {
+      isPrinting.value = false;
+    }
+  }
+
   String _rawFormatRupiah(int number) {
     return NumberFormat.currency(locale: 'id_ID', symbol: '', decimalDigits: 0).format(number).trim();
   }

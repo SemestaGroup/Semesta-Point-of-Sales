@@ -377,6 +377,10 @@ class _OrderScreenState extends State<OrderScreen> {
         value: 'reprint',
         child: _menuItem(Icons.print_rounded, 'Reprint Receipt', AppTheme.primaryColor, context),
       ));
+      menuItems.add(PopupMenuItem<String>(
+        value: 'reprint_label',
+        child: _menuItem(Icons.label_outline_rounded, 'Reprint Label', AppTheme.primaryColor, context),
+      ));
       
       // Khusus owner/managerial: bisa void order yang sudah closed atau edit (refund)
       if (Get.find<UserService>().isManagerialRole()) {
@@ -501,6 +505,15 @@ class _OrderScreenState extends State<OrderScreen> {
                                   final fetched = await reportCtrl.fetchOrderFullDetails(idPenjualan, order['id_member']);
                                   final items = fetched['items'] as List? ?? [];
                                   await reportCtrl.printReceiptOnly(order, items, member: fetched['member']);
+                                } else if (value == 'reprint_label') {
+                                  final idPenjualan = order['id_penjualan'];
+                                  if (idPenjualan == null) return;
+                                  final reportCtrl = Get.isRegistered<ReportController>()
+                                      ? Get.find<ReportController>()
+                                      : Get.put(ReportController());
+                                  final fetched = await reportCtrl.fetchOrderFullDetails(idPenjualan, order['id_member']);
+                                  final items = fetched['items'] as List? ?? [];
+                                  await reportCtrl.printLabelsOnly(order, items, member: fetched['member']);
                                 } else if (value == 'void') {
                                   _showVoidDialog(context, order);
                                 } else if (value == 'edit_void') {
