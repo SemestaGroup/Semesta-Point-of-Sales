@@ -258,13 +258,29 @@ class SyncService extends GetxService {
 
         // 1. Check if the order already exists locally
         final localCheck = await _dbService.rawQuery(
-            "SELECT id_penjualan, is_synced FROM transactions WHERE id_pos = ? OR id_penjualan_remote = ?",
+            "SELECT id_penjualan, is_synced, id_penjualan_remote FROM transactions WHERE id_pos = ? OR id_penjualan_remote = ?",
             [idPos, remoteId]);
 
         int? localIdPenjualan;
         if (localCheck.isNotEmpty) {
           final localOrder = localCheck.first;
           localIdPenjualan = localOrder['id_penjualan'];
+
+          if (localOrder['id_penjualan_remote'] == null) {
+            // The server has the order, but local doesn't know the remote ID yet!
+            // This means our POST succeeded, but we didn't get the response.
+            // 1. Update the remote ID so future edits use PUT
+            await _dbService.update('transactions', {'id_penjualan_remote': remoteId}, 'id_penjualan = ?', [localIdPenjualan]);
+            
+            // 2. Remove the POST from queue so we don't duplicate it
+            await _dbService.delete('sync_queue', "method = 'POST' AND endpoint LIKE '%pos_order%' AND local_id = ?", [localIdPenjualan.toString()]);
+            
+            // 3. Remap any pending PUT/payments (created while offline) to use the correct remoteId instead of UUID placeholder
+            await _remapLocalIdInQueue(localIdPenjualan.toString(), remoteId.toString());
+            if (idPos != null && idPos.isNotEmpty) {
+              await _remapLocalIdInQueue(idPos, remoteId.toString());
+            }
+          }
 
           // If local order is un-synced (modified locally but not yet pushed), skip pulling to avoid overriding it
           if (localOrder['is_synced'] == 0) continue;
@@ -1323,6 +1339,13 @@ class SyncService extends GetxService {
         whereArgs: [0]);
     for (var row in unsynced) {
       final localId = row['id_penjualan'];
+      
+      // Check if it's already in the queue
+      final existingQueue = await _dbService.query('sync_queue',
+          where: 'local_id = ? AND endpoint LIKE ?',
+          whereArgs: [localId.toString(), '%pos_order%']);
+      if (existingQueue.isNotEmpty) continue; // Already explicitly queued
+
       final details = await _dbService.query('transaction_details',
           where: 'id_penjualan = ?', whereArgs: [localId]);
 
@@ -1367,38 +1390,12 @@ class SyncService extends GetxService {
         'clientnote': '',
       };
 
-      final response = await _apiService.storePosOrder(map);
-      if (response.responsestate == Constants.successState &&
-          response.data != null) {
-        final remoteId = response.data['id'];
-        final String? remoteNumber = response.data['number']?.toString();
-        await _dbService.update(
-            'transactions',
-            {
-              'id_penjualan_remote': remoteId,
-              'remote_number': remoteNumber,
-              'is_synced': 1,
-            },
-            'id_penjualan = ?',
-            [localId]);
-
-        // Mapping returned item IDs
-        final List? remoteItems = response.data['items'];
-        if (remoteItems != null && remoteItems.isNotEmpty) {
-          for (int i = 0; i < remoteItems.length; i++) {
-            final remoteItem = remoteItems[i];
-            final String? serverItemId = remoteItem['itemid']?.toString() ??
-                remoteItem['id']?.toString();
-            if (serverItemId != null && i < details.length) {
-              await _dbService.update(
-                  'transaction_details',
-                  {'remote_item_id': int.tryParse(serverItemId)},
-                  'id_penjualan_detail = ?',
-                  [details[i]['id_penjualan_detail']]);
-            }
-          }
-        }
-      }
+      await enqueueCommand(
+        method: 'POST',
+        endpoint: '/api/pos_order',
+        body: map,
+        localId: localId,
+      );
     }
   }
 
