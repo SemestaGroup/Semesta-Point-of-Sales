@@ -141,7 +141,7 @@ class OrderController extends GetxController {
       'currency': '3',
       'status': newStatus,
       'billing_street': '-',
-      'allowed_payment_modes': ['4'],
+      'allowed_payment_modes': ['7'],
       'items': itemsArray,
       'subtotal': (order['total_harga'] as num? ?? 0).toDouble().toStringAsFixed(2),
       'total': (order['bayar'] as num? ?? 0).toDouble().toStringAsFixed(2),

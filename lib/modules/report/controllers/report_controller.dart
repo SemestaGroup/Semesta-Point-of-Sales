@@ -262,7 +262,7 @@ class ReportController extends GetxController {
     try {
        String sql = '''
           SELECT 
-            COALESCE(p.nama_produk, td.note) as item_name, 
+            COALESCE(td.description, td.product_name, p.description, p.nama_produk, td.note) as item_name, 
             SUM(td.jumlah) as qty_sold, 
             SUM(td.subtotal) as total_revenue
           FROM transaction_details td

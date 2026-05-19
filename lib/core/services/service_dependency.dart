@@ -7,6 +7,7 @@ import 'package:semesta_pos/core/services/local/database_service.dart';
 import 'package:semesta_pos/core/services/sync_service.dart';
 import 'package:semesta_pos/modules/home/employee/controllers/shift_controller.dart';
 import 'package:semesta_pos/modules/setting/controllers/setting_controller.dart';
+import 'package:semesta_pos/core/services/promo_service.dart';
 
 class ServiceDependency {
   static Future<void> init() async {
@@ -45,6 +46,10 @@ class ServiceDependency {
     
     if (!Get.isRegistered<SyncService>()) {
       Get.put(SyncService(), permanent: true);
+    }
+    
+    if (!Get.isRegistered<PromoService>()) {
+      Get.put(PromoService(), permanent: true);
     }
   }
 }

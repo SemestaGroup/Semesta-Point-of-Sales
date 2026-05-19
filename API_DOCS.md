@@ -21,7 +21,7 @@ path: api/
 {
     "status": true,
     "message": "Login successful",
-    "base_url": "http://randiwahyudi.manajemenpondok.com/",
+    "base_url": "http://randiwahyudi.flinkaja.com/",
     "location": "1022",
     "staff": "RANDI",
     "email": "randhi.wahyudi@gmail.com"
@@ -202,23 +202,16 @@ path: api/
 **Example Success Response:**
 ```json
 {
-  "status": true,
-  "message": "Customer add successful.",
-  "data": [
-    {
-      "id": "17",
-      "id_pos": "abcdef-ghijkl-mnopqr",
-      "nama": "test customer",
-      "no_hp": "08999999999",
-      "email": "test@gmail.com",
-      "alamat": "jakarta",
-      "jenis_kel": "L",
-      "tanggal_lahir": "2001-05-03",
-      "kategori_cust": "walk in",
-      "datecreated": "2026-03-18 14:10:46",
-      "value_pts": "0"
+    "status": true,
+    "message": "Client add successful.",
+    "data": {
+        "id": "2",
+        "nama": "Test API",
+        "no_hp": "62857493759",
+        "alamat": "Gudang Cemani",
+        "datecreated": "2026-05-18 09:29:46",
+        "value_pts": "0"
     }
-  ]
 }
 ```
 

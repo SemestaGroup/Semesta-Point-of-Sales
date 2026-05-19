@@ -4,11 +4,14 @@ part 'product_model.g.dart';
 
 @freezed
 class ProductModel with _$ProductModel {
+  const ProductModel._();
+
   const factory ProductModel({
     @JsonKey(name: 'id', fromJson: _toInt) @Default(0) int idProduk,
     @JsonKey(name: 'category_id', fromJson: _toInt) @Default(0) int idKategori,
     @JsonKey(name: 'sku') String? kodeProduk,
     @JsonKey(name: 'name') String? namaProduk,
+    @JsonKey(name: 'description') String? description,
     String? merk,
     @JsonKey(name: 'cost', fromJson: _toInt) @Default(0) int hargaBeli,
     @Default(0) int diskon,
@@ -25,6 +28,10 @@ class ProductModel with _$ProductModel {
     @JsonKey(name: 'parent') String? parent,
     @JsonKey(name: 'children') String? children,
   }) = _ProductModel;
+
+  String get displayName => (description != null && description!.trim().isNotEmpty) 
+      ? description! 
+      : (namaProduk ?? '');
 
   factory ProductModel.fromJson(Map<String, dynamic> json) =>
       _$ProductModelFromJson(json);

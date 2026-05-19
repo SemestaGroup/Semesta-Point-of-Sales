@@ -15,6 +15,7 @@ import 'package:semesta_pos/modules/dashboard/employee/controllers/dashboard_emp
 import 'package:semesta_pos/modules/dashboard/admin/controllers/dashboard_admin_controller.dart';
 import 'package:semesta_pos/modules/order/controllers/order_controller.dart';
 import 'package:semesta_pos/modules/home/employee/controllers/home_controller.dart';
+import 'package:semesta_pos/modules/member/controllers/member_controller.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:semesta_pos/core/services/error_log_service.dart';
@@ -410,15 +411,17 @@ class SyncService extends GetxService {
 
             // 3. Match reverse ID by string matching the product name
             final prodHit = await txn.query('products',
-                columns: ['id_produk', 'order_types'],
+                columns: ['id_produk', 'order_types', 'description'],
                 where: 'nama_produk = ?',
                 whereArgs: [desc],
                 limit: 1);
             int produkId = 0; // Default 0 for custom/deleted items
             String orderTypesJson = '';
+            String? prodDescription;
             if (prodHit.isNotEmpty) {
               produkId = (prodHit.first['id_produk'] as num?)?.toInt() ?? 0;
               orderTypesJson = prodHit.first['order_types']?.toString() ?? '';
+              prodDescription = prodHit.first['description']?.toString();
             }
 
             final String itemNote = itemNotesMap[desc] ?? '';
@@ -440,6 +443,7 @@ class SyncService extends GetxService {
               'orderTypesJson': orderTypesJson,
               'remote_item_id': _toInt(remoteItemId),
               'product_name': desc,
+              'description': prodDescription,
               'kitchen_status': _toInt(fullOrderData['sent']) == 1 ? 1 : 0,
               'is_refund': item['is_refund']?.toString() == '1' ||
                       item['is_refund'] == true
@@ -613,11 +617,11 @@ class SyncService extends GetxService {
           // Cross-entity dependency check:
           // If body contains a negative clientid/invoiceid, check if that placeholder is still pending in the queue.
           final bodyStr = item['body']?.toString();
-          if (bodyStr != null && bodyStr.contains('":-')) {
-            // Heuristic: body has something like "clientid":-12345
+          if (bodyStr != null && (bodyStr.contains('":-') || bodyStr.contains('":"-'))) {
+            // Heuristic: body has something like "clientid":-12345 or "clientid":"-12345"
             // We check if there's a pending command for that specific negative ID.
             bool hasPendingDependency = false;
-            final matches = RegExp(r'":(-?\d+)').allMatches(bodyStr);
+            final matches = RegExp(r'":"?(-?\d+)"?').allMatches(bodyStr);
             for (final m in matches) {
               final val = m.group(1);
               if (val != null && val.startsWith('-')) {
@@ -639,10 +643,14 @@ class SyncService extends GetxService {
             }
           }
 
-          final success = await _executeCommand(item);
+          final mutableItem = Map<String, dynamic>.from(item);
+
+
+
+          final success = await _executeCommand(mutableItem);
           if (success) {
             await _dbService.update(
-                'sync_queue', {'status': 'success'}, 'id = ?', [item['id']]);
+                'sync_queue', {'status': 'success'}, 'id = ?', [mutableItem['id']]);
           } else {
             if (localId != null) {
               final lastError = (await _dbService.query('sync_queue',
@@ -859,10 +867,20 @@ class SyncService extends GetxService {
               remoteMember = dataRaw;
             }
 
-            if (remoteMember != null) {
-              final remoteId = remoteMember['id'].toString();
-              final remoteIdPos = remoteMember['id_pos']?.toString();
+            String? remoteId;
+            String? remoteIdPos;
 
+            if (remoteMember != null) {
+              remoteId = remoteMember['id']?.toString() ?? remoteMember['clientid']?.toString();
+              remoteIdPos = remoteMember['id_pos']?.toString();
+            } else {
+              // Fallback if API only returns the ID in 'data' or root 'id'/'clientid'
+              remoteId = respData['clientid']?.toString() ??
+                         respData['id']?.toString() ??
+                         ((dataRaw is int || dataRaw is String) ? dataRaw.toString() : null);
+            }
+
+            if (remoteId != null && remoteId.isNotEmpty) {
               // 1. Remap other items in the queue using UUID (more stable)
               if (remoteIdPos != null) {
                 await _remapLocalIdInQueue(remoteIdPos, remoteId);
@@ -877,6 +895,8 @@ class SyncService extends GetxService {
               // We prioritize using the numeric localId for updating the id_member column
               await _updateLocalIdAfterSync(
                   localId?.toString() ?? remoteIdPos ?? "", remoteId, endpoint);
+            } else {
+              debugPrint("SyncService: Could not extract remote ID from pos_customers response. Body: ${response.body}");
             }
           } catch (e) {
             debugPrint(
@@ -1283,6 +1303,7 @@ class SyncService extends GetxService {
               'stok': _toInt(item['stock_quantity']),
               'img': item['image_url'],
               'merk': brandName ?? item['brand_name'] ?? '',
+              'description': item['description']?.toString(),
               'order_types': item['order_types'] != null
                   ? jsonEncode(item['order_types'])
                   : '',
@@ -1363,6 +1384,50 @@ class SyncService extends GetxService {
       final subtotal = (row['total_harga'] ?? 0).toDouble().toStringAsFixed(2);
       final total = (row['bayar'] ?? 0).toDouble().toStringAsFixed(2);
 
+      final discountType = row['discount_type']?.toString() ?? 'percent';
+      double discountPercent = 0.0;
+      double discountAmount = (row['diskon'] ?? 0).toDouble();
+      
+      if (discountType == 'percent') {
+        discountPercent = (row['manual_discount_value'] ?? 0).toDouble();
+      } else {
+        discountPercent = 0.0;
+      }
+      
+      final queueNum = row['queue_number'] ?? 0;
+      final orderNote = row['order_note']?.toString() ?? '';
+      
+      // SMART NOTE MERGING: Rebuild merged note to preserve item notes during background sync
+      String cleanedNote = orderNote;
+      if (cleanedNote.contains('---ITEM NOTES---')) {
+        cleanedNote = cleanedNote.split('---ITEM NOTES---')[0].trim();
+      }
+      
+      final itemLines = details.where((i) {
+        final itemOrderType = i['order_type']?.toString() ?? '';
+        final itemNote = i['note']?.toString() ?? '';
+        final diffType = itemOrderType.isNotEmpty && itemOrderType != "Dine In";
+        final hasNote = itemNote.isNotEmpty;
+        return diffType || hasNote;
+      }).map((i) {
+        final itemOrderType = i['order_type']?.toString() ?? '';
+        final itemNote = i['note']?.toString() ?? '';
+        final type = itemOrderType.isNotEmpty ? itemOrderType : "Dine In";
+        final noteStr = itemNote.isNotEmpty ? ' - $itemNote' : '';
+        return '${i['product_name'] ?? 'Item'} | $type$noteStr';
+      }).toList();
+
+      String mergedNote = cleanedNote;
+      if (itemLines.isNotEmpty) {
+        final buffer = StringBuffer();
+        if (cleanedNote.isNotEmpty) buffer.writeln(cleanedNote);
+        buffer.writeln('---ITEM NOTES---');
+        buffer.writeAll(itemLines, '\n');
+        mergedNote = buffer.toString().trim();
+      }
+      
+      final terms = row['order_type']?.toString() ?? 'dine_in';
+
       final map = {
         'clientid': row['id_member'],
         'date': row['tgl_penjualan'].toString().split('T')[0], // YYYY-MM-DD
@@ -1373,21 +1438,27 @@ class SyncService extends GetxService {
             .asMap()
             .entries
             .map((entry) => {
-                  'description': entry.value['productName'] ?? 'Product',
+                  'description': entry.value['product_name'] ?? 'Product',
                   'long_description': '',
                   'qty': entry.value['jumlah'].toString(),
                   'rate':
-                      entry.value['harga_jual'].toDouble().toStringAsFixed(2),
+                      (entry.value['harga_jual'] ?? 0).toDouble().toStringAsFixed(2),
                   'order': (entry.key + 1).toString(),
                   'unit': '',
                   'taxname': [],
                 })
             .toList(),
-        'allowed_payment_modes': ["4"], // Default payment mode
+        'allowed_payment_modes': ["7"], 
         'billing_street': finalBillingStreet,
         'subtotal': subtotal,
         'total': total,
-        'clientnote': '',
+        'discount_total': discountAmount.toStringAsFixed(2),
+        'discount_percent': discountPercent.toStringAsFixed(2),
+        'discount_type': discountType,
+        'clientnote': mergedNote,
+        'terms': terms,
+        'adminnote': queueNum > 0 ? queueNum.toString() : '',
+        'sale_agent': row['id_user']?.toString() ?? '',
       };
 
       await enqueueCommand(
@@ -1432,8 +1503,8 @@ class SyncService extends GetxService {
         'id_pos': row['id_pos'],
         'invoiceid': invoiceIdStr,
         'amount': row['amount']?.toString() ?? '0',
-        'paymentmode': row['paymentmode']?.toString().toLowerCase() ?? '4',
-        'paymentmethod': row['paymentmethod'] ?? row['paymentmode'] ?? '4',
+        'paymentmode': row['paymentmode']?.toString().toLowerCase() ?? '7',
+        'paymentmethod': row['paymentmethod'] ?? row['paymentmode'] ?? '7',
         'date': row['date']?.toString() ??
             DateTime.now().toIso8601String().split('T')[0],
         'transactionid': row['transactionid'] ?? '',
@@ -1592,6 +1663,37 @@ class SyncService extends GetxService {
       // ALSO update all transactions using this localId
       await _dbService.update(
           'transactions', {'id_member': remoteIdInt}, whereClause, [whereArg]);
+
+      // CRITICAL FIX: Update in-memory state of HomeController if it's holding the stale localId
+      if (Get.isRegistered<HomeController>()) {
+        final homeCtrl = Get.find<HomeController>();
+        if (homeCtrl.memberId.value.toString() == localId) {
+          if (remoteIdInt != 0) {
+            homeCtrl.memberId.value = remoteIdInt;
+            if (homeCtrl.selectedMember.value != null) {
+              homeCtrl.selectedMember.value = homeCtrl.selectedMember.value!.copyWith(
+                idMember: remoteIdInt
+              );
+            }
+            debugPrint("SyncService: Updated HomeController in-memory customer ID from $localId to $remoteId");
+          }
+        }
+      }
+      
+      // CRITICAL FIX: Update MemberController's in-memory list
+      if (Get.isRegistered<MemberController>()) {
+        final memberCtrl = Get.find<MemberController>();
+        if (localIdInt != null && remoteIdInt != 0) {
+          final index = memberCtrl.memberModelList.indexWhere((m) => m.idMember == localIdInt);
+          if (index != -1) {
+            memberCtrl.memberModelList[index] = memberCtrl.memberModelList[index].copyWith(idMember: remoteIdInt);
+            memberCtrl.memberModelList.refresh();
+          }
+          if (memberCtrl.selectedMember.value?.idMember == localIdInt) {
+            memberCtrl.selectedMember.value = memberCtrl.selectedMember.value!.copyWith(idMember: remoteIdInt);
+          }
+        }
+      }
     } else if (endpoint.contains('pos_order')) {
       // Save remote invoice ID back to local transactions table
       final remoteIdInt = int.tryParse(remoteId);

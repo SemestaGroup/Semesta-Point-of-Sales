@@ -15,6 +15,7 @@ import 'package:semesta_pos/modules/home/employee/views/shift_audit_page.dart';
 import 'package:semesta_pos/modules/home/employee/widgets/custom_keypad_dialog.dart';
 import 'package:semesta_pos/modules/setting/controllers/setting_controller.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
+import 'package:semesta_pos/core/services/promo_service.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -1817,8 +1818,16 @@ class HomeScreen extends StatelessWidget {
     final bool showPrice = display['show_price'] as bool? ?? false;
     final bool showStock = display['show_stock'] as bool? ?? false;
 
-    // Check if product has a discount
-    final bool hasDiscount = productItem.discountTotal > 0;
+    // Check if product has an active promo
+    final bool hasPromo = Get.isRegistered<PromoService>() 
+        ? Get.find<PromoService>().promoProductIds.contains(productItem.idProduk)
+        : false;
+
+    // Check if product has a regular discount
+    final bool hasProductDiscount = productItem.discountTotal > 0;
+    
+    final bool hasDiscount = hasPromo || hasProductDiscount;
+    final String badgeLabel = hasPromo ? 'PROMO' : 'DISC';
 
     // Check if product has children
     final bool hasChildren = productItem.children != null && 
@@ -1893,7 +1902,7 @@ class HomeScreen extends StatelessWidget {
                       children: [
                         if (showName)
                           Text(
-                            productItem.namaProduk!,
+                            productItem.displayName,
                             textAlign: TextAlign.center,
                             style: AppTheme.bodyLarge.copyWith(
                                 height: 1.1,
@@ -1961,7 +1970,7 @@ class HomeScreen extends StatelessWidget {
                           size: 9.sp, color: Colors.white),
                       SizedBox(width: 3.w),
                       Text(
-                        'PROMO',
+                        badgeLabel,
                         style: TextStyle(
                           color: Colors.white,
                           fontFamily: AppTheme.fontBold,
@@ -2077,7 +2086,7 @@ class HomeScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.productName ?? "Unknown Product",
+                  Text(item.description?.isNotEmpty == true ? item.description! : (item.productName ?? "Unknown Product"),
                       style: AppTheme.bodyLarge.copyWith(
                           fontSize: 15.sp,
                           fontFamily: AppTheme.fontBold,
@@ -2234,7 +2243,7 @@ class HomeScreen extends StatelessWidget {
                 SizedBox(width: 8.w),
                 Expanded(
                   child: Text(
-                    'Adjust Refund: ${item.productName ?? "Item"}',
+                    'Adjust Refund: ${item.description?.isNotEmpty == true ? item.description! : (item.productName ?? "Item")}',
                     style: AppTheme.titleLarge.copyWith(
                         fontSize: 15.sp, fontFamily: AppTheme.fontBold),
                     maxLines: 1,
@@ -2344,7 +2353,7 @@ class HomeScreen extends StatelessWidget {
                   ],
                 ),
                 SizedBox(height: 12.h),
-                Text(item.productName ?? "Product Name",
+                Text(item.description?.isNotEmpty == true ? item.description! : (item.productName ?? "Product Name"),
                     style: AppTheme.bodyLarge.copyWith(
                         fontSize: 18.sp,
                         color: AppTheme.secondaryTextColor(context))),

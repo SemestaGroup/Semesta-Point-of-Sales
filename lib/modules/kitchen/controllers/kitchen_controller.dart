@@ -203,7 +203,7 @@ class KitchenController extends GetxController {
         'currency': '3',
         'number': remoteNumber,
         'billing_street': billingStreet,
-        'allowed_payment_modes': ['4'], 
+        'allowed_payment_modes': ['7'], 
         'items': itemsArray,
         'subtotal': subtotalVal.toStringAsFixed(2),
         'total': totalVal.toStringAsFixed(2),

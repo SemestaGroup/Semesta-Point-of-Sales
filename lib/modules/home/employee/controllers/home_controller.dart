@@ -26,6 +26,7 @@ import 'package:semesta_pos/core/services/remote/api_service.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
 import 'package:semesta_pos/core/models/payment/pos_payment_model.dart';
 import 'package:semesta_pos/core/services/sync_service.dart';
+import 'package:semesta_pos/core/services/promo_service.dart';
 import 'package:semesta_pos/modules/order/controllers/order_controller.dart';
 import 'package:semesta_pos/routes/app_pages.dart';
 import 'package:semesta_pos/modules/setting/controllers/setting_controller.dart';
@@ -82,6 +83,30 @@ class HomeController extends GetxController {
       Get.put(UserService(), permanent: true);
     }
     return Get.find<UserService>();
+  }
+
+  PromoService get promoService {
+    if (!Get.isRegistered<PromoService>()) {
+      Get.put(PromoService(), permanent: true);
+    }
+    return Get.find<PromoService>();
+  }
+
+  PromoDiscount _calculateBestPriceForCartItem(
+      int idProduk, int dynamicPrice, String orderType) {
+    final product =
+        productModelList.firstWhereOrNull((p) => p.idProduk == idProduk);
+    final productDiscountTotal = product?.discountTotal ?? 0;
+    final productDiscountType = product?.discountType ?? 'percent';
+
+    return promoService.calculateBestPrice(
+      productId: idProduk,
+      productBrandIdStr: null,
+      dynamicPrice: dynamicPrice,
+      orderType: orderType,
+      productDiscountTotal: productDiscountTotal,
+      productDiscountType: productDiscountType,
+    );
   }
 
   int totalDiterima = 0;
@@ -172,21 +197,17 @@ class HomeController extends GetxController {
             item.hargaAwal > 0 ? item.hargaAwal : item.hargaJual);
 
         // 2. Apply existing item-level discount logic to the new base price
-        int newPrice = basePrice;
-        if (item.discountTotal > 0) {
-          if (item.discountType == 'percent') {
-            newPrice = basePrice - (basePrice * item.discountTotal ~/ 100);
-          } else {
-            newPrice = basePrice - item.discountTotal;
-          }
-          if (newPrice < 0) newPrice = 0;
-        }
+        final promoDiscount =
+            _calculateBestPriceForCartItem(item.idProduk, basePrice, newType);
+        int newPrice = promoDiscount.finalPrice;
 
         return item.copyWith(
           hargaAwal: basePrice,
           hargaJual: newPrice,
           subtotal: newPrice * item.jumlah,
           orderType: newType,
+          discountTotal: promoDiscount.discountTotal,
+          discountType: promoDiscount.discountType,
         );
       }).toList();
 
@@ -326,6 +347,7 @@ class HomeController extends GetxController {
             'id': e['id_produk'],
             'category_id': e['id_kategori'],
             'name': e['nama_produk'],
+            'description': e['description'],
             'sku': e['kode_produk'],
             'cost': e['harga_beli'],
             'price': e['harga_jual'],
@@ -379,7 +401,7 @@ class HomeController extends GetxController {
   }
 
   /// Returns a dynamic product image URL derived from the logged-in user's base_url.
-  /// Falls back to a generic manajemenpondok URL if no base_url is stored.
+  /// Falls back to a generic flinkaja URL if no base_url is stored.
   String getProductImageUrl(String imgPath) {
     String base = userService.getBaseUrl();
     if (base == 'Guest' || base.isEmpty) {
@@ -509,16 +531,9 @@ class HomeController extends GetxController {
     final dynamicPrice = getDynamicPrice(
         productModel.orderTypes, currentItemType, productModel.hargaJual);
 
-    int finalPrice = dynamicPrice;
-    if (productModel.discountTotal > 0) {
-      if (productModel.discountType == 'percent') {
-        finalPrice =
-            dynamicPrice - (dynamicPrice * productModel.discountTotal ~/ 100);
-      } else {
-        finalPrice = dynamicPrice - productModel.discountTotal;
-      }
-      if (finalPrice < 0) finalPrice = 0;
-    }
+    final promoDiscount = _calculateBestPriceForCartItem(
+        productModel.idProduk, dynamicPrice, currentItemType);
+    int finalPrice = promoDiscount.finalPrice;
 
     if (!appService.allowZeroStock.value && productModel.stok <= 0) {
       Get.snackbar('Error', 'Out of stock');
@@ -538,8 +553,8 @@ class HomeController extends GetxController {
         subtotal: finalPrice * (productSelected.jumlah + 1),
         hargaJual: finalPrice,
         hargaAwal: dynamicPrice,
-        discountTotal: productModel.discountTotal,
-        discountType: productModel.discountType,
+        discountTotal: promoDiscount.discountTotal,
+        discountType: promoDiscount.discountType,
       );
       penjualanDetailModelList[index] = updatedProduct;
       penjualanDetailModelList.refresh();
@@ -555,6 +570,7 @@ class HomeController extends GetxController {
     final newProductSelected = PenjualanDetailModel(
       idProduk: productModel.idProduk,
       productName: productModel.namaProduk,
+      description: productModel.description,
       hargaJual: finalPrice,
       hargaAwal: dynamicPrice,
       jumlah: 1,
@@ -563,8 +579,8 @@ class HomeController extends GetxController {
       orderType: currentItemType,
       orderTypesJson: productModel.orderTypes ?? "",
       note: "",
-      discountTotal: productModel.discountTotal,
-      discountType: productModel.discountType,
+      discountTotal: promoDiscount.discountTotal,
+      discountType: promoDiscount.discountType,
     );
     penjualanDetailModelList.add(newProductSelected);
     controllerStock[productModel.idProduk] = TextEditingController(
@@ -877,6 +893,8 @@ class HomeController extends GetxController {
 
     int dynamicPrice = item.hargaAwal > 0 ? item.hargaAwal : item.hargaJual;
     int finalPrice = item.hargaJual;
+    int currentDiscountTotal = item.discountTotal;
+    String currentDiscountType = item.discountType;
 
     if (orderType != null && orderType != item.orderType) {
       var productDb =
@@ -890,18 +908,11 @@ class HomeController extends GetxController {
       dynamicPrice =
           getDynamicPrice(item.orderTypesJson, orderType, defaultBasePrice);
 
-      finalPrice = dynamicPrice;
-
-      // Re-apply discounts to the new base price
-      if (item.discountTotal > 0) {
-        if (item.discountType == 'percent') {
-          finalPrice =
-              dynamicPrice - (dynamicPrice * item.discountTotal ~/ 100);
-        } else {
-          finalPrice = dynamicPrice - item.discountTotal;
-        }
-        if (finalPrice < 0) finalPrice = 0;
-      }
+      final promoDiscount = _calculateBestPriceForCartItem(
+          item.idProduk, dynamicPrice, orderType);
+      finalPrice = promoDiscount.finalPrice;
+      currentDiscountTotal = promoDiscount.discountTotal;
+      currentDiscountType = promoDiscount.discountType;
     }
 
     penjualanDetailModelList[index] = item.copyWith(
@@ -910,6 +921,8 @@ class HomeController extends GetxController {
       orderType: orderType ?? item.orderType,
       hargaAwal: dynamicPrice,
       hargaJual: finalPrice, // UPDATE HARGA
+      discountTotal: currentDiscountTotal,
+      discountType: currentDiscountType,
       subtotal:
           (qty ?? item.jumlah) * finalPrice, // RECALC SUBTOTAL WITH NEW PRICE
     );
@@ -1116,7 +1129,7 @@ class HomeController extends GetxController {
               'billing_street': memberAddress,
               'allowed_payment_modes': allPaymentModes.isNotEmpty
                   ? allPaymentModes.map((e) => e['id'].toString()).toList()
-                  : ['4'],
+                  : ['7'],
               'items': itemsArray,
               'subtotal':
                   (map['total_harga'] as num).toDouble().toStringAsFixed(2),
@@ -1382,6 +1395,7 @@ class HomeController extends GetxController {
           'discountType': item['discountType'] ?? 'percent',
           'hargaAwal': item['hargaAwal'] ?? 0,
           'product_name': item['productName'],
+          'description': item['description'],
           'remote_item_id': item['remote_item_id'],
           'is_refund': item['is_refund'] ?? 0,
         });
@@ -1509,7 +1523,7 @@ class HomeController extends GetxController {
           'newitems': newitemsArray,
           'allowed_payment_modes': allPaymentModes.isNotEmpty
               ? allPaymentModes.map((e) => e['id'].toString()).toList()
-              : ['4'],
+              : ['7'],
           'billing_street': billingStreet,
           'subtotal': subtotalVal.toStringAsFixed(2),
           'total': (map['bayar'] as num).toDouble().toStringAsFixed(2),
@@ -1519,6 +1533,7 @@ class HomeController extends GetxController {
           'clientnote': mergedNote,
           'terms': selectedOrderType.value,
           'adminnote': queueNum > 0 ? queueNum.toString() : '',
+          'sale_agent': userService.getPrefInt(Constants.userId).toString(),
         };
 
         await syncService.enqueueCommand(
@@ -1648,7 +1663,7 @@ class HomeController extends GetxController {
           'billing_street': billingStreet,
           'allowed_payment_modes': allPaymentModes.isNotEmpty
               ? allPaymentModes.map((e) => e['id'].toString()).toList()
-              : ['4'],
+              : ['7'],
           'items': itemsArray,
           'subtotal': subtotalVal.toStringAsFixed(2),
           'total': (map['bayar'] as num).toDouble().toStringAsFixed(2),
@@ -1743,22 +1758,6 @@ class HomeController extends GetxController {
             "Transaction record not found for this order (#${idPos.substring(0, 8)})");
       }
 
-      final payment = PosPaymentModel(
-        idPos: idPos,
-        invoiceId: invoiceIdStr,
-        amount: amount.toString(),
-        paymentMode: paymentMode,
-        paymentMethod: paymentMethod ?? paymentMode,
-        date: date,
-        dateRecorded: dateRecorded,
-        note: note ?? orderNote.value,
-        transactionId: '', // Optional transaction trace ID
-      );
-
-      // Wait for insert to get the actual local ID
-      final localPaymentId =
-          await _dbService.insert('pos_payments', payment.toJson());
-
       // Map the paymentMode string to its dynamic ID from the database
       String paymentModeId = '7'; // fallback
       final modeMatch = allPaymentModes.firstWhere(
@@ -1776,6 +1775,22 @@ class HomeController extends GetxController {
         paymentModeId = modeMatch['id'].toString();
       }
 
+      final payment = PosPaymentModel(
+        idPos: idPos,
+        invoiceId: invoiceIdStr,
+        amount: amount.toString(),
+        paymentMode: paymentModeId, // Store mapped ID in local SQLite instead of string
+        paymentMethod: paymentMethod ?? paymentMode, // Keep original string here
+        date: date,
+        dateRecorded: dateRecorded,
+        note: note ?? orderNote.value,
+        transactionId: '', // Optional transaction trace ID
+      );
+
+      // Wait for insert to get the actual local ID
+      final localPaymentId =
+          await _dbService.insert('pos_payments', payment.toJson());
+
       final apiPaymentBody = {
         'id_pos': idPos,
         'invoiceid': invoiceIdStr,
@@ -1785,6 +1800,7 @@ class HomeController extends GetxController {
         'date': date,
         'transactionid': '',
         'note': note ?? orderNote.value,
+        'sale_agent': userService.getPrefInt(Constants.userId).toString(),
       };
 
       // Enqueue the pos_order FIRST so the server only creates the invoice and awards points at payment time.
@@ -1916,7 +1932,7 @@ class HomeController extends GetxController {
         final orderTypeStr = item.orderType.isNotEmpty
             ? item.orderType
             : (penjualan?.orderType ?? selectedOrderType.value);
-            
+
         final customerWithOrderType = '$customerName ($orderTypeStr)';
 
         // Build ESC/POS bytes via SettingController helper
@@ -1924,7 +1940,7 @@ class HomeController extends GetxController {
           line1: dateTimeStr,
           line2: customerWithOrderType,
           line3: orderCode,
-          line4: item.productName ?? '',
+          line4: item.description?.isNotEmpty == true ? item.description! : (item.productName ?? ''),
           productNote: item.note,
           paperSize: labelPrinter.paperSize,
           copies: item.jumlah, // Use item quantity for copies
@@ -2105,7 +2121,7 @@ class HomeController extends GetxController {
 
         // 8/12 of the line is for the item name, 4/12 is for the price.
         final int maxNameLen = (is80mm ? 32 : 24) - prefix.length;
-        String name = item.productName ?? "Item";
+        String name = item.description?.isNotEmpty == true ? item.description! : (item.productName ?? "Item");
 
         if (name.length > maxNameLen) {
           name = '${name.substring(0, maxNameLen - 3)}..';
@@ -2423,7 +2439,7 @@ class HomeController extends GetxController {
 
         // 9/12 of the line is for the item name, 3/12 is for the checkbox.
         final int maxNameLen = (is80mm ? 36 : 26) - prefix.length;
-        String name = item.productName ?? "Item";
+        String name = item.description?.isNotEmpty == true ? item.description! : (item.productName ?? "Item");
 
         if (name.length > maxNameLen) {
           name = '${name.substring(0, maxNameLen - 3)}..';
@@ -2762,6 +2778,7 @@ class HomeController extends GetxController {
           'discountType': element.discountType,
           'hargaAwal': element.hargaAwal,
           'product_name': element.productName ?? '',
+          'description': element.description,
         });
       }
 
@@ -2982,6 +2999,7 @@ class HomeController extends GetxController {
         final item = PenjualanDetailModel(
           idProduk: (detail['id_produk'] as num?)?.toInt() ?? 0,
           productName: prodName,
+          description: detail['description']?.toString(),
           hargaJual: hargaJual,
           hargaAwal: hargaAwal,
           jumlah: jumlah,

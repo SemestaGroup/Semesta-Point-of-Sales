@@ -11,6 +11,7 @@ class PenjualanDetailModel {
   final String? createdAt;
   final String? updatedAt;
   final String? productName;
+  final String? description;
   final String note;
   final String orderType;
   final String orderTypesJson;
@@ -33,6 +34,7 @@ class PenjualanDetailModel {
     this.createdAt,
     this.updatedAt,
     this.productName,
+    this.description,
     this.note = "",
     this.orderType = "",
     this.orderTypesJson = "",
@@ -57,6 +59,7 @@ class PenjualanDetailModel {
         createdAt: json['created_at'] as String?,
         updatedAt: json['updated_at'] as String?,
         productName: json['product_name'] ?? json['productName'] as String?,
+        description: json['description'] as String?,
         note: json['note'] as String? ?? "",
         orderType: json['order_type'] ?? json['orderType'] as String? ?? "",
         orderTypesJson: json['orderTypesJson'] ?? json['order_types_json'] as String? ?? "",
@@ -80,6 +83,7 @@ class PenjualanDetailModel {
         'created_at': createdAt,
         'updated_at': updatedAt,
         'productName': productName,
+        'description': description,
         'note': note,
         'orderType': orderType,
         'orderTypesJson': orderTypesJson,
@@ -104,6 +108,7 @@ class PenjualanDetailModel {
     String? createdAt,
     String? updatedAt,
     String? productName,
+    String? description,
     String? note,
     String? orderType,
     String? orderTypesJson,
@@ -126,6 +131,7 @@ class PenjualanDetailModel {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       productName: productName ?? this.productName,
+      description: description ?? this.description,
       note: note ?? this.note,
       orderType: orderType ?? this.orderType,
       orderTypesJson: orderTypesJson ?? this.orderTypesJson,

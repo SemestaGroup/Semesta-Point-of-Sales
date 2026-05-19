@@ -121,7 +121,7 @@ class ProductScreen extends StatelessWidget {
                                   },
                                 ),
                                 title: Text(
-                                  productList.namaProduk.toString(),
+                                  productList.displayName,
                                   style: TextStyle(
                                       fontFamily: AppTheme.fontMedium,
                                       color: Colors.black,

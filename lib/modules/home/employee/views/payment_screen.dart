@@ -76,7 +76,7 @@ class PaymentScreen extends StatelessWidget {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Text(item.productName ?? "",
+                                      Text(item.description?.isNotEmpty == true ? item.description! : (item.productName ?? ""),
                                           style: AppTheme.bodyLarge.copyWith(
                                               fontFamily: AppTheme.fontBold,
                                               fontSize: 16.sp)),

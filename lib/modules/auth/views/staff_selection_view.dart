@@ -440,18 +440,17 @@ class StaffSelectionView extends GetView<AuthController> {
   void _verifyPin(StaffModel staff, String inputPin) async {
     final storedPin = (staff.pin ?? '').trim();
 
-    // If no PIN is configured for this staff, allow access directly
-    // (Admin should configure a PIN in the backend for security)
+    // If no PIN is configured for this staff, explicitly block access.
+    // An empty PIN is a security risk. Admin must set it from backend.
     if (storedPin.isEmpty) {
       Get.back(); // close dialog
       Get.snackbar(
-        'No PIN Set',
-        'Warning: No PIN configured for ${staff.fullName}. Please set a PIN in the backend.',
-        backgroundColor: Colors.orange.shade700,
+        'Access Denied',
+        'This account does not have a configured PIN. Please contact the Admin to set a PIN.',
+        backgroundColor: Colors.red.shade700,
         colorText: Colors.white,
         duration: const Duration(seconds: 3),
       );
-      controller.completeStaffLogin(staff);
       return;
     }
 

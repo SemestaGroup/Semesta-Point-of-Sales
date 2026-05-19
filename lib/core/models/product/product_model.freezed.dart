@@ -28,6 +28,8 @@ mixin _$ProductModel {
   String? get kodeProduk => throw _privateConstructorUsedError;
   @JsonKey(name: 'name')
   String? get namaProduk => throw _privateConstructorUsedError;
+  @JsonKey(name: 'description')
+  String? get description => throw _privateConstructorUsedError;
   String? get merk => throw _privateConstructorUsedError;
   @JsonKey(name: 'cost', fromJson: _toInt)
   int get hargaBeli => throw _privateConstructorUsedError;
@@ -77,6 +79,7 @@ abstract class $ProductModelCopyWith<$Res> {
       @JsonKey(name: 'category_id', fromJson: _toInt) int idKategori,
       @JsonKey(name: 'sku') String? kodeProduk,
       @JsonKey(name: 'name') String? namaProduk,
+      @JsonKey(name: 'description') String? description,
       String? merk,
       @JsonKey(name: 'cost', fromJson: _toInt) int hargaBeli,
       int diskon,
@@ -113,6 +116,7 @@ class _$ProductModelCopyWithImpl<$Res, $Val extends ProductModel>
     Object? idKategori = null,
     Object? kodeProduk = freezed,
     Object? namaProduk = freezed,
+    Object? description = freezed,
     Object? merk = freezed,
     Object? hargaBeli = null,
     Object? diskon = null,
@@ -145,6 +149,10 @@ class _$ProductModelCopyWithImpl<$Res, $Val extends ProductModel>
       namaProduk: freezed == namaProduk
           ? _value.namaProduk
           : namaProduk // ignore: cast_nullable_to_non_nullable
+              as String?,
+      description: freezed == description
+          ? _value.description
+          : description // ignore: cast_nullable_to_non_nullable
               as String?,
       merk: freezed == merk
           ? _value.merk
@@ -223,6 +231,7 @@ abstract class _$$ProductModelImplCopyWith<$Res>
       @JsonKey(name: 'category_id', fromJson: _toInt) int idKategori,
       @JsonKey(name: 'sku') String? kodeProduk,
       @JsonKey(name: 'name') String? namaProduk,
+      @JsonKey(name: 'description') String? description,
       String? merk,
       @JsonKey(name: 'cost', fromJson: _toInt) int hargaBeli,
       int diskon,
@@ -257,6 +266,7 @@ class __$$ProductModelImplCopyWithImpl<$Res>
     Object? idKategori = null,
     Object? kodeProduk = freezed,
     Object? namaProduk = freezed,
+    Object? description = freezed,
     Object? merk = freezed,
     Object? hargaBeli = null,
     Object? diskon = null,
@@ -289,6 +299,10 @@ class __$$ProductModelImplCopyWithImpl<$Res>
       namaProduk: freezed == namaProduk
           ? _value.namaProduk
           : namaProduk // ignore: cast_nullable_to_non_nullable
+              as String?,
+      description: freezed == description
+          ? _value.description
+          : description // ignore: cast_nullable_to_non_nullable
               as String?,
       merk: freezed == merk
           ? _value.merk
@@ -356,12 +370,13 @@ class __$$ProductModelImplCopyWithImpl<$Res>
 
 /// @nodoc
 @JsonSerializable()
-class _$ProductModelImpl implements _ProductModel {
+class _$ProductModelImpl extends _ProductModel {
   const _$ProductModelImpl(
       {@JsonKey(name: 'id', fromJson: _toInt) this.idProduk = 0,
       @JsonKey(name: 'category_id', fromJson: _toInt) this.idKategori = 0,
       @JsonKey(name: 'sku') this.kodeProduk,
       @JsonKey(name: 'name') this.namaProduk,
+      @JsonKey(name: 'description') this.description,
       this.merk,
       @JsonKey(name: 'cost', fromJson: _toInt) this.hargaBeli = 0,
       this.diskon = 0,
@@ -376,7 +391,8 @@ class _$ProductModelImpl implements _ProductModel {
       @JsonKey(name: 'discount_type') this.discountType = 'percent',
       this.status = 'active',
       @JsonKey(name: 'parent') this.parent,
-      @JsonKey(name: 'children') this.children});
+      @JsonKey(name: 'children') this.children})
+      : super._();
 
   factory _$ProductModelImpl.fromJson(Map<String, dynamic> json) =>
       _$$ProductModelImplFromJson(json);
@@ -393,6 +409,9 @@ class _$ProductModelImpl implements _ProductModel {
   @override
   @JsonKey(name: 'name')
   final String? namaProduk;
+  @override
+  @JsonKey(name: 'description')
+  final String? description;
   @override
   final String? merk;
   @override
@@ -440,7 +459,7 @@ class _$ProductModelImpl implements _ProductModel {
 
   @override
   String toString() {
-    return 'ProductModel(idProduk: $idProduk, idKategori: $idKategori, kodeProduk: $kodeProduk, namaProduk: $namaProduk, merk: $merk, hargaBeli: $hargaBeli, diskon: $diskon, hargaJual: $hargaJual, stok: $stok, img: $img, createdAt: $createdAt, updatedAt: $updatedAt, namaKategori: $namaKategori, orderTypes: $orderTypes, discountTotal: $discountTotal, discountType: $discountType, status: $status, parent: $parent, children: $children)';
+    return 'ProductModel(idProduk: $idProduk, idKategori: $idKategori, kodeProduk: $kodeProduk, namaProduk: $namaProduk, description: $description, merk: $merk, hargaBeli: $hargaBeli, diskon: $diskon, hargaJual: $hargaJual, stok: $stok, img: $img, createdAt: $createdAt, updatedAt: $updatedAt, namaKategori: $namaKategori, orderTypes: $orderTypes, discountTotal: $discountTotal, discountType: $discountType, status: $status, parent: $parent, children: $children)';
   }
 
   @override
@@ -456,6 +475,8 @@ class _$ProductModelImpl implements _ProductModel {
                 other.kodeProduk == kodeProduk) &&
             (identical(other.namaProduk, namaProduk) ||
                 other.namaProduk == namaProduk) &&
+            (identical(other.description, description) ||
+                other.description == description) &&
             (identical(other.merk, merk) || other.merk == merk) &&
             (identical(other.hargaBeli, hargaBeli) ||
                 other.hargaBeli == hargaBeli) &&
@@ -490,6 +511,7 @@ class _$ProductModelImpl implements _ProductModel {
         idKategori,
         kodeProduk,
         namaProduk,
+        description,
         merk,
         hargaBeli,
         diskon,
@@ -523,12 +545,13 @@ class _$ProductModelImpl implements _ProductModel {
   }
 }
 
-abstract class _ProductModel implements ProductModel {
+abstract class _ProductModel extends ProductModel {
   const factory _ProductModel(
       {@JsonKey(name: 'id', fromJson: _toInt) final int idProduk,
       @JsonKey(name: 'category_id', fromJson: _toInt) final int idKategori,
       @JsonKey(name: 'sku') final String? kodeProduk,
       @JsonKey(name: 'name') final String? namaProduk,
+      @JsonKey(name: 'description') final String? description,
       final String? merk,
       @JsonKey(name: 'cost', fromJson: _toInt) final int hargaBeli,
       final int diskon,
@@ -545,6 +568,7 @@ abstract class _ProductModel implements ProductModel {
       final String status,
       @JsonKey(name: 'parent') final String? parent,
       @JsonKey(name: 'children') final String? children}) = _$ProductModelImpl;
+  const _ProductModel._() : super._();
 
   factory _ProductModel.fromJson(Map<String, dynamic> json) =
       _$ProductModelImpl.fromJson;
@@ -561,6 +585,9 @@ abstract class _ProductModel implements ProductModel {
   @override
   @JsonKey(name: 'name')
   String? get namaProduk;
+  @override
+  @JsonKey(name: 'description')
+  String? get description;
   @override
   String? get merk;
   @override

@@ -114,7 +114,7 @@ class ErrorLogService {
   }) async {
     try {
       if (!baseUrl.endsWith('/')) baseUrl += '/';
-      final uri = Uri.parse('$baseUrl${EndPoint.apiPath}$_endpoint/$deviceId');
+      final uri = Uri.parse('$baseUrl${EndPoint.apiPath}$_endpoint');
 
       final response = await http
           .post(
@@ -150,7 +150,7 @@ class ErrorLogService {
     try {
       final dbService = Get.find<DatabaseService>();
       if (!baseUrl.endsWith('/')) baseUrl += '/';
-      final endpoint = '${EndPoint.apiPath}$_endpoint/$deviceId';
+      final endpoint = '${EndPoint.apiPath}$_endpoint';
 
       await dbService.insert('sync_queue', {
         'method': 'POST',

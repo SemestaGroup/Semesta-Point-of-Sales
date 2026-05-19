@@ -65,13 +65,21 @@ class DatabaseService {
     debugPrint('SQLite: Opening database at $path with version 41');
     return await openDatabase(
       path,
-      version: 41,
+      version: 42,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
   }
 
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 42) {
+      try {
+        await db.execute('ALTER TABLE products ADD COLUMN description TEXT');
+      } catch (e) {}
+      try {
+        await db.execute('ALTER TABLE transaction_details ADD COLUMN description TEXT');
+      } catch (e) {}
+    }
     if (oldVersion < 32) {
       await db.execute('''
         CREATE TABLE IF NOT EXISTS staff(
@@ -519,6 +527,7 @@ class DatabaseService {
         stok INTEGER,
         img TEXT,
         merk TEXT,
+        description TEXT,
         order_types TEXT,
         discount_total INTEGER DEFAULT 0,
         discount_type TEXT DEFAULT "percent",
@@ -600,6 +609,7 @@ class DatabaseService {
         hargaAwal INTEGER DEFAULT 0,
         kitchen_status INTEGER DEFAULT 0,
         product_name TEXT DEFAULT "",
+        description TEXT,
         is_refund INTEGER DEFAULT 0,
         FOREIGN KEY (id_penjualan) REFERENCES transactions (id_penjualan)
       )
