@@ -13,6 +13,7 @@ import 'package:semesta_pos/modules/home/employee/controllers/shift_controller.d
 import 'package:semesta_pos/modules/home/employee/controllers/shift_audit_controller.dart';
 import 'package:semesta_pos/modules/home/employee/views/shift_audit_page.dart';
 import 'package:semesta_pos/modules/home/employee/widgets/custom_keypad_dialog.dart';
+import 'package:semesta_pos/modules/home/employee/views/cash_flow_page.dart';
 import 'package:semesta_pos/modules/setting/controllers/setting_controller.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
 import 'package:semesta_pos/core/services/promo_service.dart';
@@ -1071,6 +1072,27 @@ class HomeScreen extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 14.sp,
                       color: Colors.redAccent,
+                      fontFamily: AppTheme.fontMedium))
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          height: 38.h,
+          onTap: () {
+            Future.delayed(
+              const Duration(seconds: 0),
+              () => Get.to(() => CashFlowPage(controller: controller)),
+            );
+          },
+          child: Row(
+            children: [
+              Icon(Icons.account_balance_wallet,
+                  size: 18.sp, color: AppTheme.primaryColor),
+              SizedBox(width: 12.w),
+              Text("Cash Flow",
+                  style: TextStyle(
+                      fontSize: 14.sp,
+                      color: AppTheme.textColor(context),
                       fontFamily: AppTheme.fontMedium))
             ],
           ),

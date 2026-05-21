@@ -13,6 +13,7 @@ import 'package:semesta_pos/core/services/app_service.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
 import 'package:semesta_pos/core/services/sync_service.dart';
 import 'package:semesta_pos/core/services/error_log_service.dart';
+import 'package:semesta_pos/core/models/cash_flow/cash_flow_model.dart';
 
 class ReportController extends GetxController {
   ApiService get apiService {
@@ -84,6 +85,11 @@ class ReportController extends GetxController {
   final appService = Get.find<AppService>();
   final userService = Get.find<UserService>();
 
+  // --- CASH FLOW TAB DATA ---
+  RxList<CashFlowModel> cashFlowItems = <CashFlowModel>[].obs;
+  final cashFlowStartDateController = TextEditingController();
+  final cashFlowEndDateController = TextEditingController();
+
   @override
   void onInit() {
     super.onInit();
@@ -96,6 +102,11 @@ class ReportController extends GetxController {
     endDateController.text = _formatDate(now);
     getOrders();
     loadPaymentModes();
+
+    // Default cash flow filter: this month
+    final firstOfMonth = DateTime(now.year, now.month, 1);
+    cashFlowStartDateController.text = _formatDate(firstOfMonth);
+    cashFlowEndDateController.text = _formatDate(now);
     
     // Automatically pull latest credit notes when opening reports
     if (Get.isRegistered<SyncService>()) {
@@ -317,6 +328,24 @@ class ReportController extends GetxController {
   void changeTab(int index) {
     activeTab.value = index;
     currentPage.value = 1;
+    if (index == 3) {
+      loadCashFlow();
+    }
+  }
+
+  Future<void> loadCashFlow() async {
+    try {
+      isLoading.value = true;
+      final rows = await _dbService.getCashFlowByDateRange(
+        cashFlowStartDateController.text,
+        cashFlowEndDateController.text,
+      );
+      cashFlowItems.value = rows.map((r) => CashFlowModel.fromMap(r)).toList();
+    } catch (e) {
+      debugPrint('ReportController: Failed to load cash flow: $e');
+    } finally {
+      isLoading.value = false;
+    }
   }
 
   String _formatDate(DateTime date) {

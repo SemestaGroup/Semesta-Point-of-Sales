@@ -233,7 +233,7 @@ class RecapView extends StatelessWidget {
                 children: [
                   Expanded(flex: 3, child: _buildPaymentModesSection(context, controller, isDark)),
                   SizedBox(width: 16.w),
-                  Expanded(flex: 2, child: _buildProductsSoldSection(context, controller, isDark)),
+                  Expanded(flex: 2, child: _buildCashFlowSection(context, controller, isDark)),
                 ],
               ),
             ),
@@ -349,66 +349,181 @@ class RecapView extends StatelessWidget {
     );
   }
 
-  Widget _buildProductsSoldSection(BuildContext context, RecapController controller, bool isDark) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.cardColor(context),
-        borderRadius: BorderRadius.circular(16.r),
-        border: Border.all(color: AppTheme.borderColor(context)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-            decoration: BoxDecoration(
-              color: Colors.grey.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.only(topLeft: Radius.circular(12.r), topRight: Radius.circular(12.r)),
+  Widget _buildCashFlowSection(BuildContext context, RecapController controller, bool isDark) {
+    return Obx(() {
+      final items = controller.cashFlowItems;
+      final cashOutItems = items.where((e) => e.direction == 'out').toList();
+      final cashInItems = items.where((e) => e.direction == 'in').toList();
+      final totalOut = cashOutItems.fold(0, (sum, e) => sum + e.amount);
+      final totalIn = cashInItems.fold(0, (sum, e) => sum + e.amount);
+
+      return Container(
+        decoration: BoxDecoration(
+          color: AppTheme.cardColor(context),
+          borderRadius: BorderRadius.circular(16.r),
+          border: Border.all(color: AppTheme.borderColor(context)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+              decoration: BoxDecoration(
+                color: Colors.grey.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(12.r),
+                  topRight: Radius.circular(12.r),
+                ),
+              ),
+              child: Text(
+                'Cash Flow',
+                style: AppTheme.labelMedium.copyWith(fontFamily: AppTheme.fontBold, fontSize: 12.sp),
+              ),
             ),
-            child: Row(
-              children: [
-                Expanded(flex: 3, child: Text("Products Sold", style: AppTheme.labelMedium.copyWith(fontFamily: AppTheme.fontBold, fontSize: 12.sp))),
-                Expanded(flex: 1, child: Text("Qty", style: AppTheme.labelMedium.copyWith(fontFamily: AppTheme.fontBold, fontSize: 12.sp), textAlign: TextAlign.right)),
-                Expanded(flex: 2, child: Text("Total", style: AppTheme.labelMedium.copyWith(fontFamily: AppTheme.fontBold, fontSize: 12.sp), textAlign: TextAlign.right)),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Obx(() {
-              if (controller.productsSoldList.isEmpty) {
-                return Center(child: Text("No items sold yet.", style: AppTheme.bodyLarge.copyWith(color: Colors.grey, fontSize: 13.sp)));
-              }
-              return ListView.separated(
-                itemCount: controller.productsSoldList.length,
-                separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.borderColor(context)),
-                itemBuilder: (context, index) {
-                  final item = controller.productsSoldList[index];
-                  return Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: Text(item['name']?.toString() ?? 'Unknown', style: AppTheme.bodyLarge.copyWith(fontSize: 13.sp, fontFamily: AppTheme.fontMedium), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ),
-                        Expanded(
-                          flex: 1,
-                          child: Text("${item['qty']}", style: AppTheme.bodyLarge.copyWith(fontSize: 13.sp), textAlign: TextAlign.right),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(_formatRupiah(item['total'] ?? 0), style: AppTheme.bodyLarge.copyWith(fontSize: 13.sp, fontFamily: AppTheme.fontBold), textAlign: TextAlign.right),
-                        ),
-                      ],
+
+            // Cash In block
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+              child: Container(
+                padding: EdgeInsets.all(10.w),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(10.r),
+                  border: Border.all(color: Colors.green.withValues(alpha: 0.15)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(6.w),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6.r),
+                      ),
+                      child: Icon(Icons.arrow_downward_rounded, size: 14.sp, color: Colors.green),
                     ),
-                  );
-                },
-              );
-            }),
-          ),
-        ],
-      ),
-    );
+                    SizedBox(width: 8.w),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Cash In', style: AppTheme.labelMedium.copyWith(color: Colors.green, fontFamily: AppTheme.fontBold, fontSize: 11.sp)),
+                          Text('${cashInItems.length} transactions', style: AppTheme.labelMedium.copyWith(fontSize: 10.sp)),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      _formatRupiah(totalIn),
+                      style: AppTheme.bodyLarge.copyWith(fontFamily: AppTheme.fontBold, color: Colors.green, fontSize: 12.sp),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Cash Out block
+            Padding(
+              padding: EdgeInsets.fromLTRB(14.w, 0, 14.w, 10.h),
+              child: Container(
+                padding: EdgeInsets.all(10.w),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(10.r),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.15)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(6.w),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6.r),
+                      ),
+                      child: Icon(Icons.arrow_upward_rounded, size: 14.sp, color: Colors.red),
+                    ),
+                    SizedBox(width: 8.w),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Cash Out', style: AppTheme.labelMedium.copyWith(color: Colors.red, fontFamily: AppTheme.fontBold, fontSize: 11.sp)),
+                          Text('${cashOutItems.length} transactions', style: AppTheme.labelMedium.copyWith(fontSize: 10.sp)),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      _formatRupiah(totalOut),
+                      style: AppTheme.bodyLarge.copyWith(fontFamily: AppTheme.fontBold, color: Colors.red, fontSize: 12.sp),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const Divider(height: 1),
+
+            // List of expense rows
+            Expanded(
+              child: cashOutItems.isEmpty && cashInItems.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.account_balance_wallet_outlined, size: 28.sp, color: Colors.grey.shade400),
+                          SizedBox(height: 8.h),
+                          Text('No cash flow recorded', style: AppTheme.bodyLarge.copyWith(color: Colors.grey, fontSize: 12.sp)),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: items.length,
+                      separatorBuilder: (_, __) => Divider(height: 1, color: AppTheme.borderColor(context)),
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+                        final isOut = item.direction == 'out';
+                        return Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: EdgeInsets.all(5.w),
+                                decoration: BoxDecoration(
+                                  color: (isOut ? Colors.red : Colors.green).withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(5.r),
+                                ),
+                                child: Icon(
+                                  isOut ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                                  size: 12.sp,
+                                  color: isOut ? Colors.red : Colors.green,
+                                ),
+                              ),
+                              SizedBox(width: 8.w),
+                              Expanded(
+                                child: Text(
+                                  item.expenseName.isNotEmpty ? item.expenseName : 'Expense',
+                                  style: AppTheme.bodyLarge.copyWith(fontSize: 12.sp),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Text(
+                                _formatRupiah(item.amount),
+                                style: AppTheme.bodyLarge.copyWith(
+                                  fontSize: 12.sp,
+                                  fontFamily: AppTheme.fontBold,
+                                  color: isOut ? Colors.red : Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   Widget _buildHistoryTab(BuildContext context, RecapController controller) {

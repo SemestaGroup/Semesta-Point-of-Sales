@@ -12,6 +12,7 @@ import 'package:semesta_pos/modules/dashboard/employee/controllers/dashboard_emp
 import 'package:semesta_pos/modules/setting/controllers/setting_controller.dart';
 import 'package:semesta_pos/core/services/sync_service.dart';
 import 'package:semesta_pos/styles/app_theme.dart';
+import 'package:semesta_pos/core/models/cash_flow/cash_flow_model.dart';
 
 import 'package:semesta_pos/core/util/constans.dart';
 
@@ -26,6 +27,7 @@ class RecapController extends GetxController {
   RxBool isLoading = false.obs;
   RxList<Map<String, dynamic>> shiftHistory = <Map<String, dynamic>>[].obs;
   RxList<Map<String, dynamic>> productsSoldList = <Map<String, dynamic>>[].obs;
+  RxList<CashFlowModel> cashFlowItems = <CashFlowModel>[].obs;
 
   @override
   void onInit() {
@@ -110,10 +112,12 @@ class RecapController extends GetxController {
     if (_shiftController.activeShift.value == null) {
       recordedTotals.clear();
       productsSoldList.clear();
+      cashFlowItems.clear();
       return;
     }
 
     await _loadProductsSold();
+    await _loadCashFlowForShift();
 
     final shift = _shiftController.activeShift.value!;
     final startTime = shift.startTime.toIso8601String().replaceAll('T', ' ').split('.')[0];
@@ -219,6 +223,29 @@ class RecapController extends GetxController {
       productsSoldList.value = list;
     } catch(e) { 
       debugPrint("Error querying products sold: $e"); 
+    }
+  }
+
+  Future<void> _loadCashFlowForShift() async {
+    final shift = _shiftController.activeShift.value;
+    if (shift == null) {
+      cashFlowItems.clear();
+      return;
+    }
+    try {
+      final shiftId = shift.idShift ?? 0;
+      if (shiftId > 0) {
+        // Load by shift ID
+        final rows = await _dbService.getCashFlowByShift(shiftId);
+        cashFlowItems.value = rows.map((r) => CashFlowModel.fromMap(r)).toList();
+      } else {
+        // Fallback: load by shift start time if no shift ID (e.g. active shift)
+        final startTime = shift.startTime.toIso8601String();
+        final rows = await _dbService.getCashFlowSince(startTime);
+        cashFlowItems.value = rows.map((r) => CashFlowModel.fromMap(r)).toList();
+      }
+    } catch (e) {
+      debugPrint('RecapController: Error loading cash flow: $e');
     }
   }
 

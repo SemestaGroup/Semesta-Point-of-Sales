@@ -1814,4 +1814,51 @@ class ApiService extends GetxService {
       );
     }
   }
+
+  Future<ResponseApiModel> postExpense(Map<String, dynamic> data) async {
+    try {
+      final responseApi = await http.post(
+        _getUri('pos_expenses'),
+        headers: {
+          'Content-Type': 'application/json',
+          ..._getAuthHeaders(),
+        },
+        body: jsonEncode(data),
+      );
+
+      final dataResponse = jsonDecode(responseApi.body);
+
+      if (responseApi.statusCode == 200 || responseApi.statusCode == 201) {
+        bool status = false;
+        if (dataResponse is Map && dataResponse.containsKey('status')) {
+          status = dataResponse['status'] == true || dataResponse['status'] == 'true';
+        } else {
+          status = true; // Assume success if 2xx and no explicit status false
+        }
+
+        if (status) {
+          return ResponseApiModel(
+            responsestate: Constants.successState,
+            message: dataResponse['message'] ?? 'Expense added successfully',
+            data: dataResponse['data'],
+          );
+        }
+      }
+
+      String? message;
+      if (dataResponse is Map) message = dataResponse['message'];
+      return ResponseApiModel(
+        responsestate: Constants.errorState,
+        message: message ?? 'Failed to add expense (HTTP ${responseApi.statusCode})',
+        data: null,
+      );
+    } catch (e) {
+      debugPrint('postExpense Error: $e');
+      return ResponseApiModel(
+        responsestate: Constants.errorState,
+        message: 'Server error: $e',
+        data: null,
+      );
+    }
+  }
 }

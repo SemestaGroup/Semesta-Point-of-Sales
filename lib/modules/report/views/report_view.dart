@@ -45,6 +45,12 @@ class ReportScreen extends StatelessWidget {
                             isActive: controller.activeTab.value == 2,
                             onTap: () => controller.changeTab(2),
                           ),
+                          SizedBox(width: 32.w),
+                          _buildTabItem(
+                            title: "Cash Flow",
+                            isActive: controller.activeTab.value == 3,
+                            onTap: () => controller.changeTab(3),
+                          ),
                         ],
                       )),
                   SizedBox(height: 24.h),
@@ -70,7 +76,7 @@ class ReportScreen extends StatelessWidget {
                       );
                     } else if (controller.activeTab.value == 1) {
                       return _buildAnalysisTab(context, controller);
-                    } else {
+                    } else if (controller.activeTab.value == 2) {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -79,6 +85,8 @@ class ReportScreen extends StatelessWidget {
                           _buildTopProductsTable(context, controller),
                         ],
                       );
+                    } else {
+                      return _buildCashFlowTab(context, controller);
                     }
                   }),
                 ],
@@ -1341,6 +1349,301 @@ class ReportScreen extends StatelessWidget {
           )
         ],
       )
+    );
+  }
+
+  // ────────────────── CASH FLOW TAB ──────────────────
+
+  Widget _buildCashFlowTab(BuildContext context, ReportController controller) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Filter row
+        Wrap(
+          alignment: WrapAlignment.start,
+          crossAxisAlignment: WrapCrossAlignment.end,
+          spacing: 16.w,
+          runSpacing: 16.h,
+          children: [
+            _buildFilterField(
+              context: context,
+              label: 'Start Date',
+              hint: 'Start date',
+              controller: controller.cashFlowStartDateController,
+              width: 160.w,
+              onTap: () => controller.selectDate(context, controller.cashFlowStartDateController),
+              icon: Icons.calendar_today_outlined,
+            ),
+            _buildFilterField(
+              context: context,
+              label: 'End Date',
+              hint: 'End date',
+              controller: controller.cashFlowEndDateController,
+              width: 160.w,
+              onTap: () => controller.selectDate(context, controller.cashFlowEndDateController),
+              icon: Icons.calendar_today_outlined,
+            ),
+            SizedBox(
+              height: 48.h,
+              child: ElevatedButton(
+                onPressed: () => controller.loadCashFlow(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  elevation: 0,
+                  padding: EdgeInsets.symmetric(horizontal: 32.w),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.r)),
+                ),
+                child: Text(
+                  'Filter',
+                  style: TextStyle(color: Colors.white, fontFamily: AppTheme.fontBold, fontSize: AppTheme.fontSizeLabelLarge),
+                ),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 24.h),
+        _buildCashFlowTable(context, controller),
+      ],
+    );
+  }
+
+  Widget _buildCashFlowTable(BuildContext context, ReportController controller) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: isDark ? Colors.grey.shade900 : const Color(0xFFF1F3F9),
+        borderRadius: BorderRadius.circular(16.r),
+      ),
+      child: Column(
+        children: [
+          // Table header
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
+            child: Row(
+              children: [
+                _buildHeaderCell('Date', flex: 2),
+                _buildHeaderCell('Person in Charge', flex: 3),
+                _buildHeaderCell('Purpose', flex: 3),
+                _buildHeaderCell('Amount', flex: 2),
+                _buildHeaderCell('Direction', flex: 2),
+              ],
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              color: AppTheme.cardColor(context),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(16.r)),
+            ),
+            child: Obx(() {
+              final items = controller.cashFlowItems;
+              if (items.isEmpty) {
+                return SizedBox(
+                  height: 300.h,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.account_balance_wallet_outlined, size: 48.sp, color: Colors.grey.shade400),
+                        SizedBox(height: 16.h),
+                        Text('No cash flow data found', style: TextStyle(color: Colors.grey, fontSize: AppTheme.fontSizeBodyLarge, fontFamily: AppTheme.fontMedium)),
+                        SizedBox(height: 8.h),
+                        Text('Try adjusting your date filters', style: TextStyle(color: Colors.grey.shade500, fontSize: AppTheme.fontSizeLabelMedium, fontFamily: AppTheme.fontRegular)),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              // Summary row
+              final totalOut = items.where((e) => e.direction == 'out').fold(0, (s, e) => s + e.amount);
+              final totalIn = items.where((e) => e.direction == 'in').fold(0, (s, e) => s + e.amount);
+
+              return Column(
+                children: [
+                  // Summary chips row
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 12.h),
+                    child: Row(
+                      children: [
+                        _buildCashFlowSummaryChip(
+                          context,
+                          label: 'Total In',
+                          value: _formatCurrency(totalIn.toDouble()),
+                          color: Colors.green,
+                          icon: Icons.arrow_downward_rounded,
+                        ),
+                        SizedBox(width: 16.w),
+                        _buildCashFlowSummaryChip(
+                          context,
+                          label: 'Total Out',
+                          value: _formatCurrency(totalOut.toDouble()),
+                          color: Colors.red,
+                          icon: Icons.arrow_upward_rounded,
+                        ),
+                        SizedBox(width: 16.w),
+                        _buildCashFlowSummaryChip(
+                          context,
+                          label: 'Net',
+                          value: _formatCurrency((totalIn - totalOut).toDouble()),
+                          color: (totalIn - totalOut) >= 0 ? Colors.blue : Colors.orange,
+                          icon: Icons.balance_rounded,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      final isOut = item.direction == 'out';
+                      return Container(
+                        padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 14.h),
+                        decoration: BoxDecoration(
+                          border: Border(bottom: BorderSide(color: AppTheme.borderColor(context).withValues(alpha: 0.3))),
+                        ),
+                        child: Row(
+                          children: [
+                            // Date
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                item.date,
+                                style: TextStyle(fontSize: AppTheme.fontSizeLabelMedium, fontFamily: AppTheme.fontMedium, color: AppTheme.textColor(context)),
+                              ),
+                            ),
+                            // Person in Charge
+                            Expanded(
+                              flex: 3,
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 14.r,
+                                    backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                                    child: Text(
+                                      item.staffName.isNotEmpty ? item.staffName[0].toUpperCase() : '?',
+                                      style: TextStyle(fontSize: 11.sp, color: AppTheme.primaryColor, fontFamily: AppTheme.fontBold),
+                                    ),
+                                  ),
+                                  SizedBox(width: 8.w),
+                                  Expanded(
+                                    child: Text(
+                                      item.staffName.isNotEmpty ? item.staffName : item.staffEmail,
+                                      style: TextStyle(fontSize: AppTheme.fontSizeLabelMedium, fontFamily: AppTheme.fontMedium, color: AppTheme.textColor(context)),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Purpose
+                            Expanded(
+                              flex: 3,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.expenseName.isNotEmpty ? item.expenseName : '—',
+                                    style: TextStyle(fontSize: AppTheme.fontSizeLabelMedium, fontFamily: AppTheme.fontMedium, color: AppTheme.textColor(context)),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (item.note.isNotEmpty)
+                                    Text(
+                                      item.note,
+                                      style: TextStyle(fontSize: 11.sp, color: Colors.grey.shade500),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                ],
+                              ),
+                            ),
+                            // Amount
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                _formatCurrency(item.amount.toDouble()),
+                                style: TextStyle(
+                                  fontSize: AppTheme.fontSizeLabelMedium,
+                                  fontFamily: AppTheme.fontBold,
+                                  color: isOut ? Colors.red.shade600 : Colors.green.shade600,
+                                ),
+                              ),
+                            ),
+                            // Direction badge
+                            Expanded(
+                              flex: 2,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+                                  decoration: BoxDecoration(
+                                    color: (isOut ? Colors.red : Colors.green).withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(20.r),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        isOut ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                                        size: 12.sp,
+                                        color: isOut ? Colors.red.shade600 : Colors.green.shade600,
+                                      ),
+                                      SizedBox(width: 4.w),
+                                      Text(
+                                        isOut ? 'Out' : 'In',
+                                        style: TextStyle(
+                                          fontSize: AppTheme.fontSizeLabelSmall,
+                                          fontFamily: AppTheme.fontBold,
+                                          color: isOut ? Colors.red.shade600 : Colors.green.shade600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCashFlowSummaryChip(BuildContext context, {required String label, required String value, required Color color, required IconData icon}) {
+    return Expanded(
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(10.r),
+          border: Border.all(color: color.withValues(alpha: 0.15)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 16.sp, color: color),
+            SizedBox(width: 8.w),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: TextStyle(fontSize: 10.sp, color: color, fontFamily: AppTheme.fontBold)),
+                  Text(value, style: TextStyle(fontSize: 13.sp, color: color, fontFamily: AppTheme.fontBold)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

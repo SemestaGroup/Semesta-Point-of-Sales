@@ -1831,3 +1831,23 @@ lastname wajib: kalau kosong default "-"
     }
 ]
 ```
+
+## 22. POST /pos_expenses
+
+**Description**: Add a new expense (Kas Keluar).
+
+**Endpoint**: `http://{domain}/api/pos_expenses`
+
+**Method**: `POST`
+
+**Request Body**:
+```json
+{
+  "expense_name": "Test Expense", // optional
+  "note": "expense note", // optional
+  "category": 1, // required
+  "date": "2026-05-11", // required
+  "amount": 2500, // required
+  "addedfrom": 1 // required (id staff yang menambahkan)
+}
+```

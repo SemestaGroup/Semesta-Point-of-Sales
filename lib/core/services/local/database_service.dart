@@ -62,16 +62,36 @@ class DatabaseService {
 
   Future<Database> _initDatabase() async {
     String path = join(await getDatabasesPath(), 'pos_database.db');
-    debugPrint('SQLite: Opening database at $path with version 41');
+    debugPrint('SQLite: Opening database at $path with version 43');
     return await openDatabase(
       path,
-      version: 42,
+      version: 43,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
   }
 
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 43) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS cash_flow(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            expense_name TEXT DEFAULT '',
+            note TEXT DEFAULT '',
+            amount INTEGER NOT NULL DEFAULT 0,
+            direction TEXT DEFAULT 'out',
+            staff_name TEXT DEFAULT '',
+            staff_email TEXT DEFAULT '',
+            date TEXT,
+            created_at TEXT,
+            id_shift INTEGER DEFAULT 0,
+            is_synced INTEGER DEFAULT 0,
+            remote_id INTEGER
+          )
+        ''');
+      } catch (e) {/* table might already exist */}
+    }
     if (oldVersion < 42) {
       try {
         await db.execute('ALTER TABLE products ADD COLUMN description TEXT');
@@ -752,6 +772,24 @@ class DatabaseService {
         created_at TEXT
       )
     ''');
+
+    // Cash Flow Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cash_flow(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        expense_name TEXT DEFAULT '',
+        note TEXT DEFAULT '',
+        amount INTEGER NOT NULL DEFAULT 0,
+        direction TEXT DEFAULT 'out',
+        staff_name TEXT DEFAULT '',
+        staff_email TEXT DEFAULT '',
+        date TEXT,
+        created_at TEXT,
+        id_shift INTEGER DEFAULT 0,
+        is_synced INTEGER DEFAULT 0,
+        remote_id INTEGER
+      )
+    ''');
   }
 
   // --- CRUD Helper Methods ---
@@ -903,4 +941,44 @@ class DatabaseService {
     await deleteDatabase(path);
     debugPrint('DatabaseService: Deleted database file completely.');
   }
+
+  // --- Cash Flow CRUD ---
+
+  Future<int> insertCashFlow(Map<String, dynamic> data) async {
+    return await insert('cash_flow', data);
+  }
+
+  Future<List<Map<String, dynamic>>> getCashFlowByDateRange(
+      String startDate, String endDate) async {
+    return await rawQuery(
+      'SELECT * FROM cash_flow WHERE date >= ? AND date <= ? ORDER BY created_at DESC',
+      [startDate, endDate],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getCashFlowByShift(int shiftId) async {
+    return await query(
+      'cash_flow',
+      where: 'id_shift = ?',
+      whereArgs: [shiftId],
+      orderBy: 'created_at ASC',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getCashFlowSince(String startTime) async {
+    return await rawQuery(
+      'SELECT * FROM cash_flow WHERE created_at >= ? ORDER BY created_at ASC',
+      [startTime],
+    );
+  }
+
+  Future<void> markCashFlowSynced(int id, int remoteId) async {
+    await update(
+      'cash_flow',
+      {'is_synced': 1, 'remote_id': remoteId},
+      'id = ?',
+      [id],
+    );
+  }
 }
+

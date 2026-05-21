@@ -34,6 +34,7 @@ import 'package:semesta_pos/modules/dashboard/employee/controllers/dashboard_emp
 import 'package:semesta_pos/modules/dashboard/admin/controllers/dashboard_admin_controller.dart';
 import 'package:semesta_pos/modules/report/controllers/report_controller.dart';
 import 'package:semesta_pos/core/services/error_log_service.dart';
+import 'package:semesta_pos/modules/recap/controllers/recap_controller.dart';
 
 class HomeController extends GetxController {
   RxList<dynamic> foodList = [].obs;
@@ -2656,6 +2657,120 @@ class HomeController extends GetxController {
       Get.snackbar('Error', 'Failed to send to kitchen: $e');
     } finally {
       isLoadingTransaction.value = false;
+    }
+  }
+
+  // ----- EXPENSE FEATURE -----
+  Future<bool> submitExpense({
+    required String name,
+    required String note,
+    required int amount,
+  }) async {
+    try {
+      final userEmail = userService.getUserEmail();
+      int addedFrom = 1;
+      String staffFirstName = '';
+
+      // Resolve staff info from SQLite
+      if (userEmail.isNotEmpty) {
+        final staffRows = await _dbService.query(
+          'staff',
+          where: 'email = ?',
+          whereArgs: [userEmail],
+        );
+        if (staffRows.isNotEmpty) {
+          addedFrom = (staffRows.first['id'] as num?)?.toInt() ?? 1;
+          staffFirstName = staffRows.first['firstname']?.toString() ?? '';
+        }
+      }
+
+      // Fallback: use session staff name if not found in staff table
+      if (staffFirstName.isEmpty) {
+        staffFirstName = userService.getUserName();
+      }
+
+      final now = DateTime.now();
+      final dateStr = now.toIso8601String().split('T')[0];
+      final createdAt = now.toIso8601String();
+
+      // Get active shift ID
+      int idShift = 0;
+      if (Get.isRegistered<ShiftController>()) {
+        idShift = Get.find<ShiftController>().activeShift.value?.idShift ?? 0;
+      }
+
+      // 1. Always save to SQLite first (offline-safe)
+      final localId = await _dbService.insertCashFlow({
+        'expense_name': name.isNotEmpty ? name : 'Expense',
+        'note': note,
+        'amount': amount,
+        'direction': 'out',
+        'staff_name': staffFirstName,
+        'staff_email': userEmail,
+        'date': dateStr,
+        'created_at': createdAt,
+        'id_shift': idShift,
+        'is_synced': 0,
+      });
+
+      // 2. Try to sync to remote API
+      final Map<String, dynamic> payload = {
+        if (name.isNotEmpty) "expense_name": name,
+        if (note.isNotEmpty) "note": note,
+        "category": 1,
+        "date": dateStr,
+        "amount": amount,
+        "addedfrom": addedFrom,
+      };
+
+      try {
+        final response = await apiService.postExpense(payload);
+        if (response.responsestate == Constants.successState) {
+          // Mark as synced in SQLite
+          final remoteId = response.data?['id'] as int? ?? 0;
+          await _dbService.markCashFlowSynced(localId, remoteId);
+
+          Get.snackbar(
+            'Success',
+            'Cash out has been recorded successfully.',
+            backgroundColor: Colors.green,
+            colorText: Colors.white,
+          );
+        } else {
+          // API returned error but data is saved locally
+          debugPrint('[submitExpense] API error: ${response.message}. Saved offline.');
+          Get.snackbar(
+            'Saved Offline',
+            'Expense saved locally. Will sync when connection is available.',
+            backgroundColor: Colors.orange,
+            colorText: Colors.white,
+          );
+        }
+      } catch (networkError) {
+        // Network error — data already saved locally
+        debugPrint('[submitExpense] Network error: $networkError. Saved offline.');
+        Get.snackbar(
+          'Saved Offline',
+          'Expense saved locally. Will sync when connection is available.',
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+        );
+      }
+
+      // Automatically refresh Recap summary if registered
+      if (Get.isRegistered<RecapController>()) {
+        Get.find<RecapController>().calculateShiftTotals();
+      }
+
+      return true;
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'An error occurred: $e',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+      return false;
     }
   }
 
