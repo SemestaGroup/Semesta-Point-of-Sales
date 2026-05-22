@@ -40,8 +40,7 @@ class SettingController extends GetxController {
   TextEditingController companyTelpFieldController = TextEditingController();
   TextEditingController companyDiscFieldController = TextEditingController();
   TextEditingController companyVersionFieldController = TextEditingController();
-  TextEditingController labelOffsetXFieldController =
-      TextEditingController(text: "20");
+
   RxBool isLoadingStore = false.obs;
 
   // Printer Management
@@ -126,12 +125,7 @@ class SettingController extends GetxController {
       companyDiscFieldController.text = model.diskon.toString();
       companyVersionFieldController.text = model.version;
 
-      final localLabelOffsetX = userService.getPrefString('pos_label_offset_x');
-      if (localLabelOffsetX.isNotEmpty && localLabelOffsetX != "Guest") {
-        labelOffsetXFieldController.text = localLabelOffsetX;
-      } else {
-        labelOffsetXFieldController.text = "20"; // Default offset
-      }
+
 
       // Auto-connect defined network printers
       autoConnectAll();
@@ -1117,7 +1111,6 @@ class SettingController extends GetxController {
     String telp = companyTelpFieldController.text;
     String address = companyAddressFieldController.text;
     String version = companyVersionFieldController.text;
-    String labelOffsetX = labelOffsetXFieldController.text;
 
     if (companyName == '') {
       Get.snackbar('Error', 'Company name cannot be empty');
@@ -1142,7 +1135,6 @@ class SettingController extends GetxController {
       'alamat': address,
       'diskon': discount,
       'versi': version,
-      'label_offset_x': labelOffsetX.isNotEmpty ? labelOffsetX : '20',
     };
 
     await updateData(data);
@@ -1196,8 +1188,6 @@ class SettingController extends GetxController {
       await userService.saveString(Constants.posAddress, data['alamat']);
       await userService.saveString(
           Constants.posDefaultDiscount, data['diskon']);
-      await userService.saveString(
-          'pos_label_offset_x', data['label_offset_x']);
       await userService.saveString(
           'pos_app_settings', jsonEncode(appService.posSettings));
 

@@ -437,9 +437,15 @@ class HomeController extends GetxController {
         final activeCatIds = activeCatRows.map((r) => r['id_kategori']).toSet();
         final allCats = await _dbService.rawQuery(
             'SELECT MIN(id_kategori) as id_kategori, nama_kategori, brand_name, commodity_code FROM categories GROUP BY LOWER(TRIM(nama_kategori))');
-        categoryList.value = allCats
+        final list = allCats
             .where((c) => activeCatIds.contains(c['id_kategori']))
             .toList();
+        list.sort((a, b) {
+          final nameA = (a['nama_kategori']?.toString() ?? '').toLowerCase().trim();
+          final nameB = (b['nama_kategori']?.toString() ?? '').toLowerCase().trim();
+          return nameA.compareTo(nameB);
+        });
+        categoryList.value = list;
       } else {
         // Active products in the selected brand
         final productsInBrand = await _dbService.query('products',
@@ -485,7 +491,14 @@ class HomeController extends GetxController {
             uniqueCats[name.toLowerCase()] = cat;
           }
         }
-        categoryList.value = uniqueCats.values.toList();
+        
+        final list = uniqueCats.values.toList();
+        list.sort((a, b) {
+          final nameA = (a['nama_kategori']?.toString() ?? '').toLowerCase().trim();
+          final nameB = (b['nama_kategori']?.toString() ?? '').toLowerCase().trim();
+          return nameA.compareTo(nameB);
+        });
+        categoryList.value = list;
       }
     } catch (e) {
       debugPrint("Error fetching categories for brand: $e");

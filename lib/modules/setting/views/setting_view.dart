@@ -393,22 +393,7 @@ class SettingScreen extends GetView<SettingController> {
                                     ),
                                   );
                                 }),
-                                Divider(
-                                    height: 1.h,
-                                    color: AppTheme.borderColor(context)),
-                                Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 8.h),
-                                  child: _buildInputField(
-                                    context,
-                                    controller:
-                                        controller.labelOffsetXFieldController,
-                                    label: 'Label X-Offset (Dots)',
-                                    hint: 'Default: 20',
-                                    icon:
-                                        CupertinoIcons.arrow_right_square_fill,
-                                    keyboardType: TextInputType.number,
-                                  ),
-                                ),
+
                               ],
                             ),
                           ),
@@ -1106,8 +1091,8 @@ class SettingScreen extends GetView<SettingController> {
               _infoRow(
                   context,
                   'App Version',
-                  controller.companyVersionFieldController.text.isNotEmpty
-                      ? controller.companyVersionFieldController.text
+                  Get.find<AppService>().appModel.value.version.isNotEmpty
+                      ? Get.find<AppService>().appModel.value.version
                       : '1.0.0'),
               _infoRow(context, 'POS Programmer', '@Rizumiya & Flinkaja Team'),
               _infoRow(context, 'Web Back Office Programmer',

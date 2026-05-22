@@ -38,224 +38,267 @@ class _AddPrinterDialogState extends State<AddPrinterDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
       backgroundColor: AppTheme.scaffoldBackgroundColor(context),
       child: Container(
-        width: 460.w,
-        padding: EdgeInsets.all(20.w),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        width: 700.w,
+        height: 480.h,
+        padding: EdgeInsets.all(24.w),
+        child: Column(
+          children: [
+            // Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Add Printer',
+                      style: TextStyle(
+                        fontSize: 18.sp,
+                        fontFamily: AppTheme.fontBold,
+                        color: AppTheme.textColor(context),
+                      ),
+                    ),
+                    SizedBox(height: 4.h),
+                    Text(
+                      'Configure a new printer to use in your POS',
+                      style: TextStyle(
+                        fontSize: 12.sp,
+                        color: AppTheme.secondaryTextColor(context),
+                        fontFamily: AppTheme.fontRegular,
+                      ),
+                    ),
+                  ],
+                ),
+                InkWell(
+                  onTap: () => Get.back(),
+                  borderRadius: BorderRadius.circular(20.r),
+                  child: Icon(
+                    CupertinoIcons.xmark_circle_fill,
+                    size: 24.sp,
+                    color: Colors.grey.shade400,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 24.h),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Add Printer',
-                    style: TextStyle(
-                      fontSize: 15.sp,
-                      fontFamily: AppTheme.fontBold,
-                      color: AppTheme.textColor(context),
+                  // Left Side: Form
+                  Expanded(
+                    flex: 5,
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildLabel('Printer Name'),
+                          TextField(
+                            controller: nameController,
+                            style: TextStyle(fontSize: 12.sp, fontFamily: AppTheme.fontMedium),
+                            decoration: _inputDecoration('e.g. Front Cashier Printer'),
+                          ),
+                          SizedBox(height: 16.h),
+                          _buildLabel('Connection Type'),
+                          Row(
+                            children: [
+                              _buildTypeChip('Bluetooth', 'bluetooth'),
+                              SizedBox(width: 8.w),
+                              _buildTypeChip('Network (IP)', 'network'),
+                            ],
+                          ),
+                          SizedBox(height: 16.h),
+                          _buildLabel('Printer Role'),
+                          Wrap(
+                            spacing: 8.w,
+                            runSpacing: 6.h,
+                            children: [
+                              _buildRoleChip('Cashier', 'cashier'),
+                              _buildRoleChip('Kitchen', 'kitchen'),
+                              _buildRoleChip('Label', 'label'),
+                            ],
+                          ),
+                          SizedBox(height: 16.h),
+                          CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            controlAffinity: ListTileControlAffinity.leading,
+                            title: Text(
+                              'Printer has AutoCut (e.g. large 80mm printer)',
+                              style: TextStyle(
+                                fontSize: 12.sp,
+                                fontFamily: AppTheme.fontMedium,
+                                color: AppTheme.textColor(context),
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Check this if your printer is a large machine to fix QR Code alignment on 58mm paper.',
+                              style: TextStyle(
+                                fontSize: 10.sp,
+                                fontFamily: AppTheme.fontRegular,
+                                color: AppTheme.secondaryTextColor(context),
+                              ),
+                            ),
+                            value: isAutoCut,
+                            onChanged: (val) {
+                              setState(() {
+                                isAutoCut = val ?? false;
+                              });
+                            },
+                            activeColor: AppTheme.primaryColor,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  InkWell(
-                    onTap: () => Get.back(),
-                    borderRadius: BorderRadius.circular(20.r),
-                    child: Icon(
-                      CupertinoIcons.xmark_circle_fill,
-                      size: 22.sp,
-                      color: Colors.grey.shade400,
-                    ),
+                  SizedBox(width: 24.w),
+                  Container(
+                    width: 1.w,
+                    height: double.infinity,
+                    color: AppTheme.borderColor(context),
                   ),
-                ],
-              ),
-              SizedBox(height: 4.h),
-              Text(
-                'Configure a new printer to use in your POS',
-                style: TextStyle(
-                  fontSize: 11.sp,
-                  color: AppTheme.secondaryTextColor(context),
-                  fontFamily: AppTheme.fontRegular,
-                ),
-              ),
-              SizedBox(height: 20.h),
-
-              // Printer Name
-              _buildLabel('Printer Name'),
-              TextField(
-                controller: nameController,
-                style: TextStyle(fontSize: 12.sp, fontFamily: AppTheme.fontMedium),
-                decoration: _inputDecoration('e.g. Front Cashier Printer'),
-              ),
-              SizedBox(height: 16.h),
-
-              // Connection Type
-              _buildLabel('Connection Type'),
-              Row(
-                children: [
-                  _buildTypeChip('Bluetooth', 'bluetooth'),
-                  SizedBox(width: 8.w),
-                  _buildTypeChip('Network (IP)', 'network'),
-                ],
-              ),
-              SizedBox(height: 16.h),
-
-              // Role
-              _buildLabel('Printer Role'),
-              Wrap(
-                spacing: 8.w,
-                runSpacing: 6.h,
-                children: [
-                  _buildRoleChip('Cashier', 'cashier'),
-                  _buildRoleChip('Kitchen', 'kitchen'),
-                  _buildRoleChip('Label', 'label'),
-                ],
-              ),
-              SizedBox(height: 16.h),
-
-              // AutoCut Option
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                title: Text(
-                  'Printer has AutoCut (e.g. large 80mm printer)',
-                  style: TextStyle(
-                    fontSize: 12.sp,
-                    fontFamily: AppTheme.fontMedium,
-                    color: AppTheme.textColor(context),
-                  ),
-                ),
-                subtitle: Text(
-                  'Check this if your printer is a large machine to fix QR Code alignment on 58mm paper.',
-                  style: TextStyle(
-                    fontSize: 10.sp,
-                    fontFamily: AppTheme.fontRegular,
-                    color: AppTheme.secondaryTextColor(context),
-                  ),
-                ),
-                value: isAutoCut,
-                onChanged: (val) {
-                  setState(() {
-                    isAutoCut = val ?? false;
-                  });
-                },
-                activeColor: AppTheme.primaryColor,
-              ),
-              SizedBox(height: 16.h),
-
-              // Conditional Address Input
-              if (selectedType == 'network') ...[
-                _buildLabel('IP Address'),
-                TextField(
-                  controller: ipController,
-                  keyboardType: TextInputType.number,
-                  style: TextStyle(fontSize: 12.sp, fontFamily: AppTheme.fontMedium),
-                  decoration: _inputDecoration('192.168.1.100'),
-                ),
-                SizedBox(height: 16.h),
-                _buildLabel('Port (Default: 9100)'),
-                TextField(
-                  controller: portController,
-                  keyboardType: TextInputType.number,
-                  style: TextStyle(fontSize: 12.sp, fontFamily: AppTheme.fontMedium),
-                  decoration: _inputDecoration('9100'),
-                ),
-              ] else ...[
-                _buildLabel('Select Bluetooth Device'),
-                Obx(() => controller.isScanning.value
-                    ? Padding(
-                        padding: EdgeInsets.symmetric(vertical: 20.h),
-                        child: Center(
-                          child: SizedBox(
-                            width: 20.w,
-                            height: 20.w,
-                            child: const CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppTheme.primaryColor,
+                  SizedBox(width: 24.w),
+                  // Right Side: Bluetooth / Network + Button
+                  Expanded(
+                    flex: 4,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (selectedType == 'network') ...[
+                          _buildLabel('IP Address'),
+                          TextField(
+                            controller: ipController,
+                            keyboardType: TextInputType.number,
+                            style: TextStyle(fontSize: 12.sp, fontFamily: AppTheme.fontMedium),
+                            decoration: _inputDecoration('192.168.1.100'),
+                          ),
+                          SizedBox(height: 16.h),
+                          _buildLabel('Port (Default: 9100)'),
+                          TextField(
+                            controller: portController,
+                            keyboardType: TextInputType.number,
+                            style: TextStyle(fontSize: 12.sp, fontFamily: AppTheme.fontMedium),
+                            decoration: _inputDecoration('9100'),
+                          ),
+                          const Spacer(),
+                        ] else ...[
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _buildLabel('Select Bluetooth Device'),
+                              if (!controller.isScanning.value)
+                                InkWell(
+                                  onTap: () => controller.startBluetoothScan(),
+                                  child: Text('Scan Again', style: TextStyle(fontSize: 11.sp, color: AppTheme.primaryColor, fontFamily: AppTheme.fontMedium)),
+                                ),
+                            ],
+                          ),
+                          Expanded(
+                            child: Obx(() => controller.isScanning.value
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        SizedBox(
+                                          width: 24.w,
+                                          height: 24.w,
+                                          child: const CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: AppTheme.primaryColor,
+                                          ),
+                                        ),
+                                        SizedBox(height: 12.h),
+                                        Text('Scanning devices...', style: TextStyle(fontSize: 11.sp, color: AppTheme.secondaryTextColor(context))),
+                                      ],
+                                    ),
+                                  )
+                                : Container(
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.isDark(context) ? Colors.grey.shade900 : Colors.grey.shade50,
+                                      border: Border.all(color: AppTheme.borderColor(context)),
+                                      borderRadius: BorderRadius.circular(10.r),
+                                    ),
+                                    child: controller.discoveredDevices.isEmpty
+                                        ? Center(
+                                            child: Text(
+                                              'No paired devices found',
+                                              style: TextStyle(
+                                                fontSize: 12.sp,
+                                                color: AppTheme.secondaryTextColor(context),
+                                              ),
+                                            ),
+                                          )
+                                        : ListView.separated(
+                                            padding: EdgeInsets.zero,
+                                            itemCount: controller.discoveredDevices.length,
+                                            separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.borderColor(context)),
+                                            itemBuilder: (context, index) {
+                                              final d = controller.discoveredDevices[index];
+                                              final isSelected = selectedBtAddress == d.address;
+                                              return ListTile(
+                                                dense: true,
+                                                contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
+                                                title: Text(
+                                                  d.name ?? 'Unknown',
+                                                  style: TextStyle(
+                                                    fontSize: 13.sp,
+                                                    fontFamily: AppTheme.fontMedium,
+                                                    color: AppTheme.textColor(context),
+                                                  ),
+                                                ),
+                                                subtitle: Text(
+                                                  d.address ?? '',
+                                                  style: TextStyle(
+                                                    fontSize: 11.sp,
+                                                    color: AppTheme.secondaryTextColor(context),
+                                                  ),
+                                                ),
+                                                trailing: isSelected
+                                                    ? Icon(CupertinoIcons.checkmark_circle_fill,
+                                                        color: AppTheme.primaryColor, size: 20.sp)
+                                                    : null,
+                                                onTap: () {
+                                                  setState(() {
+                                                    selectedBtAddress = d.address;
+                                                    selectedBtName = d.name;
+                                                    if (nameController.text.isEmpty) {
+                                                      nameController.text = d.name ?? '';
+                                                    }
+                                                  });
+                                                },
+                                              );
+                                            },
+                                          ),
+                                  )),
+                          ),
+                          SizedBox(height: 16.h),
+                        ],
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48.h,
+                          child: ElevatedButton(
+                            onPressed: _submit,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primaryColor,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
+                            ),
+                            child: Text(
+                              'Save Printer',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14.sp,
+                                fontFamily: AppTheme.fontMedium,
+                              ),
                             ),
                           ),
                         ),
-                      )
-                    : Container(
-                        height: 140.h,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: AppTheme.borderColor(context)),
-                          borderRadius: BorderRadius.circular(10.r),
-                        ),
-                        child: controller.discoveredDevices.isEmpty
-                            ? Center(
-                                child: Text(
-                                  'No paired devices found',
-                                  style: TextStyle(
-                                    fontSize: 12.sp,
-                                    color: AppTheme.secondaryTextColor(context),
-                                  ),
-                                ),
-                              )
-                            : ListView.builder(
-                                itemCount: controller.discoveredDevices.length,
-                                itemBuilder: (context, index) {
-                                  final d = controller.discoveredDevices[index];
-                                  final isSelected = selectedBtAddress == d.address;
-                                  return ListTile(
-                                    dense: true,
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 0),
-                                    title: Text(
-                                      d.name ?? 'Unknown',
-                                      style: TextStyle(
-                                        fontSize: 12.sp,
-                                        fontFamily: AppTheme.fontMedium,
-                                        color: AppTheme.textColor(context),
-                                      ),
-                                    ),
-                                    subtitle: Text(
-                                      d.address ?? '',
-                                      style: TextStyle(
-                                        fontSize: 10.sp,
-                                        color: AppTheme.secondaryTextColor(context),
-                                      ),
-                                    ),
-                                    trailing: isSelected
-                                        ? Icon(CupertinoIcons.checkmark_circle_fill,
-                                            color: AppTheme.primaryColor, size: 16.sp)
-                                        : null,
-                                    onTap: () {
-                                      setState(() {
-                                        selectedBtAddress = d.address;
-                                        selectedBtName = d.name;
-                                        if (nameController.text.isEmpty) {
-                                          nameController.text = d.name ?? '';
-                                        }
-                                      });
-                                    },
-                                  );
-                                },
-                              ),
-                      )),
-              ],
-
-              SizedBox(height: 20.h),
-              SizedBox(
-                width: double.infinity,
-                height: 42.h,
-                child: ElevatedButton(
-                  onPressed: _submit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.r)),
-                  ),
-                  child: Text(
-                    'Save Printer',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 13.sp,
-                      fontFamily: AppTheme.fontMedium,
+                      ],
                     ),
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

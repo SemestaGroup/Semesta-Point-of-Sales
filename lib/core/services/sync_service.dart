@@ -849,7 +849,16 @@ class SyncService extends GetxService {
                 "SyncService: Ignored HTTP ${response.statusCode} - Logical Failure: ${response.body}");
           }
         } catch (_) {
-          // Body is not JSON or unparseable, rely on HTTP status
+          // Body is not JSON or unparseable. 
+          // If the API returns HTML (like a PHP/CodeIgniter Exception), treat it as a failure.
+          final bodyLower = response.body.toLowerCase();
+          if (bodyLower.contains('<div') || 
+              bodyLower.contains('exception') || 
+              bodyLower.contains('error') ||
+              bodyLower.contains('mysqli_sql_exception')) {
+            isTreatedAsSuccess = false;
+            debugPrint("SyncService: Ignored HTTP ${response.statusCode} - PHP/CodeIgniter Error detected: ${response.body}");
+          }
         }
       }
 
