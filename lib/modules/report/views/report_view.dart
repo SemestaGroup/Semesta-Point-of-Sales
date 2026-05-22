@@ -45,12 +45,12 @@ class ReportScreen extends StatelessWidget {
                             isActive: controller.activeTab.value == 2,
                             onTap: () => controller.changeTab(2),
                           ),
-                          SizedBox(width: 32.w),
+                          /*SizedBox(width: 32.w),
                           _buildTabItem(
                             title: "Cash Flow",
                             isActive: controller.activeTab.value == 3,
                             onTap: () => controller.changeTab(3),
-                          ),
+                          ),*/
                         ],
                       )),
                   SizedBox(height: 24.h),

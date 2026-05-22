@@ -97,10 +97,11 @@ class ManagePrinterDialog extends StatelessWidget {
                       child: Table(
                         columnWidths: const {
                           0: FlexColumnWidth(3),
-                          1: FlexColumnWidth(2),
-                          2: FlexColumnWidth(2),
+                          1: FlexColumnWidth(1.5),
+                          2: FlexColumnWidth(1.5),
                           3: FlexColumnWidth(2),
                           4: FlexColumnWidth(2),
+                          5: FlexColumnWidth(2),
                         },
                         defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                         children: [
@@ -157,6 +158,7 @@ class ManagePrinterDialog extends StatelessWidget {
       children: [
         Padding(padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 4.w), child: Text('PRINTER NAME', style: headerStyle)),
         Padding(padding: EdgeInsets.symmetric(vertical: 10.h), child: Text('ROLE', style: headerStyle)),
+        Padding(padding: EdgeInsets.symmetric(vertical: 10.h), child: Text('AUTOCUT', style: headerStyle)),
         Padding(padding: EdgeInsets.symmetric(vertical: 10.h), child: Text('CONNECTION', style: headerStyle)),
         Padding(padding: EdgeInsets.symmetric(vertical: 10.h), child: Text('STATUS', style: headerStyle)),
         Padding(padding: EdgeInsets.symmetric(vertical: 10.h), child: Text('ACTIONS', style: headerStyle)),
@@ -192,6 +194,14 @@ class ManagePrinterDialog extends StatelessWidget {
           ),
         ),
         _buildRoleBadge(p.role),
+        Text(
+          p.isAutoCut ? 'YES' : 'NO',
+          style: TextStyle(
+            fontSize: 10.sp,
+            color: p.isAutoCut ? AppTheme.primaryColor : Colors.grey,
+            fontFamily: AppTheme.fontMedium,
+          ),
+        ),
         Text(
           p.type.toUpperCase(),
           style: TextStyle(

@@ -1861,4 +1861,46 @@ class ApiService extends GetxService {
       );
     }
   }
+
+  Future<ResponseApiModel> getExpenses() async {
+    try {
+      final uri = _getUri('pos_expenses');
+      debugPrint('=== [getExpenses] ===');
+      debugPrint('URL    : $uri');
+      
+      final responseApi = await http.get(
+        uri,
+        headers: _getAuthHeaders(),
+      );
+
+      debugPrint('Status : ${responseApi.statusCode}');
+      // debugPrint('Body   : ${responseApi.body}');
+      debugPrint('=====================');
+
+      final dataResponse = jsonDecode(responseApi.body);
+
+      if (responseApi.statusCode == 200) {
+        return ResponseApiModel(
+          responsestate: Constants.successState,
+          message: 'Berhasil memuat pengeluaran',
+          data: (dataResponse is Map) ? (dataResponse['data'] ?? dataResponse) : dataResponse,
+        );
+      }
+
+      String? message;
+      if (dataResponse is Map) message = dataResponse['message'];
+      return ResponseApiModel(
+        responsestate: Constants.errorState,
+        message: message ?? 'Failed to get expenses (HTTP ${responseApi.statusCode})',
+        data: null,
+      );
+    } catch (e) {
+      debugPrint('getExpenses Error: $e');
+      return ResponseApiModel(
+        responsestate: Constants.errorState,
+        message: 'Server error: $e',
+        data: null,
+      );
+    }
+  }
 }

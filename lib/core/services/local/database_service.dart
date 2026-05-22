@@ -65,13 +65,21 @@ class DatabaseService {
     debugPrint('SQLite: Opening database at $path with version 43');
     return await openDatabase(
       path,
-      version: 43,
+      version: 44,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
   }
 
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 44) {
+      try {
+        await db.execute("ALTER TABLE cash_flow ADD COLUMN category TEXT DEFAULT '1'");
+      } catch (e) {}
+      try {
+        await db.execute("ALTER TABLE cash_flow ADD COLUMN addedfrom TEXT DEFAULT '1'");
+      } catch (e) {}
+    }
     if (oldVersion < 43) {
       try {
         await db.execute('''
@@ -87,7 +95,9 @@ class DatabaseService {
             created_at TEXT,
             id_shift INTEGER DEFAULT 0,
             is_synced INTEGER DEFAULT 0,
-            remote_id INTEGER
+            remote_id INTEGER,
+            category TEXT DEFAULT '1',
+            addedfrom TEXT DEFAULT '1'
           )
         ''');
       } catch (e) {/* table might already exist */}
@@ -787,7 +797,9 @@ class DatabaseService {
         created_at TEXT,
         id_shift INTEGER DEFAULT 0,
         is_synced INTEGER DEFAULT 0,
-        remote_id INTEGER
+        remote_id INTEGER,
+        category TEXT DEFAULT '1',
+        addedfrom TEXT DEFAULT '1'
       )
     ''');
   }
@@ -966,8 +978,11 @@ class DatabaseService {
   }
 
   Future<List<Map<String, dynamic>>> getCashFlowSince(String startTime) async {
+    // Normalize both strings to compare as 'YYYY-MM-DD HH:MM:SS'
     return await rawQuery(
-      'SELECT * FROM cash_flow WHERE created_at >= ? ORDER BY created_at ASC',
+      '''SELECT * FROM cash_flow 
+         WHERE substr(replace(created_at, 'T', ' '), 1, 19) >= substr(replace(?, 'T', ' '), 1, 19) 
+         ORDER BY created_at ASC''',
       [startTime],
     );
   }

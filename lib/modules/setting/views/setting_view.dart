@@ -1109,10 +1109,10 @@ class SettingScreen extends GetView<SettingController> {
                   controller.companyVersionFieldController.text.isNotEmpty
                       ? controller.companyVersionFieldController.text
                       : '1.0.0'),
-              _infoRow(context, 'POS Programmer', 'Rizki & Semesta Team'),
+              _infoRow(context, 'POS Programmer', '@Rizumiya & Flinkaja Team'),
               _infoRow(context, 'Web Back Office Programmer',
-                  'Semesta Web Dev Team'),
-              _infoRow(context, 'Support', 'support@semestaspace.com'),
+                  '@cikgupapazola & Flinkaja Team'),
+              _infoRow(context, 'Support', 'support@flinkaja.com'),
             ],
           ),
           actions: [

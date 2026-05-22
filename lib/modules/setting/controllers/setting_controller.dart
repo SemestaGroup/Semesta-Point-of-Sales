@@ -528,7 +528,7 @@ class SettingController extends GetxController {
     required String line2, // row 2: customer name
     required String line3, // row 3: order code
     required String line4, // row 4: product name
-    String paperSize = '58mm',
+    bool isAutoCut = false,
     int copies = 1,
     String? productNote,
   }) async {
@@ -538,6 +538,8 @@ class SettingController extends GetxController {
     final int maxChars = 32;
     final String lineSeparator = '-' * maxChars;
     List<int> bytes = [];
+
+    bytes += generator.reset();
 
     for (int i = 0; i < copies; i++) {
       // Row 1: Date/Time
@@ -585,6 +587,43 @@ class SettingController extends GetxController {
   }
 
   /// Builds ESC/POS bytes for a test page, role-aware.
+
+  String _formatCenter(String text, int maxChars) {
+    List<String> words = text.split(' ');
+    List<String> lines = [];
+    String currentLine = '';
+
+    // 1. Bungkus teks per kata agar tidak melebihi maxChars
+    for (String word in words) {
+      if (currentLine.isEmpty) {
+        currentLine = word;
+      } else if ('$currentLine $word'.length <= maxChars) {
+        currentLine = '$currentLine $word';
+      } else {
+        lines.add(currentLine);
+        currentLine = word;
+      }
+    }
+    if (currentLine.isNotEmpty) lines.add(currentLine);
+
+    // 2. Buat tiap baris berada di tengah secara presisi
+    List<String> centeredLines = lines.map((line) {
+      int totalSpaces = maxChars - line.length;
+
+      // Jika teks pas atau lebih dari maxChars, biarkan apa adanya
+      if (totalSpaces <= 0) return line;
+
+      // Menghitung spasi kiri (pembagian bulat)
+      int leftSpaces = totalSpaces ~/ 2;
+
+      // Satukan spasi kiri + teks + spasi kanan hingga totalnya pas maxChars
+      return line.padLeft(leftSpaces + line.length).padRight(maxChars);
+    }).toList();
+
+    return centeredLines.join('\n');
+  }
+
+
   Future<List<int>> _buildTestBytes(PrinterDevice printer) async {
     final profile = await CapabilityProfile.load();
 
@@ -599,13 +638,15 @@ class SettingController extends GetxController {
         line2: 'TEST CUSTOMER',
         line3: '#ABCDEF12',
         line4: 'TEST PRODUCT NAME',
-        paperSize: printer.paperSize,
+        isAutoCut: printer.isAutoCut,
       );
     }
 
     // --- Generic test for cashier / kitchen ---
     final generator = Generator(PaperSize.mm58, profile);
     List<int> bytes = [];
+
+    bytes += generator.reset();
 
     String companyName = userService.getPrefString(Constants.posCompanyName);
     if (companyName == 'Guest' || companyName.isEmpty) companyName = 'FLINKPOS';
@@ -619,47 +660,47 @@ class SettingController extends GetxController {
     const lineSep = '------------------------------------------';
 
     bytes += generator.text(
-        isKitchen ? '*** KITCHEN ***' : companyName.toUpperCase(),
+        _formatCenter(isKitchen ? '*** KITCHEN ***' : companyName.toUpperCase(), 32),
         styles: const PosStyles(
-            align: PosAlign.center, bold: true, height: PosTextSize.size2));
+            align: PosAlign.left, bold: true, height: PosTextSize.size2));
 
     if (!isKitchen) {
       if (address.isNotEmpty)
-        bytes += generator.text(address,
-            styles: const PosStyles(align: PosAlign.center));
+        bytes += generator.text(_formatCenter(address, 32),
+            styles: const PosStyles(align: PosAlign.left));
       if (phone.isNotEmpty)
-        bytes += generator.text('Tel: $phone',
-            styles: const PosStyles(align: PosAlign.center));
+        bytes += generator.text(_formatCenter('Tel: $phone', 32),
+            styles: const PosStyles(align: PosAlign.left));
     }
 
-    bytes += generator.text(lineSep,
-        styles: const PosStyles(align: PosAlign.center));
-    bytes += generator.text(title,
-        styles: const PosStyles(align: PosAlign.center, bold: true));
+    bytes += generator.text(_formatCenter(lineSep, 32),
+        styles: const PosStyles(align: PosAlign.left));
+    bytes += generator.text(_formatCenter(title, 32),
+        styles: const PosStyles(align: PosAlign.left, bold: true));
 
     if (isKitchen) {
-      bytes += generator.text('Role: KITCHEN PREPARATION',
-          styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(_formatCenter('Role: KITCHEN PREPARATION', 32),
+          styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text('Receipt No: #TEST-KITCHEN',
           styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text(lineSep,
-          styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(_formatCenter(lineSep, 32),
+          styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text('1x TEST PRODUCT NAME',
           styles: const PosStyles(align: PosAlign.left, bold: true));
       bytes += generator.text('   * Test Note/Instruction',
           styles: const PosStyles(
               align: PosAlign.left, fontType: PosFontType.fontB));
-      bytes += generator.text(lineSep,
-          styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(_formatCenter(lineSep, 32),
+          styles: const PosStyles(align: PosAlign.left));
     } else {
-      bytes += generator.text('Role: ${printer.role.toUpperCase()}',
-          styles: const PosStyles(align: PosAlign.center));
-      bytes += generator.text('Connection: ${printer.type}',
-          styles: const PosStyles(align: PosAlign.center));
-      bytes += generator.text(lineSep,
-          styles: const PosStyles(align: PosAlign.center));
-      bytes += generator.text('Printer connected successfully!',
-          styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(_formatCenter('Role: ${printer.role.toUpperCase()}', 32),
+          styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text(_formatCenter('Connection: ${printer.type}', 32),
+          styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text(_formatCenter(lineSep, 32),
+          styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text(_formatCenter('Printer connected successfully!', 32),
+          styles: const PosStyles(align: PosAlign.left));
     }
 
     bytes += generator.feed(2);
@@ -696,7 +737,7 @@ class SettingController extends GetxController {
   Future<List<int>> _buildZReportBytes(PrinterDevice printer,
       ShiftSessionModel shift, Map<String, int> recap) async {
     final profile = await CapabilityProfile.load();
-    final is80mm = printer.paperSize == '80mm';
+    final is80mm = false; // Force 58mm as requested
     final paperSize = is80mm ? PaperSize.mm80 : PaperSize.mm58;
 
     final int maxChars = is80mm ? 48 : 33;
@@ -724,15 +765,16 @@ class SettingController extends GetxController {
     if (companyName == 'Guest' || companyName.isEmpty) companyName = 'FLINKPOS';
 
     // Header
-    bytes += generator.text(companyName.toUpperCase(),
+    bytes += generator.text(_formatCenter(companyName.toUpperCase(), maxChars),
         styles: const PosStyles(
-            align: PosAlign.center,
+            align: PosAlign.left,
             bold: true,
             height: PosTextSize.size2,
             width: PosTextSize.size2));
-    bytes += generator.text('Z-REPORT / SHIFT RECAP',
-        styles: const PosStyles(align: PosAlign.center, bold: true));
-    bytes += generator.hr();
+    bytes += generator.text(_formatCenter('Z-REPORT / SHIFT RECAP', maxChars),
+        styles: const PosStyles(align: PosAlign.left, bold: true));
+    bytes += generator.text(_formatCenter(lineSep, maxChars),
+        styles: const PosStyles(align: PosAlign.left));
 
     // Financials
     // Parse detailed reconciliation data if available
@@ -769,20 +811,22 @@ class SettingController extends GetxController {
     if (phone == 'Guest') phone = '';
 
     // 1. Header (Nota Style)
-    bytes += generator.text(companyName.toUpperCase(),
+    bytes += generator.text(_formatCenter(companyName.toUpperCase(), maxChars),
         styles: const PosStyles(
-            align: PosAlign.center, bold: true, height: PosTextSize.size2));
+            align: PosAlign.left, bold: true, height: PosTextSize.size2));
     if (address.isNotEmpty)
-      bytes += generator.text(address,
-          styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(_formatCenter(address, maxChars),
+          styles: const PosStyles(align: PosAlign.left));
     if (phone.isNotEmpty)
-      bytes += generator.text('Tel: $phone',
-          styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(_formatCenter('Tel: $phone', maxChars),
+          styles: const PosStyles(align: PosAlign.left));
 
-    bytes += generator.hr();
-    bytes += generator.text('Z-REPORT / SHIFT RECAP',
-        styles: const PosStyles(align: PosAlign.center, bold: true));
-    bytes += generator.hr();
+    bytes += generator.text(_formatCenter(lineSep, maxChars),
+        styles: const PosStyles(align: PosAlign.left));
+    bytes += generator.text(_formatCenter('Z-REPORT / SHIFT RECAP', maxChars),
+        styles: const PosStyles(align: PosAlign.left, bold: true));
+    bytes += generator.text(_formatCenter(lineSep, maxChars),
+        styles: const PosStyles(align: PosAlign.left));
 
     // 2. Shift Info
     printRow('Shift:', shift.shiftName);
@@ -792,7 +836,8 @@ class SettingController extends GetxController {
     if (shift.endTime != null) {
       printRow('End:', shift.endTime.toString().split('.')[0].substring(0, 16));
     }
-    bytes += generator.hr();
+    bytes += generator.text(_formatCenter(lineSep, maxChars),
+        styles: const PosStyles(align: PosAlign.left));
 
     if (txData != null) {
       // 3. Initial Balance & Sales Summary
@@ -818,13 +863,14 @@ class SettingController extends GetxController {
       }
       printRow('Cash Sales:', f(cashSales));
       printRow('Non-Cash Sales:', f(nonCashSales));
-      bytes += generator.hr();
+      bytes += generator.text(_formatCenter(lineSep, maxChars),
+          styles: const PosStyles(align: PosAlign.left));
 
       // 4. Products Sold (List Items)
-      bytes += generator.text('ITEM SALES',
-          styles: const PosStyles(align: PosAlign.center, bold: true));
-      bytes += generator.text('------------------------------------------',
-          styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(_formatCenter('ITEM SALES', maxChars),
+          styles: const PosStyles(align: PosAlign.left, bold: true));
+      bytes += generator.text(_formatCenter(lineSep, maxChars),
+          styles: const PosStyles(align: PosAlign.left));
       final products = txData['products_sold'] as List<dynamic>? ?? [];
       for (var product in products) {
         final qty = product['qty'] ?? 0;
@@ -842,22 +888,24 @@ class SettingController extends GetxController {
               styles: const PosStyles(fontType: PosFontType.fontB));
         }
       }
-      bytes += generator.hr();
+      bytes += generator.text(_formatCenter(lineSep, maxChars),
+          styles: const PosStyles(align: PosAlign.left));
 
       // 5. Credit Notes (Refunds)
       final creditNotes = txData['credit_notes'] ?? {};
       final cnList = creditNotes['list'] as List<dynamic>? ?? [];
       final cnTotal = creditNotes['total'] ?? 0;
       if (cnList.isNotEmpty) {
-        bytes += generator.text('CREDIT NOTES (REFUNDS)',
-            styles: const PosStyles(align: PosAlign.center, bold: true));
+        bytes += generator.text(_formatCenter('CREDIT NOTES (REFUNDS)', maxChars),
+            styles: const PosStyles(align: PosAlign.left, bold: true));
         for (var cn in cnList) {
           printRow(
               cn['number'] ?? 'CN', '-${f(cn['total']).replaceAll('Rp. ', '')}',
               fontB: true);
         }
         printRow('TOTAL REFUNDS:', f(cnTotal), bold: true);
-        bytes += generator.hr();
+        bytes += generator.text(_formatCenter(lineSep, maxChars),
+            styles: const PosStyles(align: PosAlign.left));
       }
 
       // 6. Discounts & Loyalty
@@ -865,8 +913,8 @@ class SettingController extends GetxController {
       final prodDisc = discounts['product'] ?? 0;
       final transDisc = discounts['transaction'] ?? 0;
       if (prodDisc > 0 || transDisc > 0) {
-        bytes += generator.text('DISCOUNTS',
-            styles: const PosStyles(align: PosAlign.center, bold: true));
+        bytes += generator.text(_formatCenter('DISCOUNTS', maxChars),
+            styles: const PosStyles(align: PosAlign.left, bold: true));
         if (prodDisc > 0)
           printRow(
               'Product Discounts:', '-${f(prodDisc).replaceAll('Rp. ', '')}');
@@ -916,8 +964,8 @@ class SettingController extends GetxController {
 
     bytes += generator.hr();
     bytes += generator.text(
-        'Printed on: ${DateTime.now().toString().split('.')[0]}',
-        styles: const PosStyles(align: PosAlign.center));
+        _formatCenter('Printed on: ${DateTime.now().toString().split('.')[0]}', maxChars),
+        styles: const PosStyles(align: PosAlign.left));
     bytes += generator.feed(3);
     bytes += generator.cut();
 

@@ -1780,8 +1780,10 @@ class HomeController extends GetxController {
         idPos: idPos,
         invoiceId: invoiceIdStr,
         amount: amount.toString(),
-        paymentMode: paymentModeId, // Store mapped ID in local SQLite instead of string
-        paymentMethod: paymentMethod ?? paymentMode, // Keep original string here
+        paymentMode:
+            paymentModeId, // Store mapped ID in local SQLite instead of string
+        paymentMethod:
+            paymentMethod ?? paymentMode, // Keep original string here
         date: date,
         dateRecorded: dateRecorded,
         note: note ?? orderNote.value,
@@ -1941,9 +1943,11 @@ class HomeController extends GetxController {
           line1: dateTimeStr,
           line2: customerWithOrderType,
           line3: orderCode,
-          line4: item.description?.isNotEmpty == true ? item.description! : (item.productName ?? ''),
+          line4: item.description?.isNotEmpty == true
+              ? item.description!
+              : (item.productName ?? ''),
           productNote: item.note,
-          paperSize: labelPrinter.paperSize,
+          isAutoCut: labelPrinter.isAutoCut,
           copies: item.jumlah, // Use item quantity for copies
         );
         allBytes.addAll(bytes);
@@ -1954,6 +1958,52 @@ class HomeController extends GetxController {
     } catch (e) {
       Get.snackbar('Print Label Error', 'Failed to print labels: $e');
     }
+  }
+
+  String _formatRow(String left, String right, int maxChars) {
+    if (left.length + right.length > maxChars) {
+      if (left.length > maxChars - right.length - 1) {
+        left = '${left.substring(0, maxChars - right.length - 2)}..';
+      }
+    }
+    int padLength = maxChars - left.length;
+    if (padLength < 0) padLength = 0;
+    return left + right.padLeft(padLength);
+  }
+
+  String _formatCenter(String text, int maxChars) {
+    List<String> words = text.split(' ');
+    List<String> lines = [];
+    String currentLine = '';
+
+    // 1. Bungkus teks per kata agar tidak melebihi maxChars
+    for (String word in words) {
+      if (currentLine.isEmpty) {
+        currentLine = word;
+      } else if ('$currentLine $word'.length <= maxChars) {
+        currentLine = '$currentLine $word';
+      } else {
+        lines.add(currentLine);
+        currentLine = word;
+      }
+    }
+    if (currentLine.isNotEmpty) lines.add(currentLine);
+
+    // 2. Buat tiap baris berada di tengah secara presisi
+    List<String> centeredLines = lines.map((line) {
+      int totalSpaces = maxChars - line.length;
+
+      // Jika teks pas atau lebih dari maxChars, biarkan apa adanya
+      if (totalSpaces <= 0) return line;
+
+      // Menghitung spasi kiri (pembagian bulat)
+      int leftSpaces = totalSpaces ~/ 2;
+
+      // Satukan spasi kiri + teks + spasi kanan hingga totalnya pas maxChars
+      return line.padLeft(leftSpaces + line.length).padRight(maxChars);
+    }).toList();
+
+    return centeredLines.join('\n');
   }
 
   /// Print cashier receipt.
@@ -1977,15 +2027,18 @@ class HomeController extends GetxController {
       }
 
       final profile = await CapabilityProfile.load();
-      final is80mm = cashierPrinter.paperSize == '80mm';
-      final paperSize = is80mm ? PaperSize.mm80 : PaperSize.mm58;
+      final isAutoCutPrinter = cashierPrinter.isAutoCut;
+      final paperSize = PaperSize.mm58;
 
       // Standardizing widths: 58mm -> 32 chars (Font A), 80mm -> 48 chars
-      final int maxChars = is80mm ? 48 : 32;
+      // We always format for 32 chars since the receipt design is meant for 58mm paper.
+      final int maxChars = 32;
       final String lineSeparator = '-' * maxChars;
 
       final generator = Generator(paperSize, profile);
       List<int> bytes = [];
+
+      bytes += generator.reset();
 
       // 1. Logo
       final logoUrl = userService.getPrefString('pos_brand_logo');
@@ -2023,21 +2076,21 @@ class HomeController extends GetxController {
         phone = '';
       }
 
-      bytes += generator.text(companyName,
+      bytes += generator.text(_formatCenter(companyName, maxChars),
           styles: const PosStyles(
-              align: PosAlign.center, bold: true, height: PosTextSize.size2));
+              align: PosAlign.left, bold: true, height: PosTextSize.size2));
       if (address.isNotEmpty) {
-        bytes += generator.text(address,
-            styles: const PosStyles(align: PosAlign.center));
+        bytes += generator.text(_formatCenter(address, maxChars),
+            styles: const PosStyles(align: PosAlign.left));
       }
       if (phone.isNotEmpty) {
-        bytes += generator.text(phone,
-            styles: const PosStyles(align: PosAlign.center));
+        bytes += generator.text(_formatCenter(phone, maxChars),
+            styles: const PosStyles(align: PosAlign.left));
       }
-      bytes += generator.text('Closed Bill',
-          styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(_formatCenter('Closed Bill', maxChars),
+          styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text(lineSeparator,
-          styles: const PosStyles(align: PosAlign.center));
+          styles: const PosStyles(align: PosAlign.left));
 
       // 3. Order Info
       final now = DateTime.now();
@@ -2081,16 +2134,9 @@ class HomeController extends GetxController {
               .toString()
               .padLeft(3, '0');
 
-      bytes += generator.row([
-        PosColumn(
-            text: '$dateStr $timeStr',
-            width: 7,
-            styles: const PosStyles(align: PosAlign.left)),
-        PosColumn(
-            text: 'Q: $queueNoStr',
-            width: 5,
-            styles: const PosStyles(align: PosAlign.right, bold: true)),
-      ]);
+      bytes += generator.text(
+          _formatRow('$dateStr $timeStr', 'Q: $queueNoStr', maxChars),
+          styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text('Order Type: $orderTypeStr',
           styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text('Receipt No: $orderCode',
@@ -2112,7 +2158,7 @@ class HomeController extends GetxController {
             styles: const PosStyles(align: PosAlign.left));
       }
       bytes += generator.text(lineSeparator,
-          styles: const PosStyles(align: PosAlign.center));
+          styles: const PosStyles(align: PosAlign.left));
 
       // 4. Items
       final itemsToPrint = details ?? penjualanDetailModelList;
@@ -2121,8 +2167,11 @@ class HomeController extends GetxController {
         final String prefix = '${item.jumlah.toInt()}x ';
 
         // 8/12 of the line is for the item name, 4/12 is for the price.
-        final int maxNameLen = (is80mm ? 32 : 24) - prefix.length;
-        String name = item.description?.isNotEmpty == true ? item.description! : (item.productName ?? "Item");
+        // Using 24 because maxChars is 32 (58mm width layout)
+        final int maxNameLen = 24 - prefix.length;
+        String name = item.description?.isNotEmpty == true
+            ? item.description!
+            : (item.productName ?? "Item");
 
         if (name.length > maxNameLen) {
           name = '${name.substring(0, maxNameLen - 3)}..';
@@ -2131,16 +2180,8 @@ class HomeController extends GetxController {
         final String itemName = '$prefix$name';
         final String itemPrice = formatRupiah(subtotal).replaceAll('Rp. ', '');
 
-        bytes += generator.row([
-          PosColumn(
-              text: itemName,
-              width: 9,
-              styles: const PosStyles(align: PosAlign.left)),
-          PosColumn(
-              text: itemPrice,
-              width: 3,
-              styles: const PosStyles(align: PosAlign.right)),
-        ]);
+        bytes += generator.text(_formatRow(itemName, itemPrice, maxChars),
+            styles: const PosStyles(align: PosAlign.left));
 
         // Item-level Discount (Re-enabled)
         if (item.discountTotal > 0) {
@@ -2151,23 +2192,17 @@ class HomeController extends GetxController {
           final totalNominal = (nominalPerUnit * item.jumlah).toInt();
 
           if (totalNominal > 0) {
-            bytes += generator.row([
-              PosColumn(
-                  text: '   disc',
-                  width: 6,
-                  styles: const PosStyles(
-                      align: PosAlign.left, fontType: PosFontType.fontB)),
-              PosColumn(
-                  text: '-${formatRupiah(totalNominal).replaceAll('Rp. ', '')}',
-                  width: 6,
-                  styles: const PosStyles(
-                      align: PosAlign.right, fontType: PosFontType.fontB)),
-            ]);
+            bytes += generator.text(
+                _formatRow(
+                    '   disc',
+                    '-${formatRupiah(totalNominal).replaceAll('Rp. ', '')}',
+                    maxChars),
+                styles: const PosStyles(align: PosAlign.left));
           }
         }
       }
       bytes += generator.text(lineSeparator,
-          styles: const PosStyles(align: PosAlign.center));
+          styles: const PosStyles(align: PosAlign.left));
 
       // 5. Totals
       final subtotalToPrint =
@@ -2195,84 +2230,37 @@ class HomeController extends GetxController {
       }
 
       final String fSub = formatRupiah(subtotalToPrint).replaceAll('Rp. ', '');
-      bytes += generator.row([
-        PosColumn(
-            text: 'Subtotal',
-            width: 6,
-            styles: const PosStyles(align: PosAlign.left)),
-        PosColumn(
-            text: fSub,
-            width: 6,
-            styles: const PosStyles(align: PosAlign.right)),
-      ]);
+      bytes += generator.text(_formatRow('Subtotal', fSub, maxChars),
+          styles: const PosStyles(align: PosAlign.left));
 
       if (discountToPrint > 0) {
         final String fDisc =
             formatRupiah(discountToPrint).replaceAll('Rp. ', '');
-        bytes += generator.row([
-          PosColumn(
-              text: 'Discount',
-              width: 6,
-              styles: const PosStyles(align: PosAlign.left)),
-          PosColumn(
-              text: '-$fDisc',
-              width: 6,
-              styles: const PosStyles(align: PosAlign.right)),
-        ]);
+        bytes += generator.text(_formatRow('Discount', '-$fDisc', maxChars),
+            styles: const PosStyles(align: PosAlign.left));
       }
 
       final fTotal = formatRupiah(total).replaceAll('Rp. ', '');
-      bytes += generator.row([
-        PosColumn(
-            text: 'Total',
-            width: 6,
-            styles: const PosStyles(align: PosAlign.left, bold: true)),
-        PosColumn(
-            text: fTotal,
-            width: 6,
-            styles: const PosStyles(align: PosAlign.right, bold: true)),
-      ]);
+      bytes += generator.text(_formatRow('Total', fTotal, maxChars),
+          styles: const PosStyles(align: PosAlign.left, bold: true));
 
       final fDiterima = formatRupiah(diterima).replaceAll('Rp. ', '');
-      bytes += generator.row([
-        PosColumn(
-            text: 'Cash',
-            width: 6,
-            styles: const PosStyles(align: PosAlign.left)),
-        PosColumn(
-            text: fDiterima,
-            width: 6,
-            styles: const PosStyles(align: PosAlign.right)),
-      ]);
+      bytes += generator.text(_formatRow('Cash', fDiterima, maxChars),
+          styles: const PosStyles(align: PosAlign.left));
 
       final fKembalian = formatRupiah(kembalian).replaceAll('Rp. ', '');
-      bytes += generator.row([
-        PosColumn(
-            text: 'Change',
-            width: 6,
-            styles: const PosStyles(align: PosAlign.left)),
-        PosColumn(
-            text: kembalian > 0 ? fKembalian : '0',
-            width: 6,
-            styles: const PosStyles(align: PosAlign.right)),
-      ]);
+      bytes += generator.text(
+          _formatRow('Change', kembalian > 0 ? fKembalian : '0', maxChars),
+          styles: const PosStyles(align: PosAlign.left));
 
       bytes += generator.text(lineSeparator,
-          styles: const PosStyles(align: PosAlign.center));
+          styles: const PosStyles(align: PosAlign.left));
 
-      bytes += generator.row([
-        PosColumn(
-            text: 'PAID',
-            width: 6,
-            styles: const PosStyles(align: PosAlign.left, bold: true)),
-        PosColumn(
-            text: fTotal,
-            width: 6,
-            styles: const PosStyles(align: PosAlign.right, bold: true)),
-      ]);
+      bytes += generator.text(_formatRow('PAID', fTotal, maxChars),
+          styles: const PosStyles(align: PosAlign.left, bold: true));
 
       bytes += generator.text(lineSeparator,
-          styles: const PosStyles(align: PosAlign.center));
+          styles: const PosStyles(align: PosAlign.left));
 
       // 6. Points
       if (!isWalkIn) {
@@ -2281,10 +2269,12 @@ class HomeController extends GetxController {
             int.tryParse(selectedMember.value?.points ?? '0') ?? 0;
         final newTotal = prevPoints + earnedPoints;
         if (earnedPoints > 0) {
-          bytes += generator.text('Points Earned : +$earnedPoints pts',
-              styles: const PosStyles(align: PosAlign.center));
-          bytes += generator.text('Current Points: $newTotal pts',
-              styles: const PosStyles(align: PosAlign.center));
+          bytes += generator.text(
+              _formatCenter('Points Earned : +$earnedPoints pts', maxChars),
+              styles: const PosStyles(align: PosAlign.left));
+          bytes += generator.text(
+              _formatCenter('Current Points: $newTotal pts', maxChars),
+              styles: const PosStyles(align: PosAlign.left));
           bytes += generator.hr();
         }
       }
@@ -2292,26 +2282,37 @@ class HomeController extends GetxController {
       // 7. Footer
       final footerLine1 = userService.getPrefString('pos_receipt_footer_1');
       if (footerLine1.isNotEmpty && footerLine1 != 'Guest') {
-        bytes += generator.text(footerLine1,
-            styles: const PosStyles(align: PosAlign.center));
+        bytes += generator.text(_formatCenter(footerLine1, maxChars),
+            styles: const PosStyles(align: PosAlign.left));
       }
       if (phone.isNotEmpty) {
-        bytes += generator.text('HP : $phone',
-            styles: const PosStyles(align: PosAlign.center));
+        bytes += generator.text(_formatCenter('HP : $phone', maxChars),
+            styles: const PosStyles(align: PosAlign.left));
       }
       final igAccount = userService.getPrefString('pos_ig_account');
       if (igAccount.isNotEmpty && igAccount != 'Guest') {
-        bytes += generator.text('IG : $igAccount',
-            styles: const PosStyles(align: PosAlign.center));
+        bytes += generator.text(_formatCenter('IG : $igAccount', maxChars),
+            styles: const PosStyles(align: PosAlign.left));
       }
 
       // 8. Feedback QR
-      bytes += generator.text('KRITIK & SARAN',
-          styles: const PosStyles(align: PosAlign.center, bold: true));
+      bytes += generator.text(_formatCenter('KRITIK & SARAN', maxChars),
+          styles: const PosStyles(align: PosAlign.left, bold: true));
       final encodedTenant = Uri.encodeComponent(companyName);
       final waUrl =
           "https://api.whatsapp.com/send?phone=6281387401166&text=Halo%20kak%2C%20saya%20ingin%20menyampaikan%20kritik%20dan%20saran%20untuk%20$encodedTenant";
-      bytes += generator.qrcode(waUrl);
+
+      if (isAutoCutPrinter) {
+        // Geser margin kiri (Left Margin) sebanyak 96 dots
+        // (384 dots 58mm - 192 dots QR code) / 2 = 96 dots.
+        bytes += [29, 76, 96, 0]; // GS L 96 0
+        bytes += generator.qrcode(waUrl, align: PosAlign.left);
+        bytes += [29, 76, 0, 0]; // Reset margin kiri
+      } else {
+        // Untuk printer kecil asli (58mm), tidak usah digeser, langsung align center
+        bytes += generator.qrcode(waUrl, align: PosAlign.center);
+      }
+
       bytes += generator.feed(1);
       bytes += generator.cut();
 
@@ -2365,10 +2366,15 @@ class HomeController extends GetxController {
       }
 
       final profile = await CapabilityProfile.load();
-      final is80mm = kitchenPrinter.paperSize == '80mm';
-      final paperSize = is80mm ? PaperSize.mm80 : PaperSize.mm58;
+      final isAutoCutPrinter = kitchenPrinter.isAutoCut;
+      final paperSize = PaperSize.mm58;
       final generator = Generator(paperSize, profile);
       List<int> bytes = [];
+
+      bytes += generator.reset();
+
+      final String companyName =
+          userService.getPrefString(Constants.posCompanyName);
 
       final orderCode = penjualan?.idPos != null
           ? (penjualan!.idPos!.length >= 6
@@ -2399,25 +2405,18 @@ class HomeController extends GetxController {
               : 'Customer #${penjualan.idMember}')
           : (selectedMember.value?.nama ?? 'Walk In');
 
-      final int maxChars = is80mm ? 48 : 32;
+      final int maxChars = 32;
       final String lineSep = '-' * maxChars;
 
-      bytes += generator.text('KITCHEN ORDER',
+      bytes += generator.text(_formatCenter('KITCHEN ORDER', maxChars),
           styles: const PosStyles(
-              align: PosAlign.center, bold: true, height: PosTextSize.size2));
+              align: PosAlign.left, bold: true, height: PosTextSize.size2));
       bytes += generator.text(lineSep,
-          styles: const PosStyles(align: PosAlign.center));
+          styles: const PosStyles(align: PosAlign.left));
 
-      bytes += generator.row([
-        PosColumn(
-            text: '$dateStr $timeStr',
-            width: 7,
-            styles: const PosStyles(align: PosAlign.left)),
-        PosColumn(
-            text: 'Q: $queueNoStr',
-            width: 5,
-            styles: const PosStyles(align: PosAlign.right, bold: true)),
-      ]);
+      bytes += generator.text(
+          _formatRow('$dateStr $timeStr', 'Q: $queueNoStr', maxChars),
+          styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text('Order Type: $orderTypeStr',
           styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text('Receipt No: $orderCode',
@@ -2432,15 +2431,17 @@ class HomeController extends GetxController {
       }
 
       bytes += generator.text(lineSep,
-          styles: const PosStyles(align: PosAlign.center));
+          styles: const PosStyles(align: PosAlign.left));
 
       final itemsToPrint = details ?? penjualanDetailModelList;
       for (var item in itemsToPrint) {
         final String prefix = '${item.jumlah.toInt()}x ';
 
         // 9/12 of the line is for the item name, 3/12 is for the checkbox.
-        final int maxNameLen = (is80mm ? 36 : 26) - prefix.length;
-        String name = item.description?.isNotEmpty == true ? item.description! : (item.productName ?? "Item");
+        final int maxNameLen = 26 - prefix.length; // maxChars is 32. 26 is safe.
+        String name = item.description?.isNotEmpty == true
+            ? item.description!
+            : (item.productName ?? "Item");
 
         if (name.length > maxNameLen) {
           name = '${name.substring(0, maxNameLen - 3)}..';
@@ -2448,16 +2449,8 @@ class HomeController extends GetxController {
 
         final String itemLabel = '$prefix$name';
 
-        bytes += generator.row([
-          PosColumn(
-              text: itemLabel,
-              width: 10,
-              styles: const PosStyles(align: PosAlign.left)),
-          PosColumn(
-              text: '[ ]',
-              width: 2,
-              styles: const PosStyles(align: PosAlign.right)),
-        ]);
+        bytes += generator.text(_formatRow(itemLabel, '[ ]', maxChars),
+            styles: const PosStyles(align: PosAlign.left));
 
         if (item.note.isNotEmpty) {
           bytes += generator.text('   * ${item.note}',
@@ -2467,7 +2460,7 @@ class HomeController extends GetxController {
       }
 
       bytes += generator.text(lineSep,
-          styles: const PosStyles(align: PosAlign.center));
+          styles: const PosStyles(align: PosAlign.left));
       bytes += generator.feed(3);
       bytes += generator.cut();
 
@@ -2711,6 +2704,8 @@ class HomeController extends GetxController {
         'created_at': createdAt,
         'id_shift': idShift,
         'is_synced': 0,
+        'category': '1',
+        'addedfrom': addedFrom.toString(),
       });
 
       // 2. Try to sync to remote API
@@ -2738,7 +2733,8 @@ class HomeController extends GetxController {
           );
         } else {
           // API returned error but data is saved locally
-          debugPrint('[submitExpense] API error: ${response.message}. Saved offline.');
+          debugPrint(
+              '[submitExpense] API error: ${response.message}. Saved offline.');
           Get.snackbar(
             'Saved Offline',
             'Expense saved locally. Will sync when connection is available.',
@@ -2748,7 +2744,8 @@ class HomeController extends GetxController {
         }
       } catch (networkError) {
         // Network error — data already saved locally
-        debugPrint('[submitExpense] Network error: $networkError. Saved offline.');
+        debugPrint(
+            '[submitExpense] Network error: $networkError. Saved offline.');
         Get.snackbar(
           'Saved Offline',
           'Expense saved locally. Will sync when connection is available.',

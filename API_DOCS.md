@@ -1832,12 +1832,9 @@ lastname wajib: kalau kosong default "-"
 ]
 ```
 
-## 22. POST /pos_expenses
-
+## POST /pos_expenses
 **Description**: Add a new expense (Kas Keluar).
-
-**Endpoint**: `http://{domain}/api/pos_expenses`
-
+**Endpoint**: `{{Base URL (pos perfex local) + path}}/pos_expenses`
 **Method**: `POST`
 
 **Request Body**:
@@ -1851,3 +1848,201 @@ lastname wajib: kalau kosong default "-"
   "addedfrom": 1 // required (id staff yang menambahkan)
 }
 ```
+
+**Response**:
+```
+{
+    "status": true,
+    "message": "Expense added successfully.",
+    "data": {
+        "id": "5",
+        "category": "1",
+        "currency": "3",
+        "amount": "2500.00",
+        "tax": null,
+        "tax2": "0",
+        "reference_no": null,
+        "note": "expense note",
+        "expense_name": "Test Expense",
+        "clientid": "0",
+        "project_id": "0",
+        "billable": "0",
+        "invoiceid": null,
+        "paymentmode": null,
+        "date": "2026-05-11",
+        "recurring_type": null,
+        "repeat_every": null,
+        "recurring": "0",
+        "cycles": "0",
+        "total_cycles": "0",
+        "custom_recurring": "0",
+        "last_recurring_date": null,
+        "create_invoice_billable": "0",
+        "send_invoice_to_customer": "0",
+        "recurring_from": null,
+        "dateadded": "2026-05-21 13:16:04",
+        "addedfrom": "1",
+        "vendor": null,
+        "due_date": null,
+        "date_paid": null,
+        "status": null,
+        "is_bill": "0",
+        "reason_for_void": null,
+        "voided": "0",
+        "approved": "0",
+        "userid": null,
+        "company": null,
+        "vat": null,
+        "phonenumber": null,
+        "country": null,
+        "city": null,
+        "zip": null,
+        "state": null,
+        "address": null,
+        "website": null,
+        "datecreated": null,
+        "active": null,
+        "leadid": null,
+        "billing_street": null,
+        "billing_city": null,
+        "billing_state": null,
+        "billing_zip": null,
+        "billing_country": null,
+        "shipping_street": null,
+        "shipping_city": null,
+        "shipping_state": null,
+        "shipping_zip": null,
+        "shipping_country": null,
+        "longitude": null,
+        "latitude": null,
+        "default_language": null,
+        "default_currency": null,
+        "show_primary_contact": null,
+        "stripe_id": null,
+        "registration_confirmed": null,
+        "balance": null,
+        "balance_as_of": null,
+        "name": "Keperluan POS",
+        "description": "Keperluan POS",
+        "show_on_pdf": null,
+        "allow_pos": null,
+        "invoices_only": null,
+        "expenses_only": null,
+        "selected_by_default": null,
+        "taxrate": null,
+        "category_name": "Keperluan POS",
+        "payment_mode_name": null,
+        "tax_name": null,
+        "tax_name2": null,
+        "taxrate2": null,
+        "expenseid": "5",
+        "attachment": "",
+        "filetype": "",
+        "attachment_added_from": 0,
+        "currency_data": {
+            "id": "3",
+            "symbol": "Rp.",
+            "name": "Indonesian Rupiah",
+            "decimal_separator": ".",
+            "thousand_separator": ",",
+            "placement": "before",
+            "isdefault": "1"
+        }
+    }
+}
+```
+
+## GET /pos_expenses
+**Endpoint**: `{{Base URL (pos perfex local) + path}}/pos_expenses`
+**Method**: `GET`
+
+**Response**:
+```json
+[
+    {
+        "id": "4",
+        "category": "1",
+        "currency": "3",
+        "amount": "5000.00",
+        "tax": null,
+        "tax2": "0",
+        "reference_no": null,
+        "note": "",
+        "expense_name": "Es Batu",
+        "clientid": "0",
+        "project_id": "0",
+        "billable": "0",
+        "invoiceid": null,
+        "paymentmode": null,
+        "date": "2026-05-21",
+        "recurring_type": null,
+        "repeat_every": null,
+        "recurring": "0",
+        "cycles": "0",
+        "total_cycles": "0",
+        "custom_recurring": "0",
+        "last_recurring_date": null,
+        "create_invoice_billable": "0",
+        "send_invoice_to_customer": "0",
+        "recurring_from": null,
+        "dateadded": "2026-05-21 10:20:03",
+        "addedfrom": "2",
+        "vendor": null,
+        "due_date": null,
+        "date_paid": null,
+        "status": null,
+        "is_bill": "0",
+        "reason_for_void": null,
+        "voided": "0",
+        "approved": "0",
+        "userid": null,
+        "company": null,
+        "vat": null,
+        "phonenumber": null,
+        "country": null,
+        "city": null,
+        "zip": null,
+        "state": null,
+        "address": null,
+        "website": null,
+        "datecreated": null,
+        "active": null,
+        "leadid": null,
+        "billing_street": null,
+        "billing_city": null,
+        "billing_state": null,
+        "billing_zip": null,
+        "billing_country": null,
+        "shipping_street": null,
+        "shipping_city": null,
+        "shipping_state": null,
+        "shipping_zip": null,
+        "shipping_country": null,
+        "longitude": null,
+        "latitude": null,
+        "default_language": null,
+        "default_currency": null,
+        "show_primary_contact": null,
+        "stripe_id": null,
+        "registration_confirmed": null,
+        "balance": null,
+        "balance_as_of": null,
+        "name": "Keperluan POS",
+        "description": "Keperluan POS",
+        "show_on_pdf": null,
+        "allow_pos": null,
+        "invoices_only": null,
+        "expenses_only": null,
+        "selected_by_default": null,
+        "taxrate": null,
+        "category_name": "Keperluan POS",
+        "payment_mode_name": null,
+        "tax_name": null,
+        "tax_name2": null,
+        "taxrate2": null,
+        "expenseid": "4",
+        "customfields": []
+    },
+]
+```
+

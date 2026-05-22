@@ -22,6 +22,7 @@ class _AddPrinterDialogState extends State<AddPrinterDialog> {
 
   String selectedType = 'bluetooth';
   String selectedRole = 'cashier';
+  bool isAutoCut = false;
   String? selectedBtAddress;
   String? selectedBtName;
 
@@ -111,8 +112,35 @@ class _AddPrinterDialogState extends State<AddPrinterDialog> {
               ),
               SizedBox(height: 16.h),
 
-
-
+              // AutoCut Option
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(
+                  'Printer has AutoCut (e.g. large 80mm printer)',
+                  style: TextStyle(
+                    fontSize: 12.sp,
+                    fontFamily: AppTheme.fontMedium,
+                    color: AppTheme.textColor(context),
+                  ),
+                ),
+                subtitle: Text(
+                  'Check this if your printer is a large machine to fix QR Code alignment on 58mm paper.',
+                  style: TextStyle(
+                    fontSize: 10.sp,
+                    fontFamily: AppTheme.fontRegular,
+                    color: AppTheme.secondaryTextColor(context),
+                  ),
+                ),
+                value: isAutoCut,
+                onChanged: (val) {
+                  setState(() {
+                    isAutoCut = val ?? false;
+                  });
+                },
+                activeColor: AppTheme.primaryColor,
+              ),
+              SizedBox(height: 16.h),
 
               // Conditional Address Input
               if (selectedType == 'network') ...[
@@ -266,7 +294,7 @@ class _AddPrinterDialogState extends State<AddPrinterDialog> {
       address: address,
       port: port,
       role: selectedRole,
-      paperSize: '58mm',
+      isAutoCut: isAutoCut,
     );
 
     controller.addPrinter(newPrinter);

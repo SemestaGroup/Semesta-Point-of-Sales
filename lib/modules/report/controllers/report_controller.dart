@@ -22,13 +22,13 @@ class ReportController extends GetxController {
     }
     return Get.find<ApiService>();
   }
+
   DatabaseService get _dbService {
     if (!Get.isRegistered<DatabaseService>()) {
       Get.put(DatabaseService(), permanent: true);
     }
     return Get.find<DatabaseService>();
   }
-
 
   RxList<ReportModel> reportModelList = <ReportModel>[].obs;
   RxBool isLoading = false.obs;
@@ -80,7 +80,7 @@ class ReportController extends GetxController {
   RxList<double> currentPeriodChart = <double>[].obs;
   RxList<double> previousPeriodChart = <double>[].obs;
   RxString analysisViewMode = "Day".obs; // "Day" or "Month"
-  
+
   RxBool isPrinting = false.obs;
   final appService = Get.find<AppService>();
   final userService = Get.find<UserService>();
@@ -107,7 +107,7 @@ class ReportController extends GetxController {
     final firstOfMonth = DateTime(now.year, now.month, 1);
     cashFlowStartDateController.text = _formatDate(firstOfMonth);
     cashFlowEndDateController.text = _formatDate(now);
-    
+
     // Automatically pull latest credit notes when opening reports
     if (Get.isRegistered<SyncService>()) {
       Get.find<SyncService>().pullCreditNotes().then((_) {
@@ -157,7 +157,8 @@ class ReportController extends GetxController {
     rawReportData.clear();
     isLoading.value = true;
     try {
-      final responseApiModel = await apiService.getReport(type, tglAwal, tglAkhir);
+      final responseApiModel =
+          await apiService.getReport(type, tglAwal, tglAkhir);
       isLoading.value = false;
       if (responseApiModel.responsestate == Constants.successState) {
         if (responseApiModel.data is List) {
@@ -169,7 +170,8 @@ class ReportController extends GetxController {
     } catch (e) {
       isLoading.value = false;
       debugPrint('Error caught in ReportController.getReport: $e');
-      Get.snackbar('Modus Offline', 'Tidak dapat mengambil data laporan dari server. Beberapa laporan mungkin tidak tersedia karena koneksi terputus.');
+      Get.snackbar('Modus Offline',
+          'Tidak dapat mengambil data laporan dari server. Beberapa laporan mungkin tidak tersedia karena koneksi terputus.');
     }
   }
 
@@ -180,7 +182,8 @@ class ReportController extends GetxController {
       String startDate = startDateController.text;
       String endDate = endDateController.text;
 
-      debugPrint("ReportController: Querying orders from $startDate to $endDate");
+      debugPrint(
+          "ReportController: Querying orders from $startDate to $endDate");
 
       // LEFT JOIN subquery of pos_payments to get one payment method per transaction
       String sql = '''
@@ -216,7 +219,8 @@ class ReportController extends GetxController {
       sql += ' ORDER BY t.tgl_penjualan DESC';
 
       final result = await _dbService.rawQuery(sql, args);
-      List<Map<String, dynamic>> combined = List<Map<String, dynamic>>.from(result);
+      List<Map<String, dynamic>> combined =
+          List<Map<String, dynamic>>.from(result);
 
       // Fetch Credit Notes (Refunds) — isolated so a missing table won't break the main report
       try {
@@ -232,25 +236,35 @@ class ReportController extends GetxController {
         for (var cn in cnResult) {
           combined.add({
             'id_penjualan': cn['id_credit_note'],
-            'id_member': cn['original_customer_id'] ?? int.tryParse(cn['clientid']?.toString() ?? ''),
+            'id_member': cn['original_customer_id'] ??
+                int.tryParse(cn['clientid']?.toString() ?? ''),
             'remote_number': cn['formatted_number'],
             'tgl_penjualan': cn['datecreated'] ?? cn['date'],
             'order_type': 'Refund',
             'status': 2,
-            'bayar': -(double.tryParse(cn['total']?.toString() ?? '0')?.toInt() ?? 0),
-            'total_harga': -(double.tryParse(cn['subtotal']?.toString() ?? '0')?.toInt() ?? 0),
+            'bayar':
+                -(double.tryParse(cn['total']?.toString() ?? '0')?.toInt() ??
+                    0),
+            'total_harga':
+                -(double.tryParse(cn['subtotal']?.toString() ?? '0')?.toInt() ??
+                    0),
             'payment_method': 'Refund',
             'is_refund': true,
           });
         }
       } catch (cnErr) {
-        debugPrint('ReportController: credit notes query failed (table may not exist yet): $cnErr');
+        debugPrint(
+            'ReportController: credit notes query failed (table may not exist yet): $cnErr');
       }
 
       // Sort combined list descending by date
       combined.sort((a, b) {
-        DateTime dateA = DateTime.tryParse(a['tgl_penjualan']?.toString() ?? '') ?? DateTime(2000);
-        DateTime dateB = DateTime.tryParse(b['tgl_penjualan']?.toString() ?? '') ?? DateTime(2000);
+        DateTime dateA =
+            DateTime.tryParse(a['tgl_penjualan']?.toString() ?? '') ??
+                DateTime(2000);
+        DateTime dateB =
+            DateTime.tryParse(b['tgl_penjualan']?.toString() ?? '') ??
+                DateTime(2000);
         return dateB.compareTo(dateA);
       });
 
@@ -265,13 +279,14 @@ class ReportController extends GetxController {
     } catch (e) {
       if (!silent) isLoading.value = false;
       debugPrint('ReportController getOrders error: $e');
-      Get.snackbar("Error", "Koneksi bermasalah. Gagal memuat data dari DB: $e");
+      Get.snackbar(
+          "Error", "Koneksi bermasalah. Gagal memuat data dari DB: $e");
     }
   }
 
   Future<void> getTopProducts(String startDate, String endDate) async {
     try {
-       String sql = '''
+      String sql = '''
           SELECT 
             COALESCE(td.description, td.product_name, p.description, p.nama_produk, td.note) as item_name, 
             SUM(td.jumlah) as qty_sold, 
@@ -283,19 +298,20 @@ class ReportController extends GetxController {
             AND date(t.tgl_penjualan) <= date(?)
             AND (t.status = 2 OR t.status = 3)
        ''';
-       List<dynamic> args = [startDate, endDate];
+      List<dynamic> args = [startDate, endDate];
 
-       if (!userService.isManagerialRole()) {
-         sql += ' AND t.id_user = ?';
-         args.add(userService.getPrefInt(Constants.userId));
-       }
+      if (!userService.isManagerialRole()) {
+        sql += ' AND t.id_user = ?';
+        args.add(userService.getPrefInt(Constants.userId));
+      }
 
-       sql += ' GROUP BY td.id_produk, item_name ORDER BY qty_sold DESC LIMIT 50';
-       
-       final result = await _dbService.rawQuery(sql, args);
-       topProducts.value = result;
+      sql +=
+          ' GROUP BY td.id_produk, item_name ORDER BY qty_sold DESC LIMIT 50';
+
+      final result = await _dbService.rawQuery(sql, args);
+      topProducts.value = result;
     } catch (e) {
-       debugPrint("Failed to load top products: $e");
+      debugPrint("Failed to load top products: $e");
     }
   }
 
@@ -362,9 +378,11 @@ class ReportController extends GetxController {
     DateTime now = DateTime.now();
     String today = _formatDate(now);
     String yesterday = _formatDate(now.subtract(const Duration(days: 1)));
-    
+
     String thisMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
-    String lastMonthDateRaw = now.month == 1 ? "${now.year - 1}-12" : "${now.year}-${(now.month - 1).toString().padLeft(2, '0')}";
+    String lastMonthDateRaw = now.month == 1
+        ? "${now.year - 1}-12"
+        : "${now.year}-${(now.month - 1).toString().padLeft(2, '0')}";
 
     double tSales = 0;
     double ySales = 0;
@@ -377,13 +395,13 @@ class ReportController extends GetxController {
       if (status == 2 || status == 3) {
         String fullDate = tx['tgl_penjualan']?.toString() ?? "";
         if (fullDate.isEmpty) continue;
-        
+
         DateTime? dt = DateTime.tryParse(fullDate);
         if (dt == null) continue;
-        
+
         String dateOnly = _formatDate(dt);
         String monthOnly = dateOnly.substring(0, 7);
-        
+
         // Use bayar if available, fallback to total_harga
         double total = double.tryParse(tx['bayar']?.toString() ?? "0") ?? 0;
         if (total == 0) {
@@ -392,7 +410,7 @@ class ReportController extends GetxController {
 
         if (dateOnly == today) tSales += total;
         if (dateOnly == yesterday) ySales += total;
-        
+
         if (monthOnly == thisMonth) tmSales += total;
         if (monthOnly == lastMonthDateRaw) lmSales += total;
       }
@@ -402,7 +420,7 @@ class ReportController extends GetxController {
     yesterdaySales.value = ySales;
     thisMonthSales.value = tmSales;
     lastMonthSales.value = lmSales;
-    
+
     // Default chart data to comparing today vs yesterday hours
     _computeChartData(allTx, analysisViewMode.value);
   }
@@ -416,23 +434,23 @@ class ReportController extends GetxController {
     DateTime now = DateTime.now();
     currentPeriodChart.clear();
     previousPeriodChart.clear();
-    
+
     if (mode == "Day") {
       // 0 to 23 hours
       List<double> curr = List.filled(24, 0.0);
       List<double> prev = List.filled(24, 0.0);
-      
+
       String today = _formatDate(now);
       String yesterday = _formatDate(now.subtract(const Duration(days: 1)));
-      
+
       for (var tx in allTx) {
         String fullDateStr = tx['tgl_penjualan']?.toString() ?? "";
         DateTime? dt = DateTime.tryParse(fullDateStr);
         if (dt == null) continue;
-        
+
         String dateOnly = _formatDate(dt);
         int hour = dt.hour;
-        
+
         final status = tx['status'];
         if (status != 2 && status != 3) continue;
 
@@ -440,57 +458,64 @@ class ReportController extends GetxController {
         if (dateOnly == today) curr[hour] += total;
         if (dateOnly == yesterday) prev[hour] += total;
       }
-      
+
       currentPeriodChart.addAll(curr);
       previousPeriodChart.addAll(prev);
     } else {
       // Month (1-31 days)
       int currDays = DateUtils.getDaysInMonth(now.year, now.month);
-      
-      DateTime lastMonthDate = DateTime(now.month == 1 ? now.year - 1 : now.year, now.month == 1 ? 12 : now.month - 1);
-      int prevDays = DateUtils.getDaysInMonth(lastMonthDate.year, lastMonthDate.month);
-      
+
+      DateTime lastMonthDate = DateTime(
+          now.month == 1 ? now.year - 1 : now.year,
+          now.month == 1 ? 12 : now.month - 1);
+      int prevDays =
+          DateUtils.getDaysInMonth(lastMonthDate.year, lastMonthDate.month);
+
       List<double> curr = List.filled(currDays, 0.0);
       List<double> prev = List.filled(prevDays, 0.0);
-      
-      String thisMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
-      String lastMonthRaw = "${lastMonthDate.year}-${lastMonthDate.month.toString().padLeft(2, '0')}";
-      
-      for (var tx in allTx) {
-         String fullDateStr = tx['tgl_penjualan']?.toString() ?? "";
-         DateTime? dt = DateTime.tryParse(fullDateStr);
-         if (dt == null) continue;
-         
-         String dateOnly = _formatDate(dt);
-         String monthOnly = dateOnly.substring(0, 7);
-         int day = dt.day;
-         
-         final status = tx['status'];
-         if (status != 2 && status != 3) continue;
 
-         double total = double.tryParse(tx['bayar']?.toString() ?? "0") ?? 0;
-         if (monthOnly == thisMonth && day <= currDays) curr[day-1] += total;
-         if (monthOnly == lastMonthRaw && day <= prevDays) prev[day-1] += total;
+      String thisMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
+      String lastMonthRaw =
+          "${lastMonthDate.year}-${lastMonthDate.month.toString().padLeft(2, '0')}";
+
+      for (var tx in allTx) {
+        String fullDateStr = tx['tgl_penjualan']?.toString() ?? "";
+        DateTime? dt = DateTime.tryParse(fullDateStr);
+        if (dt == null) continue;
+
+        String dateOnly = _formatDate(dt);
+        String monthOnly = dateOnly.substring(0, 7);
+        int day = dt.day;
+
+        final status = tx['status'];
+        if (status != 2 && status != 3) continue;
+
+        double total = double.tryParse(tx['bayar']?.toString() ?? "0") ?? 0;
+        if (monthOnly == thisMonth && day <= currDays) curr[day - 1] += total;
+        if (monthOnly == lastMonthRaw && day <= prevDays)
+          prev[day - 1] += total;
       }
       currentPeriodChart.addAll(curr);
       previousPeriodChart.addAll(prev);
     }
   }
 
-  Future<Map<String, dynamic>> fetchOrderFullDetails(int idPenjualan, dynamic idMember, {bool isRefund = false, double refundTotal = 0}) async {
+  Future<Map<String, dynamic>> fetchOrderFullDetails(
+      int idPenjualan, dynamic idMember,
+      {bool isRefund = false, double refundTotal = 0}) async {
     List<Map<String, dynamic>> items = [];
-    
+
     // 1. Fetch items
     if (isRefund) {
-       items = [
-         {
-           'jumlah': 1,
-           'nama_produk': 'Refund (Credit Note)',
-           'note': 'Generated from remote server',
-           'subtotal': refundTotal.abs(),
-           'is_refund': 1,
-         }
-       ];
+      items = [
+        {
+          'jumlah': 1,
+          'nama_produk': 'Refund (Credit Note)',
+          'note': 'Generated from remote server',
+          'subtotal': refundTotal.abs(),
+          'is_refund': 1,
+        }
+      ];
     } else {
       final dbResult = await _dbService.rawQuery('''
         SELECT td.*, p.nama_produk, p.img 
@@ -504,8 +529,8 @@ class ReportController extends GetxController {
     // 2. Fetch member info
     Map<String, dynamic>? member;
     if (idMember != null) {
-      final memberResult = await _dbService.query('members', 
-          where: 'id_member = ?', whereArgs: [idMember]);
+      final memberResult = await _dbService
+          .query('members', where: 'id_member = ?', whereArgs: [idMember]);
       if (memberResult.isNotEmpty) {
         member = memberResult.first;
       }
@@ -517,33 +542,86 @@ class ReportController extends GetxController {
     };
   }
 
-  Future<void> printReceiptOnly(Map<String, dynamic> order, List items, {Map<String, dynamic>? member}) async {
+  String _formatRow(String left, String right, int maxChars) {
+    if (left.length + right.length > maxChars) {
+      if (left.length > maxChars - right.length - 1) {
+        left = '${left.substring(0, maxChars - right.length - 2)}..';
+      }
+    }
+    int padLength = maxChars - left.length;
+    if (padLength < 0) padLength = 0;
+    return left + right.padLeft(padLength);
+  }
+
+  String _formatCenter(String text, int maxChars) {
+    List<String> words = text.split(' ');
+    List<String> lines = [];
+    String currentLine = '';
+
+    // 1. Bungkus teks per kata agar tidak melebihi maxChars
+    for (String word in words) {
+      if (currentLine.isEmpty) {
+        currentLine = word;
+      } else if ('$currentLine $word'.length <= maxChars) {
+        currentLine = '$currentLine $word';
+      } else {
+        lines.add(currentLine);
+        currentLine = word;
+      }
+    }
+    if (currentLine.isNotEmpty) lines.add(currentLine);
+
+    // 2. Buat tiap baris berada di tengah secara presisi
+    List<String> centeredLines = lines.map((line) {
+      int totalSpaces = maxChars - line.length;
+
+      // Jika teks pas atau lebih dari maxChars, biarkan apa adanya
+      if (totalSpaces <= 0) return line;
+
+      // Menghitung spasi kiri (pembagian bulat)
+      int leftSpaces = totalSpaces ~/ 2;
+
+      // Satukan spasi kiri + teks + spasi kanan hingga totalnya pas maxChars
+      return line.padLeft(leftSpaces + line.length).padRight(maxChars);
+    }).toList();
+
+    return centeredLines.join('\n');
+  }
+
+  Future<void> printReceiptOnly(Map<String, dynamic> order, List items,
+      {Map<String, dynamic>? member}) async {
     try {
       isPrinting.value = true;
       final settingCtrl = Get.find<SettingController>();
       final cashierPrinter = settingCtrl.getPrinterForRole('cashier');
-      
+
       if (cashierPrinter == null) {
-        Get.snackbar('No Cashier Printer', 'Please configure a printer with the Cashier role in Settings.');
+        Get.snackbar('No Cashier Printer',
+            'Please configure a printer with the Cashier role in Settings.');
         isPrinting.value = false;
         return;
       }
 
       final profile = await CapabilityProfile.load();
-      final is80mm = cashierPrinter.paperSize == '80mm';
-      final paperSize = is80mm ? PaperSize.mm80 : PaperSize.mm58;
-      
-      final int maxChars = is80mm ? 48 : 32;
-      final int nameWidth = is80mm ? 35 : 25;
+      final isAutoCutPrinter = cashierPrinter.isAutoCut;
+      final paperSize = PaperSize.mm58;
+
+      // Force 32 chars format for 58mm layout
+      final int maxChars = 32;
+      final int nameWidth = 25;
 
       final generator = Generator(paperSize, profile);
       List<int> bytes = [];
+
+      bytes += generator.reset();
 
       // 1. Logo
       final logoUrl = userService.getPrefString('pos_brand_logo');
       if (logoUrl.isNotEmpty) {
         try {
-          final res = await http.get(Uri.parse(logoUrl)).timeout(const Duration(seconds: 4));
+          final res = await http
+              .get(Uri.parse(logoUrl))
+              .timeout(const Duration(seconds: 4));
           if (res.statusCode == 200) {
             final decodedImage = img.decodeImage(res.bodyBytes);
             if (decodedImage != null) {
@@ -556,7 +634,8 @@ class ReportController extends GetxController {
 
       // 2. Header
       String companyName = userService.getPrefString(Constants.posCompanyName);
-      if (companyName == 'Guest' || companyName.isEmpty) companyName = appService.appModel.value.namaPerusahaan;
+      if (companyName == 'Guest' || companyName.isEmpty)
+        companyName = appService.appModel.value.namaPerusahaan;
       if (companyName.isEmpty) companyName = 'FLINKPOS';
       String address = userService.getPrefString(Constants.posAddress);
       if (address == 'Guest') address = '';
@@ -565,146 +644,198 @@ class ReportController extends GetxController {
 
       final String lineSeparator = '-' * maxChars;
 
-      bytes += generator.text(companyName, styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
-      if (address.isNotEmpty) bytes += generator.text(address, styles: const PosStyles(align: PosAlign.center));
-      if (phone.isNotEmpty) bytes += generator.text(phone, styles: const PosStyles(align: PosAlign.center));
-      bytes += generator.text('COPY RECEIPT', styles: const PosStyles(align: PosAlign.center));
-      bytes += generator.text(lineSeparator, styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(_formatCenter(companyName, maxChars),
+          styles: const PosStyles(
+              align: PosAlign.left, bold: true, height: PosTextSize.size2));
+      if (address.isNotEmpty)
+        bytes += generator.text(_formatCenter(address, maxChars),
+            styles: const PosStyles(align: PosAlign.left));
+      if (phone.isNotEmpty)
+        bytes += generator.text(_formatCenter(phone, maxChars),
+            styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text(_formatCenter('COPY RECEIPT', maxChars),
+          styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text(_formatCenter(lineSeparator, maxChars),
+          styles: const PosStyles(align: PosAlign.left));
 
       // 3. Order Info
       final String fullDateStr = order['tgl_penjualan']?.toString() ?? "";
       DateTime dt = DateTime.tryParse(fullDateStr) ?? DateTime.now();
-      final dateStr = '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
-      final timeStr = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-      
-      final String idPos = order['id_pos']?.toString() ?? order['id_penjualan']?.toString() ?? '---';
-      final orderCode = idPos.length >= 6 ? idPos.substring(idPos.length - 6).toUpperCase() : idPos;
+      final dateStr =
+          '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+      final timeStr =
+          '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+
+      final String idPos = order['id_pos']?.toString() ??
+          order['id_penjualan']?.toString() ??
+          '---';
+      final orderCode = idPos.length >= 6
+          ? idPos.substring(idPos.length - 6).toUpperCase()
+          : idPos;
 
       final orderTypeStr = order['order_type']?.toString() ?? "Dine In";
       final queueNumber = order['queue_number']?.toString() ?? "-";
 
-      final int idMember = int.tryParse(order['id_member']?.toString() ?? "0") ?? 0;
+      final int idMember =
+          int.tryParse(order['id_member']?.toString() ?? "0") ?? 0;
       final isWalkIn = idMember == 0 || idMember == 1;
-      final customerName = isWalkIn ? "Walk In Customer" : (member?['nama']?.toString() ?? 'Customer #$idMember');
+      final customerName = isWalkIn
+          ? "Walk In Customer"
+          : (member?['nama']?.toString() ?? 'Customer #$idMember');
 
-      bytes += generator.row([
-        PosColumn(text: '$dateStr $timeStr', width: 7, styles: const PosStyles(align: PosAlign.left)),
-        PosColumn(text: 'Q: $queueNumber', width: 5, styles: const PosStyles(align: PosAlign.right, bold: true)),
-      ]);
-      bytes += generator.text('Order Type: $orderTypeStr', styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text('Receipt No: $orderCode', styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text('Cashier   : ${userService.getPrefString(Constants.userName)}', styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text('Customer  : $customerName', styles: const PosStyles(align: PosAlign.left));
-      
+      bytes += generator.text(
+          _formatRow('$dateStr $timeStr', 'Q: $queueNumber', maxChars),
+          styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text('Order Type: $orderTypeStr',
+          styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text('Receipt No: $orderCode',
+          styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text(
+          'Cashier   : ${userService.getPrefString(Constants.userName)}',
+          styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text('Customer  : $customerName',
+          styles: const PosStyles(align: PosAlign.left));
+
       final orderNoteStr = order['note']?.toString() ?? "";
       if (orderNoteStr.isNotEmpty) {
-        bytes += generator.text('Note      : $orderNoteStr', styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text('Note      : $orderNoteStr',
+            styles: const PosStyles(align: PosAlign.left));
       }
-      bytes += generator.text(lineSeparator, styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(_formatCenter(lineSeparator, maxChars),
+          styles: const PosStyles(align: PosAlign.left));
 
       // 4. Items
       for (var item in items) {
-        final double qty = double.tryParse(item['jumlah']?.toString() ?? "1") ?? 1;
-        final String name = item['nama_produk']?.toString() ?? item['note']?.toString() ?? "Item";
-        final int subtotal = (double.tryParse(item['subtotal']?.toString() ?? "0") ?? 0).toInt();
+        final double qty =
+            double.tryParse(item['jumlah']?.toString() ?? "1") ?? 1;
+        final String name = item['nama_produk']?.toString() ??
+            item['note']?.toString() ??
+            "Item";
+        final int subtotal =
+            (double.tryParse(item['subtotal']?.toString() ?? "0") ?? 0).toInt();
 
         final String prefix = '${qty.toInt()}x ';
-        
+
         // 8/12 of the line is for the item name, 4/12 is for the price.
-        final int maxNameLen = (is80mm ? 32 : 24) - prefix.length;
+        // Using 24 because maxChars is 32 (58mm width layout)
+        final int maxNameLen = 24 - prefix.length;
         String displayName = name;
         if (displayName.length > maxNameLen) {
           displayName = '${displayName.substring(0, maxNameLen - 3)}..';
         }
-        
-        final String itemLabel = '$prefix$displayName';
-        final String itemPrice = _rawFormatRupiah(subtotal).replaceAll('Rp. ', '');
-        
-        bytes += generator.row([
-          PosColumn(text: itemLabel, width: 9, styles: const PosStyles(align: PosAlign.left)),
-          PosColumn(text: itemPrice, width: 3, styles: const PosStyles(align: PosAlign.right)),
-        ]);
-        
-        // Item-level Discount
-        final double itemDiscTotal = double.tryParse(item['discountTotal']?.toString() ?? "0") ?? 0;
-        final String discType = item['discount_type']?.toString() ?? 'fixed';
-        
-        if (itemDiscTotal > 0) {
-            int totalNominal = itemDiscTotal.toInt();
-            if (discType == 'percent') {
-                 final double harga = double.tryParse(item['harga_jual']?.toString() ?? "0") ?? 0;
-                 final int nominalPerUnit = (harga * itemDiscTotal / 100).round();
-                 totalNominal = nominalPerUnit * qty.toInt();
-            }
 
-            if (totalNominal > 0) {
-              bytes += generator.row([
-                PosColumn(text: '   disc', width: 6, styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB)),
-                PosColumn(text: '-${_rawFormatRupiah(totalNominal).replaceAll('Rp. ', '')}', width: 6, styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB)),
-              ]);
-            }
+        final String itemLabel = '$prefix$displayName';
+        final String itemPrice =
+            _rawFormatRupiah(subtotal).replaceAll('Rp. ', '');
+
+        bytes += generator.text(_formatRow(itemLabel, itemPrice, maxChars),
+            styles: const PosStyles(align: PosAlign.left));
+
+        // Item-level Discount
+        final double itemDiscTotal =
+            double.tryParse(item['discountTotal']?.toString() ?? "0") ?? 0;
+        final String discType = item['discount_type']?.toString() ?? 'fixed';
+
+        if (itemDiscTotal > 0) {
+          int totalNominal = itemDiscTotal.toInt();
+          if (discType == 'percent') {
+            final double harga =
+                double.tryParse(item['harga_jual']?.toString() ?? "0") ?? 0;
+            final int nominalPerUnit = (harga * itemDiscTotal / 100).round();
+            totalNominal = nominalPerUnit * qty.toInt();
+          }
+
+          if (totalNominal > 0) {
+            bytes += generator.text(
+                _formatRow(
+                    '   disc',
+                    '-${_rawFormatRupiah(totalNominal).replaceAll('Rp. ', '')}',
+                    maxChars),
+                styles: const PosStyles(
+                    align: PosAlign.left, fontType: PosFontType.fontB));
+          }
         }
       }
-      bytes += generator.text(lineSeparator, styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(_formatCenter(lineSeparator, maxChars),
+          styles: const PosStyles(align: PosAlign.left));
 
       // 5. Totals
-      final int total = (double.tryParse(order['bayar']?.toString() ?? "0") ?? 0).toInt();
-      
+      final int total =
+          (double.tryParse(order['bayar']?.toString() ?? "0") ?? 0).toInt();
+
       // Calculate total discount from both default and manual fields
-      int diskon = (double.tryParse(order['diskon']?.toString() ?? "0") ?? 0).toInt();
-      int manualDisc = (double.tryParse(order['manual_discount_value']?.toString() ?? "0") ?? 0).toInt();
+      int diskon =
+          (double.tryParse(order['diskon']?.toString() ?? "0") ?? 0).toInt();
+      int manualDisc =
+          (double.tryParse(order['manual_discount_value']?.toString() ?? "0") ??
+                  0)
+              .toInt();
       String discType = order['discount_type']?.toString() ?? 'fixed';
-      
+
       int totalDiscount = 0;
 
       // Re-calculate based on how it's stored in DB
       if (manualDisc > 0) {
-          totalDiscount = (discType == 'percent') 
-              ? (double.tryParse(order['total_harga']?.toString() ?? "0") ?? 0 * manualDisc / 100).round()
-              : manualDisc;
+        totalDiscount = (discType == 'percent')
+            ? (double.tryParse(order['total_harga']?.toString() ?? "0") ??
+                    0 * manualDisc / 100)
+                .round()
+            : manualDisc;
       } else if (diskon > 0) {
-          totalDiscount = (double.tryParse(order['total_harga']?.toString() ?? "0") ?? 0 * diskon / 100).round();
+        totalDiscount =
+            (double.tryParse(order['total_harga']?.toString() ?? "0") ??
+                    0 * diskon / 100)
+                .round();
       }
-      
+
       final int subtotalTotal = total + totalDiscount;
-      final int cash = (double.tryParse(order['diterima']?.toString() ?? "0") ?? 0).toInt();
+      final int cash =
+          (double.tryParse(order['diterima']?.toString() ?? "0") ?? 0).toInt();
       final int change = cash - total;
 
-      bytes += generator.row([
-        PosColumn(text: 'Subtotal', width: 6, styles: const PosStyles(align: PosAlign.left)),
-        PosColumn(text: _rawFormatRupiah(subtotalTotal).replaceAll('Rp. ', ''), width: 6, styles: const PosStyles(align: PosAlign.right)),
-      ]);
+      bytes += generator.text(
+          _formatRow('Subtotal',
+              _rawFormatRupiah(subtotalTotal).replaceAll('Rp. ', ''), maxChars),
+          styles: const PosStyles(align: PosAlign.left));
 
       if (totalDiscount > 0) {
-        bytes += generator.row([
-          PosColumn(text: 'Discount', width: 6, styles: const PosStyles(align: PosAlign.left)),
-          PosColumn(text: '-${_rawFormatRupiah(totalDiscount).replaceAll('Rp. ', '')}', width: 6, styles: const PosStyles(align: PosAlign.right)),
-        ]);
+        bytes += generator.text(
+            _formatRow(
+                'Discount',
+                '-${_rawFormatRupiah(totalDiscount).replaceAll('Rp. ', '')}',
+                maxChars),
+            styles: const PosStyles(align: PosAlign.left));
       }
 
-      bytes += generator.row([
-        PosColumn(text: 'Total', width: 6, styles: const PosStyles(align: PosAlign.left, bold: true)),
-        PosColumn(text: _rawFormatRupiah(total).replaceAll('Rp. ', ''), width: 6, styles: const PosStyles(align: PosAlign.right, bold: true)),
-      ]);
-      
-      bytes += generator.row([
-        PosColumn(text: 'Cash', width: 6, styles: const PosStyles(align: PosAlign.left)),
-        PosColumn(text: _rawFormatRupiah(cash).replaceAll('Rp. ', ''), width: 6, styles: const PosStyles(align: PosAlign.right)),
-      ]);
-      
-      bytes += generator.row([
-        PosColumn(text: 'Change', width: 6, styles: const PosStyles(align: PosAlign.left)),
-        PosColumn(text: _rawFormatRupiah(change > 0 ? change : 0).replaceAll('Rp. ', ''), width: 6, styles: const PosStyles(align: PosAlign.right)),
-      ]);
+      bytes += generator.text(
+          _formatRow('Total', _rawFormatRupiah(total).replaceAll('Rp. ', ''),
+              maxChars),
+          styles: const PosStyles(align: PosAlign.left, bold: true));
 
-      bytes += generator.text(lineSeparator, styles: const PosStyles(align: PosAlign.center));
-      
-      bytes += generator.row([
-        PosColumn(text: 'PAID', width: 6, styles: const PosStyles(align: PosAlign.left, bold: true)),
-        PosColumn(text: _rawFormatRupiah(total).replaceAll('Rp. ', ''), width: 6, styles: const PosStyles(align: PosAlign.right, bold: true)),
-      ]);
+      bytes += generator.text(
+          _formatRow(
+              'Cash', _rawFormatRupiah(cash).replaceAll('Rp. ', ''), maxChars),
+          styles: const PosStyles(align: PosAlign.left));
 
-      bytes += generator.text(lineSeparator, styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text(
+          _formatRow(
+              'Change',
+              change > 0
+                  ? _rawFormatRupiah(change).replaceAll('Rp. ', '')
+                  : '0',
+              maxChars),
+          styles: const PosStyles(align: PosAlign.left));
+
+      bytes += generator.text(_formatCenter(lineSeparator, maxChars),
+          styles: const PosStyles(align: PosAlign.left));
+
+      bytes += generator.text(
+          _formatRow(
+              'PAID', _rawFormatRupiah(total).replaceAll('Rp. ', ''), maxChars),
+          styles: const PosStyles(align: PosAlign.left, bold: true));
+
+      bytes += generator.text(_formatCenter(lineSeparator, maxChars),
+          styles: const PosStyles(align: PosAlign.left));
 
       // 6. Points
       if (!isWalkIn) {
@@ -713,24 +844,46 @@ class ReportController extends GetxController {
         final prevPoints = int.tryParse(prevPointsStr) ?? 0;
         final newTotal = prevPoints + earnedPoints;
         if (earnedPoints > 0) {
-          bytes += generator.text('Points Earned : +$earnedPoints pts', styles: const PosStyles(align: PosAlign.center));
-          bytes += generator.text('Current Points: $newTotal pts', styles: const PosStyles(align: PosAlign.center));
+          bytes += generator.text(
+              _formatCenter('Points Earned : +$earnedPoints pts', maxChars),
+              styles: const PosStyles(align: PosAlign.left));
+          bytes += generator.text(
+              _formatCenter('Current Points: $newTotal pts', maxChars),
+              styles: const PosStyles(align: PosAlign.left));
           bytes += generator.hr();
         }
       }
 
       // 7. Footer
       final footerLine1 = userService.getPrefString('pos_receipt_footer_1');
-      if (footerLine1.isNotEmpty && footerLine1 != 'Guest') bytes += generator.text(footerLine1, styles: const PosStyles(align: PosAlign.center));
-      if (phone.isNotEmpty) bytes += generator.text('HP : $phone', styles: const PosStyles(align: PosAlign.center));
+      if (footerLine1.isNotEmpty && footerLine1 != 'Guest')
+        bytes += generator.text(_formatCenter(footerLine1, maxChars),
+            styles: const PosStyles(align: PosAlign.left));
+      if (phone.isNotEmpty)
+        bytes += generator.text(_formatCenter('HP : $phone', maxChars),
+            styles: const PosStyles(align: PosAlign.left));
       final igAccount = userService.getPrefString('pos_ig_account');
-      if (igAccount.isNotEmpty && igAccount != 'Guest') bytes += generator.text('IG : $igAccount', styles: const PosStyles(align: PosAlign.center));
+      if (igAccount.isNotEmpty && igAccount != 'Guest')
+        bytes += generator.text(_formatCenter('IG : $igAccount', maxChars),
+            styles: const PosStyles(align: PosAlign.left));
 
       // 8. Feedback QR
-      bytes += generator.text('KRITIK & SARAN', styles: const PosStyles(align: PosAlign.center, bold: true));
+      bytes += generator.text(_formatCenter('KRITIK & SARAN', maxChars),
+          styles: const PosStyles(align: PosAlign.left, bold: true));
       final encodedTenant = Uri.encodeComponent(companyName);
-      final waUrl = "https://api.whatsapp.com/send?phone=6281387401166&text=Halo%20kak%2C%20saya%20ingin%20menyampaikan%20kritik%20dan%20saran%20untuk%20$encodedTenant";
-      bytes += generator.qrcode(waUrl);
+      final waUrl =
+          "https://api.whatsapp.com/send?phone=6281387401166&text=Halo%20kak%2C%20saya%20ingin%20menyampaikan%20kritik%20dan%20saran%20untuk%20$encodedTenant";
+
+      if (isAutoCutPrinter) {
+        // Geser margin kiri (Left Margin) sebanyak 96 dots
+        // (384 dots 58mm - 192 dots QR code) / 2 = 96 dots.
+        bytes += [29, 76, 96, 0]; // GS L 96 0
+        bytes += generator.qrcode(waUrl, align: PosAlign.left);
+        bytes += [29, 76, 0, 0]; // Reset margin kiri
+      } else {
+        // Untuk printer kecil asli (58mm), tidak usah digeser, langsung align center
+        bytes += generator.qrcode(waUrl, align: PosAlign.center);
+      }
 
       bytes += generator.feed(1);
       bytes += generator.cut();
@@ -740,7 +893,8 @@ class ReportController extends GetxController {
       ErrorLogService.log(
         category: 'printer',
         errCode: 'REPRINT_FAIL',
-        errMsg: 'orderId=${order['id_penjualan']} | remoteNo=${order['remote_number']} | $e',
+        errMsg:
+            'orderId=${order['id_penjualan']} | remoteNo=${order['remote_number']} | $e',
       );
       Get.snackbar('Print Error', 'Failed to reprint: $e');
     } finally {
@@ -748,33 +902,43 @@ class ReportController extends GetxController {
     }
   }
 
-  Future<void> printLabelsOnly(Map<String, dynamic> order, List<dynamic> items, {Map<String, dynamic>? member}) async {
+  Future<void> printLabelsOnly(Map<String, dynamic> order, List<dynamic> items,
+      {Map<String, dynamic>? member}) async {
     isPrinting.value = true;
     try {
       final settingCtrl = Get.find<SettingController>();
       final labelPrinter = settingCtrl.getPrinterForRole('label');
       if (labelPrinter == null) {
-        Get.snackbar('No Label Printer', 'Please configure a printer with the Label role in Settings.');
+        Get.snackbar('No Label Printer',
+            'Please configure a printer with the Label role in Settings.');
         return;
       }
 
       final dateStr = order['tgl_penjualan'] != null
-          ? DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.parse(order['tgl_penjualan'].toString()).toLocal())
+          ? DateFormat('yyyy-MM-dd HH:mm:ss').format(
+              DateTime.parse(order['tgl_penjualan'].toString()).toLocal())
           : DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
 
-      final String idPos = order['id_pos']?.toString() ?? order['id_penjualan']?.toString() ?? '---';
-      final orderCode = '#${idPos.length >= 8 ? idPos.substring(idPos.length - 8).toUpperCase() : idPos.toUpperCase()}';
+      final String idPos = order['id_pos']?.toString() ??
+          order['id_penjualan']?.toString() ??
+          '---';
+      final orderCode =
+          '#${idPos.length >= 8 ? idPos.substring(idPos.length - 8).toUpperCase() : idPos.toUpperCase()}';
 
-      final int idMember = int.tryParse(order['id_member']?.toString() ?? "0") ?? 0;
+      final int idMember =
+          int.tryParse(order['id_member']?.toString() ?? "0") ?? 0;
       final isWalkIn = idMember == 0 || idMember == 1;
-      final customerName = isWalkIn ? "Walk In" : (member?['nama']?.toString() ?? 'Customer #$idMember');
+      final customerName = isWalkIn
+          ? "Walk In"
+          : (member?['nama']?.toString() ?? 'Customer #$idMember');
       final orderTypeStr = order['order_type']?.toString() ?? "Dine In";
       final customerWithOrderType = '$customerName ($orderTypeStr)';
 
       List<int> allBytes = [];
 
       for (var item in items) {
-        final double qtyDouble = double.tryParse(item['jumlah']?.toString() ?? "1") ?? 1;
+        final double qtyDouble =
+            double.tryParse(item['jumlah']?.toString() ?? "1") ?? 1;
         final int qty = qtyDouble.toInt();
         final String name = item['nama_produk']?.toString() ?? "Item";
         final String note = item['note']?.toString() ?? '';
@@ -785,7 +949,7 @@ class ReportController extends GetxController {
           line3: orderCode,
           line4: name,
           productNote: note,
-          paperSize: labelPrinter.paperSize,
+          isAutoCut: labelPrinter.isAutoCut,
           copies: qty,
         );
         allBytes.addAll(bytes);
@@ -796,7 +960,8 @@ class ReportController extends GetxController {
       ErrorLogService.log(
         category: 'printer',
         errCode: 'REPRINT_LABEL_FAIL',
-        errMsg: 'orderId=${order['id_penjualan']} | remoteNo=${order['remote_number']} | $e',
+        errMsg:
+            'orderId=${order['id_penjualan']} | remoteNo=${order['remote_number']} | $e',
       );
       Get.snackbar('Print Error', 'Failed to reprint label: $e');
     } finally {
@@ -805,8 +970,11 @@ class ReportController extends GetxController {
   }
 
   String _rawFormatRupiah(int number) {
-    return NumberFormat.currency(locale: 'id_ID', symbol: '', decimalDigits: 0).format(number).trim();
+    return NumberFormat.currency(locale: 'id_ID', symbol: '', decimalDigits: 0)
+        .format(number)
+        .trim();
   }
+
   String _truncateProductName(String text, int maxLength) {
     if (text.length <= maxLength) return text;
     return '${text.substring(0, maxLength - 2)}..';

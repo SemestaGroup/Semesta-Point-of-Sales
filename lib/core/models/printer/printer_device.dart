@@ -5,7 +5,7 @@ class PrinterDevice {
   final String address; // MAC for BT, IP for Network
   final int port; // Port for Network (default 9100)
   final String role; // 'cashier', 'kitchen', 'label'
-  final String paperSize; // '58mm' or '80mm'
+  final bool isAutoCut; // true for large 80mm printers, false for standard 58mm
   bool isActive;
   bool isConnected;
 
@@ -16,7 +16,7 @@ class PrinterDevice {
     required this.address,
     this.port = 9100,
     required this.role,
-    this.paperSize = '58mm',
+    this.isAutoCut = false,
     this.isActive = true,
     this.isConnected = false,
   });
@@ -29,7 +29,7 @@ class PrinterDevice {
       'address': address,
       'port': port,
       'role': role,
-      'paperSize': paperSize,
+      'isAutoCut': isAutoCut,
       'isActive': isActive,
     };
   }
@@ -42,7 +42,7 @@ class PrinterDevice {
       address: json['address'] as String,
       port: json['port'] as int? ?? 9100,
       role: json['role'] as String,
-      paperSize: json['paperSize'] as String? ?? '58mm',
+      isAutoCut: json['isAutoCut'] as bool? ?? false,
       isActive: json['isActive'] as bool? ?? true,
       isConnected: false,
     );
@@ -55,7 +55,7 @@ class PrinterDevice {
     String? address,
     int? port,
     String? role,
-    String? paperSize,
+    bool? isAutoCut,
     bool? isActive,
     bool? isConnected,
   }) {
@@ -66,7 +66,7 @@ class PrinterDevice {
       address: address ?? this.address,
       port: port ?? this.port,
       role: role ?? this.role,
-      paperSize: paperSize ?? this.paperSize,
+      isAutoCut: isAutoCut ?? this.isAutoCut,
       isActive: isActive ?? this.isActive,
       isConnected: isConnected ?? this.isConnected,
     );

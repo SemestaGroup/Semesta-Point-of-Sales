@@ -132,7 +132,11 @@ class SyncService extends GetxService {
       // 11. Promotions
       await syncPromotions();
 
-      // 12. Cleanup
+      // 12. Expenses
+      syncStatus.value = "Fetching Expenses...";
+      await pullRemoteExpenses();
+
+      // 13. Cleanup
       syncStatus.value = "Optimizing Database...";
       await _cleanupOldOrders();
       syncProgress.value = 1.0;
@@ -210,6 +214,7 @@ class SyncService extends GetxService {
       await pullRemoteOrders();
       await syncStaff();
       await syncPromotions();
+      await pullRemoteExpenses();
 
       // Final cleanup
       await _cleanupOldOrders();
@@ -615,25 +620,42 @@ class SyncService extends GetxService {
           }
 
           // Cross-entity dependency check:
-          // If body contains a negative clientid/invoiceid, check if that placeholder is still pending in the queue.
+          // If body contains a negative clientid/invoiceid OR a UUID placeholder, check if that placeholder is still pending in the queue.
           final bodyStr = item['body']?.toString();
-          if (bodyStr != null && (bodyStr.contains('":-') || bodyStr.contains('":"-'))) {
-            // Heuristic: body has something like "clientid":-12345 or "clientid":"-12345"
-            // We check if there's a pending command for that specific negative ID.
+          if (bodyStr != null) {
             bool hasPendingDependency = false;
-            final matches = RegExp(r'":"?(-?\d+)"?').allMatches(bodyStr);
-            for (final m in matches) {
-              final val = m.group(1);
-              if (val != null && val.startsWith('-')) {
-                // This is a local placeholder. Is it still in the queue?
-                final depItems = await _dbService.rawQuery(
-                    "SELECT id FROM sync_queue WHERE local_id = ? AND status IN ('pending', 'failed') AND id < ?",
-                    [val, item['id']]);
-                if (depItems.isNotEmpty) {
-                  hasPendingDependency = true;
-                  break;
+            
+            // 1. Check for negative numeric placeholders
+            if (bodyStr.contains('":-') || bodyStr.contains('":"-')) {
+              final matches = RegExp(r'":"?(-?\d+)"?').allMatches(bodyStr);
+              for (final m in matches) {
+                final val = m.group(1);
+                if (val != null && val.startsWith('-')) {
+                  final depItems = await _dbService.rawQuery(
+                      "SELECT id FROM sync_queue WHERE local_id = ? AND status IN ('pending', 'failed') AND id < ?",
+                      [val, item['id']]);
+                  if (depItems.isNotEmpty) {
+                    hasPendingDependency = true;
+                    break;
+                  }
                 }
               }
+            }
+            
+            // 2. Check for UUID placeholders in invoiceid or clientid
+            if (!hasPendingDependency && (bodyStr.contains('invoiceid') || bodyStr.contains('clientid'))) {
+              try {
+                final jsonMap = jsonDecode(bodyStr);
+                final invoiceId = jsonMap['invoiceid']?.toString() ?? '';
+                final clientId = jsonMap['clientid']?.toString() ?? '';
+                
+                // If invoiceid or clientid is a UUID (contains '-' and length > 20), it's a placeholder.
+                // We defer this item because its parent hasn't been successfully synced yet.
+                if ((invoiceId.contains('-') && invoiceId.length > 20) || 
+                    (clientId.contains('-') && clientId.length > 20)) {
+                  hasPendingDependency = true;
+                }
+              } catch (_) {}
             }
 
             if (hasPendingDependency) {
@@ -2040,6 +2062,55 @@ class SyncService extends GetxService {
       }
     } catch (e) {
       debugPrint("SyncService Error in syncPromotions: $e");
+    }
+  }
+
+  Future<void> pullRemoteExpenses() async {
+    try {
+      syncStatus.value = "Pulling Remote Expenses...";
+      debugPrint("SyncService: Pulling Remote Expenses...");
+      final response = await _apiService.getExpenses();
+
+      if (response.responsestate == Constants.successState && response.data != null) {
+        final List remoteExpenses = response.data;
+        
+        await _dbService.transaction((txn) async {
+          // Instead of clearing all expenses, maybe we clear only remote ones?
+          // For simplicity, if we pull all expenses, we can clear those that are already synced,
+          // or we can just replace by remote_id if we have one. But our cash_flow table
+          // uses auto-increment id, and we might not have a remote_id column. 
+          // Wait, in my previous task, I added 'remote_id' column to cash_flow!
+          // So we can check if it exists or we can just clear synced expenses and re-insert.
+          
+          await txn.delete('cash_flow', where: 'is_synced = ? OR remote_id IS NOT NULL', whereArgs: [1]);
+          
+          for (var item in remoteExpenses) {
+            await txn.insert(
+              'cash_flow',
+              {
+                'remote_id': int.tryParse(item['id']?.toString() ?? '0'),
+                'id_shift': int.tryParse(item['id_shift']?.toString() ?? '0'),
+                'expense_name': item['expense_name']?.toString() ?? '',
+                'note': item['note']?.toString() ?? '',
+                'category': item['category']?.toString() ?? '1',
+                'date': item['date']?.toString() ?? '',
+                'amount': double.tryParse(item['amount']?.toString() ?? '0')?.toInt() ?? 0,
+                'addedfrom': item['addedfrom']?.toString() ?? '1',
+                'is_synced': 1,
+                // created_at needs to be preserved if available, otherwise use date or now
+                'created_at': item['dateadded']?.toString() ?? item['created_at']?.toString() ?? DateTime.now().toIso8601String(),
+              },
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          }
+        });
+        debugPrint("SyncService: Successfully synced ${remoteExpenses.length} expenses.");
+        syncStatus.value = "Expenses Updated";
+      } else {
+        debugPrint("SyncService: Failed to fetch expenses. Reason: ${response.message}");
+      }
+    } catch (e) {
+      debugPrint("SyncService Error in pullRemoteExpenses: $e");
     }
   }
 }
