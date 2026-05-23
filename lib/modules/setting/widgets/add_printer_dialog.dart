@@ -234,7 +234,9 @@ class _AddPrinterDialogState extends State<AddPrinterDialog> {
                                             itemBuilder: (context, index) {
                                               final d = controller.discoveredDevices[index];
                                               final isSelected = selectedBtAddress == d.address;
-                                              return ListTile(
+                                              return Material(
+                                                color: Colors.transparent,
+                                                child: ListTile(
                                                 dense: true,
                                                 contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
                                                 title: Text(
@@ -265,6 +267,7 @@ class _AddPrinterDialogState extends State<AddPrinterDialog> {
                                                     }
                                                   });
                                                 },
+                                              ),
                                               );
                                             },
                                           ),

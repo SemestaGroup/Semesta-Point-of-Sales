@@ -178,6 +178,10 @@ class HomeController extends GetxController {
           // Refresh catalog and members seamlessly
           getProductData(silent: true);
           getMember(silent: true);
+          // Reload promos in case they were updated during sync
+          if (Get.isRegistered<PromoService>()) {
+            Get.find<PromoService>().loadPromos();
+          }
         }
       });
     }
@@ -1807,6 +1811,25 @@ class HomeController extends GetxController {
       final localPaymentId =
           await _dbService.insert('pos_payments', payment.toJson());
 
+      // Update member points locally immediately
+      if (selectedMember.value != null && selectedMember.value!.idMember != 1) {
+        final earnedPoints = (amount / 10000).floor();
+        if (earnedPoints > 0) {
+          final int currentPoints =
+              int.tryParse(selectedMember.value!.points ?? '0') ?? 0;
+          final int newPoints = currentPoints + earnedPoints;
+          selectedMember.value = selectedMember.value!.copyWith(points: newPoints.toString());
+
+          await _dbService.update(
+            'members',
+            {'points': newPoints.toString()},
+            'id_member = ?',
+            [selectedMember.value!.idMember],
+          );
+          selectedMember.refresh();
+        }
+      }
+
       final apiPaymentBody = {
         'id_pos': idPos,
         'invoiceid': invoiceIdStr,
@@ -1943,7 +1966,12 @@ class HomeController extends GetxController {
           : (selectedMember.value?.nama ?? 'Walk In');
 
       List<int> allBytes = [];
+      int totalLabels = 0;
+      for (var item in items) {
+        totalLabels += item.jumlah;
+      }
 
+      int currentIndex = 1;
       for (var item in items) {
         final orderTypeStr = item.orderType.isNotEmpty
             ? item.orderType
@@ -1956,14 +1984,17 @@ class HomeController extends GetxController {
           line1: dateTimeStr,
           line2: customerWithOrderType,
           line3: orderCode,
-          line4: item.description?.isNotEmpty == true
+          line4: _cleanProductName(item.description?.isNotEmpty == true
               ? item.description!
-              : (item.productName ?? ''),
+              : (item.productName ?? '')),
           productNote: item.note,
           isAutoCut: labelPrinter.isAutoCut,
           copies: item.jumlah, // Use item quantity for copies
+          startIndex: currentIndex,
+          totalLabels: totalLabels,
         );
         allBytes.addAll(bytes);
+        currentIndex += item.jumlah;
       }
 
       // Delegate to SettingController for sequential BT connect→print→disconnect (once per order)
@@ -1971,6 +2002,16 @@ class HomeController extends GetxController {
     } catch (e) {
       Get.snackbar('Print Label Error', 'Failed to print labels: $e');
     }
+  }
+
+  String _cleanProductName(String rawName) {
+    if (rawName.contains('|')) {
+      final parts = rawName.split('|');
+      if (parts.length > 1) {
+        return parts[1].trim(); // e.g. "Brand | Product Name" -> "Product Name"
+      }
+    }
+    return rawName.trim();
   }
 
   String _formatRow(String left, String right, int maxChars) {
@@ -2182,9 +2223,9 @@ class HomeController extends GetxController {
         // 8/12 of the line is for the item name, 4/12 is for the price.
         // Using 24 because maxChars is 32 (58mm width layout)
         final int maxNameLen = 24 - prefix.length;
-        String name = item.description?.isNotEmpty == true
+        String name = _cleanProductName(item.description?.isNotEmpty == true
             ? item.description!
-            : (item.productName ?? "Item");
+            : (item.productName ?? "Item"));
 
         if (name.length > maxNameLen) {
           name = '${name.substring(0, maxNameLen - 3)}..';
@@ -2452,9 +2493,9 @@ class HomeController extends GetxController {
 
         // 9/12 of the line is for the item name, 3/12 is for the checkbox.
         final int maxNameLen = 26 - prefix.length; // maxChars is 32. 26 is safe.
-        String name = item.description?.isNotEmpty == true
+        String name = _cleanProductName(item.description?.isNotEmpty == true
             ? item.description!
-            : (item.productName ?? "Item");
+            : (item.productName ?? "Item"));
 
         if (name.length > maxNameLen) {
           name = '${name.substring(0, maxNameLen - 3)}..';

@@ -694,6 +694,7 @@ class PaymentScreen extends StatelessWidget {
                                       // Wait for BT to fully release before label prints
                                       await Future.delayed(const Duration(seconds: 2));
                                     }
+                                    if (!context.mounted) return;
 
                                     _showSuccessDialog(context, controller,
                                         paymentMethod, receivedAmount, kembalian);

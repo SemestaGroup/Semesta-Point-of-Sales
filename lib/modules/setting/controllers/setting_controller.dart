@@ -524,6 +524,8 @@ class SettingController extends GetxController {
     required String line4, // row 4: product name
     bool isAutoCut = false,
     int copies = 1,
+    int startIndex = 1,
+    int totalLabels = 1,
     String? productNote,
   }) async {
     final profile = await CapabilityProfile.load();
@@ -536,12 +538,14 @@ class SettingController extends GetxController {
     bytes += generator.reset();
 
     for (int i = 0; i < copies; i++) {
-      // Row 1: Date/Time
-      bytes += generator.text(line1,
-          styles: const PosStyles(align: PosAlign.left));
+      int currentCounter = startIndex + i;
+      String labelCounter = '$currentCounter/$totalLabels';
       
-      // bytes += generator.text(lineSeparator,
-      //     styles: const PosStyles(align: PosAlign.left));
+      String topRow = _formatRow(line1, labelCounter, maxChars);
+
+      // Row 1: Date/Time + Counter
+      bytes += generator.text(topRow,
+          styles: const PosStyles(align: PosAlign.left));
       // bytes += generator.feed(1);
 
       // Row 2: Customer Name
@@ -558,9 +562,6 @@ class SettingController extends GetxController {
 
       // Row 4: Product Name (Bold)
       String displayText = line4;
-      if (copies > 1) {
-        displayText += " (${i + 1}/$copies)";
-      }
       bytes += generator.text(
         displayText,
         styles: const PosStyles(align: PosAlign.left, bold: true),
@@ -581,6 +582,17 @@ class SettingController extends GetxController {
   }
 
   /// Builds ESC/POS bytes for a test page, role-aware.
+
+  String _formatRow(String left, String right, int maxChars) {
+    if (left.length + right.length > maxChars) {
+      if (left.length > maxChars - right.length - 1) {
+        left = '${left.substring(0, maxChars - right.length - 2)}..';
+      }
+    }
+    int padLength = maxChars - left.length;
+    if (padLength < 0) padLength = 0;
+    return left + right.padLeft(padLength);
+  }
 
   String _formatCenter(String text, int maxChars) {
     List<String> words = text.split(' ');

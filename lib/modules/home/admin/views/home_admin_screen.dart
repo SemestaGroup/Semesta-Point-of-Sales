@@ -17,6 +17,22 @@ class HomeAdminScreen extends GetView<HomeAdminController> {
     return f.format(v);
   }
 
+  String _cleanProductName(String rawName) {
+    String result = rawName;
+    final lastSpaceIndex = result.lastIndexOf(' ');
+    if (lastSpaceIndex != -1) {
+      result = result.substring(lastSpaceIndex + 1);
+    }
+    result = result.replaceAll('_', ' ').trim();
+    while (result.startsWith('-') || result.startsWith(' ')) {
+      result = result.substring(1);
+    }
+    while (result.endsWith('-') || result.endsWith(' ')) {
+      result = result.substring(0, result.length - 1);
+    }
+    return result.trim();
+  }
+
   @override
   Widget build(BuildContext context) {
     final ctrl = Get.put(HomeAdminController());
@@ -293,14 +309,14 @@ class HomeAdminScreen extends GetView<HomeAdminController> {
           SizedBox(height: 12.h),
           _topProductRow(context,
               label: 'Today',
-              name: ctrl.topProductToday['name'] as String,
+              name: _cleanProductName(ctrl.topProductToday['name'] as String),
               qty: ctrl.topProductToday['qty'] as int,
               progress: (ctrl.topProductToday['progress'] as double),
               color: Colors.green),
           SizedBox(height: 10.h),
           _topProductRow(context,
               label: 'This Month',
-              name: ctrl.topProductMonth['name'] as String,
+              name: _cleanProductName(ctrl.topProductMonth['name'] as String),
               qty: ctrl.topProductMonth['qty'] as int,
               progress: (ctrl.topProductMonth['progress'] as double),
               color: AppTheme.primaryColor),

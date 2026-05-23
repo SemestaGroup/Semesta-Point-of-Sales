@@ -650,6 +650,22 @@ class ReportScreen extends StatelessWidget {
     );
   }
 
+  String _cleanProductName(String rawName) {
+    String result = rawName;
+    final lastSpaceIndex = result.lastIndexOf(' ');
+    if (lastSpaceIndex != -1) {
+      result = result.substring(lastSpaceIndex + 1);
+    }
+    result = result.replaceAll('_', ' ').trim();
+    while (result.startsWith('-') || result.startsWith(' ')) {
+      result = result.substring(1);
+    }
+    while (result.endsWith('-') || result.endsWith(' ')) {
+      result = result.substring(0, result.length - 1);
+    }
+    return result.trim();
+  }
+
   Widget _buildOrderItemRow(BuildContext context, Map<String, dynamic> item, {bool isRefund = false}) {
     return Padding(
       padding: EdgeInsets.only(bottom: 12.h),
@@ -682,7 +698,7 @@ class ReportScreen extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        item['nama_produk']?.toString() ?? item['note']?.toString() ?? "Custom Item",
+                        _cleanProductName(item['nama_produk']?.toString() ?? item['note']?.toString() ?? "Custom Item"),
                         style: TextStyle(
                           fontFamily: AppTheme.fontMedium,
                           fontSize: AppTheme.fontSizeLabelMedium,

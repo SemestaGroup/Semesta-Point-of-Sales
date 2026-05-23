@@ -587,6 +587,25 @@ class ReportController extends GetxController {
 
     return centeredLines.join('\n');
   }
+  String _cleanReprintProductName(String rawName) {
+    String result = rawName;
+    // 1. Split by last space
+    final lastSpaceIndex = result.lastIndexOf(' ');
+    if (lastSpaceIndex != -1) {
+      result = result.substring(lastSpaceIndex + 1);
+    }
+    // 2. Replace '_' with ' '
+    result = result.replaceAll('_', ' ');
+    // 3. Trim spaces and '-' at the start and end
+    result = result.trim();
+    while (result.startsWith('-') || result.startsWith(' ')) {
+      result = result.substring(1);
+    }
+    while (result.endsWith('-') || result.endsWith(' ')) {
+      result = result.substring(0, result.length - 1);
+    }
+    return result.trim();
+  }
 
   Future<void> printReceiptOnly(Map<String, dynamic> order, List items,
       {Map<String, dynamic>? member}) async {
@@ -719,7 +738,7 @@ class ReportController extends GetxController {
         // 8/12 of the line is for the item name, 4/12 is for the price.
         // Using 24 because maxChars is 32 (58mm width layout)
         final int maxNameLen = 24 - prefix.length;
-        String displayName = name;
+        String displayName = _cleanReprintProductName(name);
         if (displayName.length > maxNameLen) {
           displayName = '${displayName.substring(0, maxNameLen - 3)}..';
         }
@@ -936,11 +955,19 @@ class ReportController extends GetxController {
 
       List<int> allBytes = [];
 
+      int totalLabels = 0;
+      for (var item in items) {
+        final double qtyDouble =
+            double.tryParse(item['jumlah']?.toString() ?? "1") ?? 1;
+        totalLabels += qtyDouble.toInt();
+      }
+
+      int currentIndex = 1;
       for (var item in items) {
         final double qtyDouble =
             double.tryParse(item['jumlah']?.toString() ?? "1") ?? 1;
         final int qty = qtyDouble.toInt();
-        final String name = item['nama_produk']?.toString() ?? "Item";
+        final String name = _cleanReprintProductName(item['nama_produk']?.toString() ?? "Item");
         final String note = item['note']?.toString() ?? '';
 
         final bytes = await settingCtrl.buildLabelEscPos(
@@ -951,8 +978,11 @@ class ReportController extends GetxController {
           productNote: note,
           isAutoCut: labelPrinter.isAutoCut,
           copies: qty,
+          startIndex: currentIndex,
+          totalLabels: totalLabels,
         );
         allBytes.addAll(bytes);
+        currentIndex += qty;
       }
 
       await settingCtrl.printToTarget(labelPrinter, prebuiltBytes: allBytes);
