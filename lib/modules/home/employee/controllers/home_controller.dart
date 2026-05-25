@@ -1989,7 +1989,7 @@ class HomeController extends GetxController {
           line1: dateTimeStr,
           line2: customerWithOrderType,
           line3: orderCode,
-          line4: _cleanProductName(item.description?.isNotEmpty == true
+          line4: normalizeUIName(item.description?.isNotEmpty == true
               ? item.description!
               : (item.productName ?? '')),
           productNote: item.note,
@@ -2009,8 +2009,13 @@ class HomeController extends GetxController {
     }
   }
 
-  String _cleanProductName(String rawName) {
-    return rawName.trim();
+  // Used specifically for the UI to show the full name with parent, replacing '_' with space.
+  String normalizeUIName(String rawName) {
+    String name = rawName.trim();
+    if (name.contains('_')) {
+      name = name.replaceAll('_', ' ');
+    }
+    return name.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   String _formatRow(String left, String right, int maxChars) {
@@ -2062,6 +2067,34 @@ class HomeController extends GetxController {
   /// Print cashier receipt.
   /// Routes to the 'cashier' role printer via SettingController (sequential BT flow).
   /// [penjualan] and [details] can be provided; otherwise defaults to current controller state.
+  List<String> _wrapText(String text, int maxWidth) {
+    if (text.isEmpty) return [""];
+    List<String> lines = [];
+    int start = 0;
+    while (start < text.length) {
+      if (text.length - start <= maxWidth) {
+        lines.add(text.substring(start).trim());
+        break;
+      }
+      int breakPoint = -1;
+      for (int i = start + maxWidth; i > start; i--) {
+        if (i < text.length && (text[i] == ' ' || text[i] == '-')) {
+          breakPoint = i;
+          break;
+        }
+      }
+      if (breakPoint == -1) {
+        lines.add(text.substring(start, start + maxWidth).trim());
+        start += maxWidth;
+      } else {
+        int end = text[breakPoint] == '-' ? breakPoint + 1 : breakPoint;
+        lines.add(text.substring(start, end).trim());
+        start = text[breakPoint] == '-' ? breakPoint + 1 : breakPoint + 1;
+      }
+    }
+    return lines;
+  }
+
   Future<void> printReceipt({
     required String paymentMethod,
     required int total,
@@ -2194,8 +2227,24 @@ class HomeController extends GetxController {
           styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text('Receipt No: $orderCode',
           styles: const PosStyles(align: PosAlign.left));
+      String cashierName = userService.getPrefString(Constants.userName);
+      if (penjualan != null && penjualan.idUser > 0) {
+        try {
+          final _dbService = Get.find<DatabaseService>();
+          final rows = await _dbService.rawQuery(
+              'SELECT firstname, lastname FROM staff WHERE id = ?',
+              [penjualan.idUser]);
+          if (rows.isNotEmpty) {
+            final fName = rows.first['firstname']?.toString() ?? '';
+            final lName = rows.first['lastname']?.toString() ?? '';
+            final full = '$fName $lName'.trim();
+            if (full.isNotEmpty) cashierName = full;
+          }
+        } catch (_) {}
+      }
+
       bytes += generator.text(
-          'Cashier   : ${userService.getPrefString(Constants.userName)}',
+          'Cashier   : $cashierName',
           styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text('Customer  : $customerName',
           styles: const PosStyles(align: PosAlign.left));
@@ -2217,9 +2266,15 @@ class HomeController extends GetxController {
       final itemsToPrint = details ?? penjualanDetailModelList;
       for (var item in itemsToPrint) {
         final int subtotal = item.subtotal;
-        String name = _cleanProductName(item.description?.isNotEmpty == true
-            ? item.description!
-            : (item.productName ?? "Item"));
+        
+        final String rawDesc = item.description?.toString() ?? "";
+        final String rawProd = item.productName?.toString() ?? "";
+        final String rawNote = item.note?.toString() ?? "";
+        
+        String name = rawDesc.isNotEmpty ? rawDesc : (rawProd.isNotEmpty ? rawProd : rawNote);
+        if (name.isEmpty) name = "Item";
+
+        String cleanName = name.replaceAll('_', ' ').replaceAll('|', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
 
         int displaySubtotal = subtotal;
         int totalNominal = 0;
@@ -2242,43 +2297,35 @@ class HomeController extends GetxController {
         final String itemPrice = formatRupiah(displaySubtotal).replaceAll('Rp. ', '');
         final String prefix = '${item.jumlah.toInt()}x ';
 
-        if (name.contains('|')) {
-          int maxPart1 = 24 - prefix.length;
-          String part1 = name;
-          String part2 = "";
-          
-          if (name.length > maxPart1) {
-            part1 = name.substring(0, maxPart1);
-            part2 = name.substring(maxPart1).trimLeft(); // remove leading spaces for part2
-          }
-          
-          // Print line 1 (Name only, no price)
-          final String itemLabel1 = '$prefix$part1';
-          bytes += generator.text(itemLabel1, styles: const PosStyles(align: PosAlign.left));
-          
-          // Print line 2 (Indented Name + Price)
-          String indent = ' ' * prefix.length;
-          String indentedPart2 = '$indent$part2';
-          bytes += generator.text(_formatRow(indentedPart2, itemPrice, maxChars),
+        int maxWidth = 24 - prefix.length;
+        List<String> wrappedLines = _wrapText(cleanName, maxWidth);
+
+        if (wrappedLines.length == 1) {
+          bytes += generator.text(_formatRow('$prefix${wrappedLines[0]}', itemPrice, maxChars),
               styles: const PosStyles(align: PosAlign.left));
         } else {
-          final int maxNameLen = 24 - prefix.length;
-          if (name.length > maxNameLen) {
-            name = '${name.substring(0, maxNameLen - 3)}..';
-          }
-          final String itemName = '$prefix$name';
-          bytes += generator.text(_formatRow(itemName, itemPrice, maxChars),
+          bytes += generator.text('$prefix${wrappedLines[0]}',
               styles: const PosStyles(align: PosAlign.left));
+          for (int i = 1; i < wrappedLines.length; i++) {
+            String indent = ' ' * prefix.length;
+            if (i == wrappedLines.length - 1) {
+              bytes += generator.text(_formatRow('$indent${wrappedLines[i]}', itemPrice, maxChars),
+                  styles: const PosStyles(align: PosAlign.left));
+            } else {
+              bytes += generator.text('$indent${wrappedLines[i]}',
+                  styles: const PosStyles(align: PosAlign.left));
+            }
+          }
         }
 
-        // Item-level Discount (Re-enabled)
         if (totalNominal > 0) {
           bytes += generator.text(
               _formatRow(
                   '   disc',
                   '-${formatRupiah(totalNominal).replaceAll('Rp. ', '')}',
                   maxChars),
-              styles: const PosStyles(align: PosAlign.left));
+              styles: const PosStyles(
+                  align: PosAlign.left, fontType: PosFontType.fontB));
         }
       }
       bytes += generator.text(lineSeparator,

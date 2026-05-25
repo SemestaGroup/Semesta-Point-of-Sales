@@ -651,19 +651,11 @@ class ReportScreen extends StatelessWidget {
   }
 
   String _cleanProductName(String rawName) {
-    String result = rawName;
-    final lastSpaceIndex = result.lastIndexOf(' ');
-    if (lastSpaceIndex != -1) {
-      result = result.substring(lastSpaceIndex + 1);
+    String name = rawName.trim();
+    if (name.contains('_')) {
+      name = name.replaceAll('_', ' ');
     }
-    result = result.replaceAll('_', ' ').trim();
-    while (result.startsWith('-') || result.startsWith(' ')) {
-      result = result.substring(1);
-    }
-    while (result.endsWith('-') || result.endsWith(' ')) {
-      result = result.substring(0, result.length - 1);
-    }
-    return result.trim();
+    return name.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   Widget _buildOrderItemRow(BuildContext context, Map<String, dynamic> item, {bool isRefund = false}) {

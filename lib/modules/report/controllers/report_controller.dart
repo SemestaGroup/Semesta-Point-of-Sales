@@ -204,10 +204,7 @@ class ReportController extends GetxController {
       ''';
       List<dynamic> args = [startDate, endDate];
 
-      if (!userService.isManagerialRole()) {
-        sql += ' AND t.id_user = ?';
-        args.add(userService.getPrefInt(Constants.userId));
-      }
+      // No role restrictions; all users can see all orders
 
       // Payment method filter: match against pos_payments.paymentmethod
       final filterMethod = selectedPaymentMethod.value;
@@ -300,10 +297,7 @@ class ReportController extends GetxController {
        ''';
       List<dynamic> args = [startDate, endDate];
 
-      if (!userService.isManagerialRole()) {
-        sql += ' AND t.id_user = ?';
-        args.add(userService.getPrefInt(Constants.userId));
-      }
+      // No role restrictions; all users can see top products
 
       sql +=
           ' GROUP BY td.id_produk, item_name ORDER BY qty_sold DESC LIMIT 50';
@@ -587,8 +581,41 @@ class ReportController extends GetxController {
 
     return centeredLines.join('\n');
   }
+
   String _cleanReprintProductName(String rawName) {
-    return rawName.trim();
+    String name = rawName.trim();
+    if (name.contains('_')) {
+      name = name.replaceAll('_', ' ');
+    }
+    return name.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  List<String> _wrapText(String text, int maxWidth) {
+    if (text.isEmpty) return [""];
+    List<String> lines = [];
+    int start = 0;
+    while (start < text.length) {
+      if (text.length - start <= maxWidth) {
+        lines.add(text.substring(start).trim());
+        break;
+      }
+      int breakPoint = -1;
+      for (int i = start + maxWidth; i > start; i--) {
+        if (i < text.length && (text[i] == ' ' || text[i] == '-')) {
+          breakPoint = i;
+          break;
+        }
+      }
+      if (breakPoint == -1) {
+        lines.add(text.substring(start, start + maxWidth).trim());
+        start += maxWidth;
+      } else {
+        int end = text[breakPoint] == '-' ? breakPoint + 1 : breakPoint;
+        lines.add(text.substring(start, end).trim());
+        start = text[breakPoint] == '-' ? breakPoint + 1 : breakPoint + 1;
+      }
+    }
+    return lines;
   }
 
   Future<void> printReceiptOnly(Map<String, dynamic> order, List items,
@@ -693,8 +720,27 @@ class ReportController extends GetxController {
           styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text('Receipt No: $orderCode',
           styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text(
-          'Cashier   : ${userService.getPrefString(Constants.userName)}',
+      String cashierName = userService.getPrefString(Constants.userName);
+      final int orderIdUser = int.tryParse(order['id_user']?.toString() ??
+              order['sale_agent']?.toString() ??
+              "0") ??
+          0;
+      if (orderIdUser > 0) {
+        try {
+          final _dbService = Get.find<DatabaseService>();
+          final rows = await _dbService.rawQuery(
+              'SELECT firstname, lastname FROM staff WHERE id = ?',
+              [orderIdUser]);
+          if (rows.isNotEmpty) {
+            final fName = rows.first['firstname']?.toString() ?? '';
+            final lName = rows.first['lastname']?.toString() ?? '';
+            final full = '$fName $lName'.trim();
+            if (full.isNotEmpty) cashierName = full;
+          }
+        } catch (_) {}
+      }
+
+      bytes += generator.text('Cashier   : $cashierName',
           styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text('Customer  : $customerName',
           styles: const PosStyles(align: PosAlign.left));
@@ -709,30 +755,31 @@ class ReportController extends GetxController {
 
       // 4. Items
       for (var item in items) {
-        final double qty =
-            double.tryParse(item['jumlah']?.toString() ?? "1") ?? 1;
-        final String name = item['nama_produk']?.toString() ??
-            item['note']?.toString() ??
-            "Item";
-        final int subtotal =
-            (double.tryParse(item['subtotal']?.toString() ?? "0") ?? 0).toInt();
+        final double qty = double.tryParse(item['jumlah']?.toString() ?? "1") ?? 1;
+        final String rawDesc = item['description']?.toString() ?? "";
+        final String rawProd = item['nama_produk']?.toString() ?? "";
+        final String rawNote = item['note']?.toString() ?? "";
+        
+        String name = rawDesc.isNotEmpty ? rawDesc : (rawProd.isNotEmpty ? rawProd : rawNote);
+        if (name.isEmpty) name = "Item";
+
+        final int subtotal = (double.tryParse(item['subtotal']?.toString() ?? "0") ?? 0).toInt();
 
         final String prefix = '${qty.toInt()}x ';
 
-        String rawName = _cleanReprintProductName(name);
-        
-        final double hargaAwal = double.tryParse(item['harga_awal']?.toString() ?? "0") ?? 0;
-        final double hargaJual = double.tryParse(item['harga_jual']?.toString() ?? "0") ?? 0;
+        String cleanName = name.replaceAll('_', ' ').replaceAll('|', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+
+        final double hargaAwal = double.tryParse(item['hargaAwal']?.toString() ?? item['harga_awal']?.toString() ?? "0") ?? 0;
+        final double hargaJual = double.tryParse(item['harga_jual']?.toString() ?? item['hargaJual']?.toString() ?? "0") ?? 0;
         final double base = hargaAwal > 0 ? hargaAwal : hargaJual;
-        
+
         int displaySubtotal = subtotal;
-        final double itemDiscTotal = double.tryParse(item['discountTotal']?.toString() ?? "0") ?? 0;
-        final String discType = item['discount_type']?.toString() ?? 'fixed';
+        final double itemDiscTotal = double.tryParse(item['discountTotal']?.toString() ?? item['discount_total']?.toString() ?? "0") ?? 0;
+        final String discType = item['discountType']?.toString() ?? item['discount_type']?.toString() ?? 'fixed';
         int totalNominal = 0;
 
         if (itemDiscTotal > 0) {
           displaySubtotal = (base * qty).toInt();
-          
           int nominalPerUnit = 0;
           if (discType == 'percent') {
             nominalPerUnit = (base * itemDiscTotal / 100).round();
@@ -746,31 +793,25 @@ class ReportController extends GetxController {
 
         final String itemPrice = _rawFormatRupiah(displaySubtotal).replaceAll('Rp. ', '');
 
-        if (rawName.contains('|')) {
-          int maxPart1 = 24 - prefix.length;
-          String part1 = rawName;
-          String part2 = "";
-          
-          if (rawName.length > maxPart1) {
-            part1 = rawName.substring(0, maxPart1);
-            part2 = rawName.substring(maxPart1).trimLeft();
-          }
-          
-          final String itemLabel1 = '$prefix$part1';
-          bytes += generator.text(itemLabel1, styles: const PosStyles(align: PosAlign.left));
-          
-          String indent = ' ' * prefix.length;
-          String indentedPart2 = '$indent$part2';
-          bytes += generator.text(_formatRow(indentedPart2, itemPrice, maxChars),
+        int maxWidth = 24 - prefix.length;
+        List<String> wrappedLines = _wrapText(cleanName, maxWidth);
+
+        if (wrappedLines.length == 1) {
+          bytes += generator.text(_formatRow('$prefix${wrappedLines[0]}', itemPrice, maxChars),
               styles: const PosStyles(align: PosAlign.left));
         } else {
-          final int maxNameLen = 24 - prefix.length;
-          if (rawName.length > maxNameLen) {
-            rawName = '${rawName.substring(0, maxNameLen - 3)}..';
-          }
-          final String itemLabel = '$prefix$rawName';
-          bytes += generator.text(_formatRow(itemLabel, itemPrice, maxChars),
+          bytes += generator.text('$prefix${wrappedLines[0]}',
               styles: const PosStyles(align: PosAlign.left));
+          for (int i = 1; i < wrappedLines.length; i++) {
+            String indent = ' ' * prefix.length;
+            if (i == wrappedLines.length - 1) {
+              bytes += generator.text(_formatRow('$indent${wrappedLines[i]}', itemPrice, maxChars),
+                  styles: const PosStyles(align: PosAlign.left));
+            } else {
+              bytes += generator.text('$indent${wrappedLines[i]}',
+                  styles: const PosStyles(align: PosAlign.left));
+            }
+          }
         }
 
         if (totalNominal > 0) {
@@ -975,7 +1016,8 @@ class ReportController extends GetxController {
         final double qtyDouble =
             double.tryParse(item['jumlah']?.toString() ?? "1") ?? 1;
         final int qty = qtyDouble.toInt();
-        final String name = _cleanReprintProductName(item['nama_produk']?.toString() ?? "Item");
+        final String name =
+            _cleanReprintProductName(item['nama_produk']?.toString() ?? "Item");
         final String note = item['note']?.toString() ?? '';
 
         final bytes = await settingCtrl.buildLabelEscPos(

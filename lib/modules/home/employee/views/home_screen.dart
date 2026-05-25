@@ -288,6 +288,10 @@ class HomeScreen extends StatelessWidget {
                                           : (() {
                                               final settings = controller
                                                   .appService.posSettings;
+                                              // Observe promoProductIds so the grid rebuilds when promos finish loading from SQLite
+                                              if (Get.isRegistered<PromoService>()) {
+                                                Get.find<PromoService>().promoProductIds.isEmpty;
+                                              }
                                               final display =
                                                   settings['display'] ?? {};
                                               final bool showPrice =
@@ -2108,7 +2112,8 @@ class HomeScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.description?.isNotEmpty == true ? item.description! : (item.productName ?? "Unknown Product"),
+                  Text(
+                    controller.normalizeUIName(item.productName ?? "Unknown Product"),
                       style: AppTheme.bodyLarge.copyWith(
                           fontSize: 15.sp,
                           fontFamily: AppTheme.fontBold,
@@ -2265,7 +2270,7 @@ class HomeScreen extends StatelessWidget {
                 SizedBox(width: 8.w),
                 Expanded(
                   child: Text(
-                    'Adjust Refund: ${item.description?.isNotEmpty == true ? item.description! : (item.productName ?? "Item")}',
+                    'Adjust Refund: ${controller.normalizeUIName(item.productName ?? "Item")}',
                     style: AppTheme.titleLarge.copyWith(
                         fontSize: 15.sp, fontFamily: AppTheme.fontBold),
                     maxLines: 1,
@@ -2375,7 +2380,8 @@ class HomeScreen extends StatelessWidget {
                   ],
                 ),
                 SizedBox(height: 12.h),
-                Text(item.description?.isNotEmpty == true ? item.description! : (item.productName ?? "Product Name"),
+                Text(
+                  controller.normalizeUIName(item.productName ?? "Product Name"),
                     style: AppTheme.bodyLarge.copyWith(
                         fontSize: 18.sp,
                         color: AppTheme.secondaryTextColor(context))),

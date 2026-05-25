@@ -176,6 +176,8 @@ class UserService extends GetxService {
     // Legacy support for numeric roles stored as strings after migration
     if (roleStr == "1") return "owner";
     if (roleStr == "2") return "cashier";
+    if (roleStr == "3") return "kitchen";
+    if (roleStr == "4") return "supervisor";
     return roleStr;
   }
 

@@ -464,9 +464,9 @@ class ShiftController extends GetxController {
         FROM transactions t
         WHERE t.status IN (2, 3)
           AND (
-            (t.tgl_bayar IS NOT NULL AND t.tgl_bayar != "" AND substr(t.tgl_bayar, 1, 19) >= ?)
+            (t.tgl_bayar IS NOT NULL AND t.tgl_bayar != '' AND substr(t.tgl_bayar,1,19) >= ?)
             OR (
-              (t.tgl_bayar IS NULL OR t.tgl_bayar = "")
+              (t.tgl_bayar IS NULL OR t.tgl_bayar = '')
               AND substr(t.tgl_penjualan, 1, 19) >= ?
             )
           )
