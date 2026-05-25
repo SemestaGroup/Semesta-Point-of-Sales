@@ -588,23 +588,7 @@ class ReportController extends GetxController {
     return centeredLines.join('\n');
   }
   String _cleanReprintProductName(String rawName) {
-    String result = rawName;
-    // 1. Split by last space
-    final lastSpaceIndex = result.lastIndexOf(' ');
-    if (lastSpaceIndex != -1) {
-      result = result.substring(lastSpaceIndex + 1);
-    }
-    // 2. Replace '_' with ' '
-    result = result.replaceAll('_', ' ');
-    // 3. Trim spaces and '-' at the start and end
-    result = result.trim();
-    while (result.startsWith('-') || result.startsWith(' ')) {
-      result = result.substring(1);
-    }
-    while (result.endsWith('-') || result.endsWith(' ')) {
-      result = result.substring(0, result.length - 1);
-    }
-    return result.trim();
+    return rawName.trim();
   }
 
   Future<void> printReceiptOnly(Map<String, dynamic> order, List items,
@@ -735,44 +719,68 @@ class ReportController extends GetxController {
 
         final String prefix = '${qty.toInt()}x ';
 
-        // 8/12 of the line is for the item name, 4/12 is for the price.
-        // Using 24 because maxChars is 32 (58mm width layout)
-        final int maxNameLen = 24 - prefix.length;
-        String displayName = _cleanReprintProductName(name);
-        if (displayName.length > maxNameLen) {
-          displayName = '${displayName.substring(0, maxNameLen - 3)}..';
-        }
-
-        final String itemLabel = '$prefix$displayName';
-        final String itemPrice =
-            _rawFormatRupiah(subtotal).replaceAll('Rp. ', '');
-
-        bytes += generator.text(_formatRow(itemLabel, itemPrice, maxChars),
-            styles: const PosStyles(align: PosAlign.left));
-
-        // Item-level Discount
-        final double itemDiscTotal =
-            double.tryParse(item['discountTotal']?.toString() ?? "0") ?? 0;
+        String rawName = _cleanReprintProductName(name);
+        
+        final double hargaAwal = double.tryParse(item['harga_awal']?.toString() ?? "0") ?? 0;
+        final double hargaJual = double.tryParse(item['harga_jual']?.toString() ?? "0") ?? 0;
+        final double base = hargaAwal > 0 ? hargaAwal : hargaJual;
+        
+        int displaySubtotal = subtotal;
+        final double itemDiscTotal = double.tryParse(item['discountTotal']?.toString() ?? "0") ?? 0;
         final String discType = item['discount_type']?.toString() ?? 'fixed';
+        int totalNominal = 0;
 
         if (itemDiscTotal > 0) {
-          int totalNominal = itemDiscTotal.toInt();
+          displaySubtotal = (base * qty).toInt();
+          
+          int nominalPerUnit = 0;
           if (discType == 'percent') {
-            final double harga =
-                double.tryParse(item['harga_jual']?.toString() ?? "0") ?? 0;
-            final int nominalPerUnit = (harga * itemDiscTotal / 100).round();
-            totalNominal = nominalPerUnit * qty.toInt();
+            nominalPerUnit = (base * itemDiscTotal / 100).round();
+          } else if (discType == 'final_price') {
+            nominalPerUnit = (base - itemDiscTotal).toInt();
+          } else {
+            nominalPerUnit = itemDiscTotal.toInt();
           }
+          totalNominal = (nominalPerUnit * qty).toInt();
+        }
 
-          if (totalNominal > 0) {
-            bytes += generator.text(
-                _formatRow(
-                    '   disc',
-                    '-${_rawFormatRupiah(totalNominal).replaceAll('Rp. ', '')}',
-                    maxChars),
-                styles: const PosStyles(
-                    align: PosAlign.left, fontType: PosFontType.fontB));
+        final String itemPrice = _rawFormatRupiah(displaySubtotal).replaceAll('Rp. ', '');
+
+        if (rawName.contains('|')) {
+          int maxPart1 = 24 - prefix.length;
+          String part1 = rawName;
+          String part2 = "";
+          
+          if (rawName.length > maxPart1) {
+            part1 = rawName.substring(0, maxPart1);
+            part2 = rawName.substring(maxPart1).trimLeft();
           }
+          
+          final String itemLabel1 = '$prefix$part1';
+          bytes += generator.text(itemLabel1, styles: const PosStyles(align: PosAlign.left));
+          
+          String indent = ' ' * prefix.length;
+          String indentedPart2 = '$indent$part2';
+          bytes += generator.text(_formatRow(indentedPart2, itemPrice, maxChars),
+              styles: const PosStyles(align: PosAlign.left));
+        } else {
+          final int maxNameLen = 24 - prefix.length;
+          if (rawName.length > maxNameLen) {
+            rawName = '${rawName.substring(0, maxNameLen - 3)}..';
+          }
+          final String itemLabel = '$prefix$rawName';
+          bytes += generator.text(_formatRow(itemLabel, itemPrice, maxChars),
+              styles: const PosStyles(align: PosAlign.left));
+        }
+
+        if (totalNominal > 0) {
+          bytes += generator.text(
+              _formatRow(
+                  '   disc',
+                  '-${_rawFormatRupiah(totalNominal).replaceAll('Rp. ', '')}',
+                  maxChars),
+              styles: const PosStyles(
+                  align: PosAlign.left, fontType: PosFontType.fontB));
         }
       }
       bytes += generator.text(_formatCenter(lineSeparator, maxChars),

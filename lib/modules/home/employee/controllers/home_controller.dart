@@ -723,6 +723,7 @@ class HomeController extends GetxController {
   void calculateTotals() {
     int subtotal = 0;
     for (var item in penjualanDetailModelList) {
+      if (item.isRefund) continue;
       subtotal += item.subtotal;
     }
     subtotalRaw.value = subtotal;
@@ -1458,7 +1459,9 @@ class HomeController extends GetxController {
               ? selectedMember.value!.alamat!
               : '-';
 
-      final today = DateTime.now().toIso8601String().split('T')[0];
+      // Use the actual transaction date, falling back to now if missing
+      final String tglStr = map['tgl_penjualan']?.toString() ?? DateTime.now().toIso8601String();
+      final String today = tglStr.split('T')[0].split(' ')[0];
       final syncService = Get.find<SyncService>();
 
       // Remove any pending pushes for this exact local order to avoid sending multiple stale updates
@@ -1536,6 +1539,7 @@ class HomeController extends GetxController {
           'id_pos': map['id_pos'],
           'clientid': clientId,
           'date': today,
+          'datecreated': tglStr,
           'currency': 3,
           'prefix': 'POS-',
           'newitems': newitemsArray,
@@ -1837,6 +1841,7 @@ class HomeController extends GetxController {
         'paymentmode': paymentModeId,
         'paymentmethod': paymentMethod ?? paymentMode,
         'date': date,
+        'daterecorded': dateRecorded,
         'transactionid': '',
         'note': note ?? orderNote.value,
         'sale_agent': userService.getPrefInt(Constants.userId).toString(),
@@ -2005,12 +2010,6 @@ class HomeController extends GetxController {
   }
 
   String _cleanProductName(String rawName) {
-    if (rawName.contains('|')) {
-      final parts = rawName.split('|');
-      if (parts.length > 1) {
-        return parts[1].trim(); // e.g. "Brand | Product Name" -> "Product Name"
-      }
-    }
     return rawName.trim();
   }
 
@@ -2218,41 +2217,68 @@ class HomeController extends GetxController {
       final itemsToPrint = details ?? penjualanDetailModelList;
       for (var item in itemsToPrint) {
         final int subtotal = item.subtotal;
-        final String prefix = '${item.jumlah.toInt()}x ';
-
-        // 8/12 of the line is for the item name, 4/12 is for the price.
-        // Using 24 because maxChars is 32 (58mm width layout)
-        final int maxNameLen = 24 - prefix.length;
         String name = _cleanProductName(item.description?.isNotEmpty == true
             ? item.description!
             : (item.productName ?? "Item"));
 
-        if (name.length > maxNameLen) {
-          name = '${name.substring(0, maxNameLen - 3)}..';
-        }
+        int displaySubtotal = subtotal;
+        int totalNominal = 0;
 
-        final String itemName = '$prefix$name';
-        final String itemPrice = formatRupiah(subtotal).replaceAll('Rp. ', '');
-
-        bytes += generator.text(_formatRow(itemName, itemPrice, maxChars),
-            styles: const PosStyles(align: PosAlign.left));
-
-        // Item-level Discount (Re-enabled)
         if (item.discountTotal > 0) {
           final base = item.hargaAwal > 0 ? item.hargaAwal : item.hargaJual;
-          final nominalPerUnit = item.discountType == 'percent'
-              ? (base * item.discountTotal / 100).round()
-              : item.discountTotal;
-          final totalNominal = (nominalPerUnit * item.jumlah).toInt();
+          displaySubtotal = (base * item.jumlah).toInt();
 
-          if (totalNominal > 0) {
-            bytes += generator.text(
-                _formatRow(
-                    '   disc',
-                    '-${formatRupiah(totalNominal).replaceAll('Rp. ', '')}',
-                    maxChars),
-                styles: const PosStyles(align: PosAlign.left));
+          int nominalPerUnit = 0;
+          if (item.discountType == 'percent') {
+            nominalPerUnit = (base * item.discountTotal / 100).round();
+          } else if (item.discountType == 'final_price') {
+            nominalPerUnit = base - item.discountTotal;
+          } else {
+            nominalPerUnit = item.discountTotal;
           }
+          totalNominal = (nominalPerUnit * item.jumlah).toInt();
+        }
+
+        final String itemPrice = formatRupiah(displaySubtotal).replaceAll('Rp. ', '');
+        final String prefix = '${item.jumlah.toInt()}x ';
+
+        if (name.contains('|')) {
+          int maxPart1 = 24 - prefix.length;
+          String part1 = name;
+          String part2 = "";
+          
+          if (name.length > maxPart1) {
+            part1 = name.substring(0, maxPart1);
+            part2 = name.substring(maxPart1).trimLeft(); // remove leading spaces for part2
+          }
+          
+          // Print line 1 (Name only, no price)
+          final String itemLabel1 = '$prefix$part1';
+          bytes += generator.text(itemLabel1, styles: const PosStyles(align: PosAlign.left));
+          
+          // Print line 2 (Indented Name + Price)
+          String indent = ' ' * prefix.length;
+          String indentedPart2 = '$indent$part2';
+          bytes += generator.text(_formatRow(indentedPart2, itemPrice, maxChars),
+              styles: const PosStyles(align: PosAlign.left));
+        } else {
+          final int maxNameLen = 24 - prefix.length;
+          if (name.length > maxNameLen) {
+            name = '${name.substring(0, maxNameLen - 3)}..';
+          }
+          final String itemName = '$prefix$name';
+          bytes += generator.text(_formatRow(itemName, itemPrice, maxChars),
+              styles: const PosStyles(align: PosAlign.left));
+        }
+
+        // Item-level Discount (Re-enabled)
+        if (totalNominal > 0) {
+          bytes += generator.text(
+              _formatRow(
+                  '   disc',
+                  '-${formatRupiah(totalNominal).replaceAll('Rp. ', '')}',
+                  maxChars),
+              styles: const PosStyles(align: PosAlign.left));
         }
       }
       bytes += generator.text(lineSeparator,
@@ -2490,21 +2516,37 @@ class HomeController extends GetxController {
       final itemsToPrint = details ?? penjualanDetailModelList;
       for (var item in itemsToPrint) {
         final String prefix = '${item.jumlah.toInt()}x ';
-
-        // 9/12 of the line is for the item name, 3/12 is for the checkbox.
-        final int maxNameLen = 26 - prefix.length; // maxChars is 32. 26 is safe.
-        String name = _cleanProductName(item.description?.isNotEmpty == true
+        String rawName = item.description?.isNotEmpty == true
             ? item.description!
-            : (item.productName ?? "Item"));
+            : (item.productName ?? "Item");
 
-        if (name.length > maxNameLen) {
-          name = '${name.substring(0, maxNameLen - 3)}..';
+        if (rawName.contains('|')) {
+          int maxPart1 = 24 - prefix.length;
+          String part1 = rawName;
+          String part2 = "";
+          
+          if (rawName.length > maxPart1) {
+            part1 = rawName.substring(0, maxPart1);
+            part2 = rawName.substring(maxPart1).trimLeft();
+          }
+          
+          final String itemLabel1 = '$prefix$part1';
+          bytes += generator.text(itemLabel1, styles: const PosStyles(align: PosAlign.left));
+          
+          String indent = ' ' * prefix.length;
+          String indentedPart2 = '$indent$part2';
+          bytes += generator.text(_formatRow(indentedPart2, '[ ]', maxChars),
+              styles: const PosStyles(align: PosAlign.left));
+        } else {
+          final int maxNameLen = 24 - prefix.length;
+          String name = rawName;
+          if (name.length > maxNameLen) {
+            name = '${name.substring(0, maxNameLen - 3)}..';
+          }
+          final String itemLabel = '$prefix$name';
+          bytes += generator.text(_formatRow(itemLabel, '[ ]', maxChars),
+              styles: const PosStyles(align: PosAlign.left));
         }
-
-        final String itemLabel = '$prefix$name';
-
-        bytes += generator.text(_formatRow(itemLabel, '[ ]', maxChars),
-            styles: const PosStyles(align: PosAlign.left));
 
         if (item.note.isNotEmpty) {
           bytes += generator.text('   * ${item.note}',

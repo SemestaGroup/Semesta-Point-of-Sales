@@ -561,11 +561,27 @@ class SettingController extends GetxController {
       //     styles: const PosStyles(align: PosAlign.left));
 
       // Row 4: Product Name (Bold)
-      String displayText = line4;
-      bytes += generator.text(
-        displayText,
-        styles: const PosStyles(align: PosAlign.left, bold: true),
-      );
+      if (line4.contains('|')) {
+        String part1 = line4;
+        String part2 = "";
+        if (line4.length > 24) {
+          part1 = line4.substring(0, 24);
+          part2 = line4.substring(24).trimLeft();
+        }
+        bytes += generator.text(part1, styles: const PosStyles(align: PosAlign.left, bold: true));
+        if (part2.isNotEmpty) {
+          if (part2.length > 26) {
+             part2 = '${part2.substring(0, 23)}..';
+          }
+          bytes += generator.text(part2, styles: const PosStyles(align: PosAlign.left, bold: true));
+        }
+      } else {
+        String name = line4;
+        if (name.length > 24) {
+           name = '${name.substring(0, 21)}..';
+        }
+        bytes += generator.text(name, styles: const PosStyles(align: PosAlign.left, bold: true));
+      }
 
       if (productNote != null && productNote.trim().isNotEmpty) {
         bytes += generator.text(

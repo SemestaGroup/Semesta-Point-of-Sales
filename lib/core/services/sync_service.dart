@@ -247,7 +247,17 @@ class SyncService extends GetxService {
         response.data != null) {
       // Data is already decoded in ApiService, but if it was raw, we'd use compute here.
       final List remoteOrders = response.data;
+      
+      // Sort orders descending (newest first) to prioritize fetching recent orders
+      remoteOrders.sort((a, b) {
+        final idA = int.tryParse(a['id']?.toString() ?? '0') ?? 0;
+        final idB = int.tryParse(b['id']?.toString() ?? '0') ?? 0;
+        return idB.compareTo(idA);
+      });
+
       final List<int> pulledRemoteIds = [];
+      int newlyFetchedPaidOrders = 0;
+      final int MAX_HISTORY = 50;
 
       // Fetch all pending payments once to avoid querying inside the loop (prevents query spam)
       final pendingPayments =
@@ -264,7 +274,7 @@ class SyncService extends GetxService {
 
         // 1. Check if the order already exists locally
         final localCheck = await _dbService.rawQuery(
-            "SELECT id_penjualan, is_synced, id_penjualan_remote FROM transactions WHERE id_pos = ? OR id_penjualan_remote = ?",
+            "SELECT id_penjualan, is_synced, id_penjualan_remote, status FROM transactions WHERE id_pos = ? OR id_penjualan_remote = ?",
             [idPos, remoteId]);
 
         int? localIdPenjualan;
@@ -297,6 +307,25 @@ class SyncService extends GetxService {
             debugPrint(
                 'SyncService: Skipping pullRemoteOrders override for id_pos=$idPos — pending local payment found.');
             continue;
+          }
+
+          // PERFORMANCE OPTIMIZATION: Skip fetching details if order already synced and status hasn't changed
+          if (localOrder['is_synced'] == 1 && localOrder['id_penjualan_remote'] != null) {
+            final int localStatus = localOrder['status'] ?? 1;
+            final int remoteStatus = _toInt(orderJson['status']);
+            if (localStatus == remoteStatus) {
+              continue; // Skip fetching the full details API call!
+            }
+          }
+        } else {
+          // It's a completely new order (not in local DB)
+          // If it is a paid order (status 2) and we've already fetched MAX_HISTORY paid orders, skip it.
+          final int remoteStatus = _toInt(orderJson['status']);
+          if (remoteStatus == 2 || remoteStatus == 5) { // 2: Paid, 5: Cancelled/Refunded
+            if (newlyFetchedPaidOrders >= MAX_HISTORY) {
+              continue;
+            }
+            newlyFetchedPaidOrders++;
           }
         }
 
@@ -1462,6 +1491,7 @@ class SyncService extends GetxService {
       final map = {
         'clientid': row['id_member'],
         'date': row['tgl_penjualan'].toString().split('T')[0], // YYYY-MM-DD
+        'datecreated': row['tgl_penjualan'].toString(),
         'prefix': 'POS-',
         'id_pos': row['id_pos'] ?? "",
         'currency': 3, // Indonesian Rupiah
@@ -1538,6 +1568,7 @@ class SyncService extends GetxService {
         'paymentmethod': row['paymentmethod'] ?? row['paymentmode'] ?? '7',
         'date': row['date']?.toString() ??
             DateTime.now().toIso8601String().split('T')[0],
+        'daterecorded': row['date']?.toString() ?? DateTime.now().toIso8601String(),
         'transactionid': row['transactionid'] ?? '',
         'note': row['note'] ?? '',
       };

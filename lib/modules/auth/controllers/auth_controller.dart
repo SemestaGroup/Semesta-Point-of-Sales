@@ -216,7 +216,7 @@ class AuthController extends GetxController {
 
       // Update UserService with staff info (Legacy Compat)
       await userService.saveUserInfo(ClientModel(
-        userId: int.tryParse(session['location']?.toString() ?? '0') ?? 0,
+        userId: staff.id ?? int.tryParse(session['location']?.toString() ?? '0') ?? 0,
         name: staff.fullName,
         email: staff.email ?? '',
         role: staff.role?.toLowerCase() ?? 'cashier',
