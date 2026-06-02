@@ -48,6 +48,7 @@ class ProductScreen extends StatelessWidget {
                         ),
                       ),
                       TextField(
+                        controller: controller.searchController,
                         onChanged: (value) {
                           controller.searchProduct(value);
                         },
@@ -59,6 +60,20 @@ class ProductScreen extends StatelessWidget {
                             color: Colors.grey,
                           ),
                           prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: controller.searchController,
+                            builder: (context, value, child) {
+                              return value.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear, color: Colors.grey),
+                                      onPressed: () {
+                                        controller.searchController.clear();
+                                        controller.searchProduct('');
+                                      },
+                                    )
+                                  : const SizedBox.shrink();
+                            },
+                          ),
                           filled: true,
                           fillColor: Colors.grey[100],
                           contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),

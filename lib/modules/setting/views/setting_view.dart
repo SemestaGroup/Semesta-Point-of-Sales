@@ -6,7 +6,7 @@ import 'package:semesta_pos/core/services/app_service.dart';
 import 'package:semesta_pos/core/services/theme_service.dart';
 import 'package:semesta_pos/modules/home/employee/controllers/shift_controller.dart';
 import 'package:semesta_pos/modules/setting/controllers/setting_controller.dart';
-import 'package:semesta_pos/modules/setting/widgets/manage_printer_dialog.dart';
+import 'package:semesta_pos/modules/setting/views/printer_management_view.dart';
 import 'package:semesta_pos/modules/setting/widgets/manage_shift_dialog.dart';
 import 'package:semesta_pos/styles/app_theme.dart';
 import 'package:semesta_pos/routes/app_pages.dart';
@@ -348,8 +348,7 @@ class SettingScreen extends GetView<SettingController> {
                             child: Column(
                               children: [
                                 InkWell(
-                                  onTap: () =>
-                                      Get.dialog(const ManagePrinterDialog()),
+                                  onTap: () => Get.to(() => const PrinterManagementView()),
                                   child: Obx(() {
                                     final count =
                                         controller.assignedPrinters.length;

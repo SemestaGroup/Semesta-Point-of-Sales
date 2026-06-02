@@ -72,6 +72,20 @@ class MemberScreen extends StatelessWidget {
                       ),
                       prefixIcon: Icon(CupertinoIcons.search,
                           size: 20.sp, color: Colors.grey.shade500),
+                      suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: controller.searchController,
+                        builder: (context, value, child) {
+                          return value.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, color: Colors.grey),
+                                  onPressed: () {
+                                    controller.searchController.clear();
+                                    controller.filterMembers('');
+                                  },
+                                )
+                              : const SizedBox.shrink();
+                        },
+                      ),
                       border: InputBorder.none,
                       isDense: true,
                       contentPadding: EdgeInsets.symmetric(vertical: 12.h),
@@ -169,7 +183,8 @@ class MemberScreen extends StatelessWidget {
                 _buildHeaderCell(context, "No", flex: 1),
                 _buildHeaderCell(context, "Name", flex: 2),
                 _buildHeaderCell(context, "Phone", flex: 2),
-                _buildHeaderCell(context, "Address", flex: 4), // Increased flex
+                _buildHeaderCell(context, "Address", flex: 3), 
+                _buildHeaderCell(context, "Joined Date", flex: 2),
                 _buildHeaderCell(context, "", flex: 1), // Empty header for chevron
               ],
             ),
@@ -269,7 +284,7 @@ class MemberScreen extends StatelessWidget {
                         fontFamily: AppTheme.fontMedium,
                         color: AppTheme.textColor(context)))),
             Expanded(
-              flex: 4, // Matched with header
+              flex: 3, // Matched with header
               child: Text(
                 member.alamat ?? '-',
                 style: TextStyle(
@@ -280,6 +295,13 @@ class MemberScreen extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            Expanded(
+                flex: 2,
+                child: Text((member.datecreated ?? '-').split(' ')[0],
+                    style: TextStyle(
+                        fontSize: 14.sp,
+                        fontFamily: AppTheme.fontMedium,
+                        color: AppTheme.secondaryTextColor(context)))),
             Expanded(
               flex: 1,
               child: Icon(

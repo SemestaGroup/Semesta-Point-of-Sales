@@ -183,6 +183,7 @@ class MemberController extends GetxController {
           nama: newMemberDataMap['nama'],
           telepon: newMemberDataMap['no_hp'],
           alamat: newMemberDataMap['alamat'],
+          datecreated: DateTime.now().toIso8601String(),
         );
       }
 
@@ -193,6 +194,7 @@ class MemberController extends GetxController {
         'nama': resolvedMember.nama,
         'telepon': resolvedMember.telepon,
         'alamat': resolvedMember.alamat,
+        'datecreated': resolvedMember.datecreated ?? DateTime.now().toIso8601String(),
         'is_synced': syncedInstantly ? 1 : 0,
       });
 

@@ -127,10 +127,10 @@ class ShiftAuditController extends GetxController {
         FROM transactions t
         WHERE t.status IN (2, 3)
           AND (
-            (t.tgl_bayar IS NOT NULL AND t.tgl_bayar != "" AND substr(t.tgl_bayar,1,19) >= ?)
+            (t.tgl_bayar IS NOT NULL AND t.tgl_bayar != "" AND REPLACE(substr(t.tgl_bayar,1,19), 'T', ' ') >= ?)
             OR (
               (t.tgl_bayar IS NULL OR t.tgl_bayar = "")
-              AND substr(t.tgl_penjualan,1,19) >= ?
+              AND REPLACE(substr(t.tgl_penjualan,1,19), 'T', ' ') >= ?
             )
           )
       ''', [startTime, startTime]);
@@ -266,6 +266,43 @@ class ShiftAuditController extends GetxController {
       Get.snackbar(
         'Error',
         'Failed to close shift: ${e.toString()}',
+        backgroundColor: Colors.red.withValues(alpha: 0.1),
+        colorText: Colors.red,
+      );
+    } finally {
+      isSubmitting.value = false;
+    }
+  }
+
+  Future<void> confirmSwitchPerson() async {
+    if (isSubmitting.value) return;
+    
+    isSubmitting.value = true;
+    try {
+      final cashModeId = _getCashModeId();
+      final actualCash = cashModeId != null
+          ? (auditAmounts[cashModeId] ?? totalAudited)
+          : totalAudited;
+
+      debugPrint('ShiftAuditController: Switching person with actual cash: $actualCash');
+      final result = await _shiftController.closeShift(
+          actualCash, noteController.text, isSwitchPerson: true);
+
+      Get.back(); // Pop audit page
+
+      if (Get.isRegistered<DashboardEmployeeController>()) {
+        Get.find<DashboardEmployeeController>().stateSelectedIndex.value = 0;
+      }
+
+      if (result != null) {
+        _showZReportDialog(result);
+      }
+    } catch (e, stack) {
+      debugPrint('ShiftAuditController: Error switching person: $e');
+      debugPrint(stack.toString());
+      Get.snackbar(
+        'Error',
+        'Failed to switch person: ${e.toString()}',
         backgroundColor: Colors.red.withValues(alpha: 0.1),
         colorText: Colors.red,
       );

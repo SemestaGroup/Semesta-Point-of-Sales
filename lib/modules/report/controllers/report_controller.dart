@@ -97,7 +97,7 @@ class ReportController extends GetxController {
 
     // Default dates for history (MIGRATED)
     final now = DateTime.now();
-    final firstDay = now;
+    final firstDay = DateTime(now.year, now.month, 1);
     startDateController.text = _formatDate(firstDay);
     endDateController.text = _formatDate(now);
     getOrders();
@@ -188,15 +188,13 @@ class ReportController extends GetxController {
       // LEFT JOIN subquery of pos_payments to get one payment method per transaction
       String sql = '''
         SELECT t.*,
-               COALESCE(pp.paymentmethod, t.payment_method) as payment_method,
+               COALESCE(
+                 (SELECT paymentmethod FROM pos_payments WHERE id_pos = t.id_pos AND id_pos IS NOT NULL AND id_pos != '' LIMIT 1),
+                 (SELECT paymentmethod FROM pos_payments WHERE invoiceid = t.id_penjualan_remote AND invoiceid IS NOT NULL AND invoiceid != '' LIMIT 1),
+                 t.payment_method, 'Cash'
+               ) as payment_method,
                (SELECT COUNT(*) FROM transaction_details td WHERE td.id_penjualan = t.id_penjualan AND td.is_refund = 1) as refund_count
         FROM transactions t
-        LEFT JOIN (
-          SELECT id_pos, invoiceid, paymentmethod
-          FROM pos_payments
-          GROUP BY id_pos, invoiceid
-        ) pp ON (pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL) 
-             OR (pp.invoiceid = t.remote_number AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '')
         WHERE ((date(t.tgl_penjualan) >= date(?)
           AND date(t.tgl_penjualan) <= date(?))
           OR t.status = 1)
@@ -209,11 +207,15 @@ class ReportController extends GetxController {
       // Payment method filter: match against pos_payments.paymentmethod
       final filterMethod = selectedPaymentMethod.value;
       if (filterMethod.isNotEmpty && filterMethod != 'All') {
-        sql += ' AND LOWER(pp.paymentmethod) = LOWER(?)';
+        sql += ''' AND LOWER(COALESCE(
+                 (SELECT paymentmethod FROM pos_payments WHERE id_pos = t.id_pos AND id_pos IS NOT NULL AND id_pos != '' LIMIT 1),
+                 (SELECT paymentmethod FROM pos_payments WHERE invoiceid = t.id_penjualan_remote AND invoiceid IS NOT NULL AND invoiceid != '' LIMIT 1),
+                 t.payment_method, 'Cash'
+               )) = LOWER(?)''';
         args.add(filterMethod);
       }
 
-      sql += ' ORDER BY t.tgl_penjualan DESC';
+      sql += ' GROUP BY t.id_penjualan ORDER BY t.tgl_penjualan DESC';
 
       final result = await _dbService.rawQuery(sql, args);
       List<Map<String, dynamic>> combined =
@@ -311,11 +313,15 @@ class ReportController extends GetxController {
 
   Future<void> selectDate(
       BuildContext context, TextEditingController textController) async {
+    final now = DateTime.now();
+    final firstDayOfMonth = DateTime(now.year, now.month, 1);
+    final lastDayOfMonth = DateTime(now.year, now.month + 1, 0);
+
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2101),
+      initialDate: now,
+      firstDate: firstDayOfMonth,
+      lastDate: lastDayOfMonth,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -908,15 +914,14 @@ class ReportController extends GetxController {
       // 6. Points
       if (!isWalkIn) {
         final earnedPoints = (total / 10000).floor();
-        final prevPointsStr = member?['points']?.toString() ?? '0';
-        final prevPoints = int.tryParse(prevPointsStr) ?? 0;
-        final newTotal = prevPoints + earnedPoints;
+        final currentPointsStr = member?['points']?.toString() ?? '0';
+        final currentPoints = int.tryParse(currentPointsStr) ?? 0;
         if (earnedPoints > 0) {
           bytes += generator.text(
               _formatCenter('Points Earned : +$earnedPoints pts', maxChars),
               styles: const PosStyles(align: PosAlign.left));
           bytes += generator.text(
-              _formatCenter('Current Points: $newTotal pts', maxChars),
+              _formatCenter('Current Points: $currentPoints pts', maxChars),
               styles: const PosStyles(align: PosAlign.left));
           bytes += generator.hr();
         }

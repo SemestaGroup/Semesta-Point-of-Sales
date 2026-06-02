@@ -712,45 +712,88 @@ class ShiftAuditPage extends StatelessWidget {
           SizedBox(width: 16.w),
 
           // Confirm button
-          Obx(() => ElevatedButton.icon(
-                onPressed: ctrl.isSubmitting.value
-                    ? null
-                    : () => _onConfirm(context, ctrl, isOpen),
-                icon: ctrl.isSubmitting.value
-                    ? SizedBox(
-                        width: 18.w,
-                        height: 18.w,
-                        child: const CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation(Colors.white),
+          Obx(() => Row(
+                children: [
+                  if (!isOpen) ...[
+                    ElevatedButton.icon(
+                      onPressed: ctrl.isSubmitting.value
+                          ? null
+                          : () => ctrl.confirmSwitchPerson(),
+                      icon: ctrl.isSubmitting.value
+                          ? SizedBox(
+                              width: 18.w,
+                              height: 18.w,
+                              child: const CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor:
+                                    AlwaysStoppedAnimation(Colors.white),
+                              ),
+                            )
+                          : Icon(
+                              CupertinoIcons.person_2_alt,
+                              size: 18.sp,
+                            ),
+                      label: Text(
+                        'Ganti Kasir',
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontBold,
+                          fontSize: 16.sp,
+                          color: Colors.white,
                         ),
-                      )
-                    : Icon(
-                        isOpen
-                            ? CupertinoIcons.checkmark_circle_fill
-                            : CupertinoIcons.lock_fill,
-                        size: 18.sp,
                       ),
-                label: Text(
-                  isOpen ? 'Open Shift' : 'Close Shift',
-                  style: TextStyle(
-                    fontFamily: AppTheme.fontBold,
-                    fontSize: 16.sp,
-                    color: Colors.white,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        disabledBackgroundColor: Colors.blue.withValues(alpha: 0.4),
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 24.w, vertical: 16.h),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14.r)),
+                        elevation: 0,
+                      ),
+                    ),
+                    SizedBox(width: 12.w),
+                  ],
+                  ElevatedButton.icon(
+                    onPressed: ctrl.isSubmitting.value
+                        ? null
+                        : () => _onConfirm(context, ctrl, isOpen),
+                    icon: ctrl.isSubmitting.value
+                        ? SizedBox(
+                            width: 18.w,
+                            height: 18.w,
+                            child: const CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation(Colors.white),
+                            ),
+                          )
+                        : Icon(
+                            isOpen
+                                ? CupertinoIcons.checkmark_circle_fill
+                                : CupertinoIcons.lock_fill,
+                            size: 18.sp,
+                          ),
+                    label: Text(
+                      isOpen ? 'Buka Shift' : 'Tutup Harian',
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontBold,
+                        fontSize: 16.sp,
+                        color: Colors.white,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          isOpen ? Colors.green : const Color(0xFFE63946),
+                      disabledBackgroundColor:
+                          isOpen ? Colors.green.withValues(alpha: 0.5) : Colors.red.withValues(alpha: 0.4),
+                      padding: EdgeInsets.symmetric(
+                          horizontal: 24.w, vertical: 16.h),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14.r)),
+                      elevation: 0,
+                    ),
                   ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      isOpen ? Colors.green : const Color(0xFFE63946),
-                  disabledBackgroundColor:
-                      isOpen ? Colors.green.withValues(alpha: 0.5) : Colors.red.withValues(alpha: 0.4),
-                  padding: EdgeInsets.symmetric(
-                      horizontal: 32.w, vertical: 16.h),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14.r)),
-                  elevation: 0,
-                ),
+                ],
               )),
         ],
       ),

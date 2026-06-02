@@ -131,18 +131,18 @@ class RecapController extends GetxController {
         SELECT
           t.id_penjualan,
           t.bayar          AS amount,
-          t.payment_method AS local_method,
-          (SELECT paymentmethod
-             FROM pos_payments
-            WHERE id_pos = t.id_pos
-            LIMIT 1)       AS pp_method
+          COALESCE(
+             (SELECT paymentmethod FROM pos_payments WHERE id_pos = t.id_pos AND id_pos IS NOT NULL AND id_pos != '' LIMIT 1),
+             (SELECT paymentmethod FROM pos_payments WHERE invoiceid = t.id_penjualan_remote AND invoiceid IS NOT NULL AND invoiceid != '' LIMIT 1),
+             t.payment_method, 'Cash'
+          ) AS pp_method
         FROM transactions t
         WHERE t.status IN (2, 3)
           AND (
-            (t.tgl_bayar IS NOT NULL AND t.tgl_bayar != '' AND substr(t.tgl_bayar,1,19) >= ?)
+            (t.tgl_bayar IS NOT NULL AND t.tgl_bayar != '' AND REPLACE(substr(t.tgl_bayar,1,19), 'T', ' ') >= ?)
             OR (
               (t.tgl_bayar IS NULL OR t.tgl_bayar = '')
-              AND substr(t.tgl_penjualan,1,19) >= ?
+              AND REPLACE(substr(t.tgl_penjualan,1,19), 'T', ' ') >= ?
             )
           )
       ''', [startTime, startTime]);
@@ -154,26 +154,14 @@ class RecapController extends GetxController {
         final int amount = double.tryParse(r['amount']?.toString() ?? '0')?.toInt() ?? 0;
         if (amount == 0) continue;
 
-        // Resolve payment mode in Dart to avoid any SQL join fan-out.
-        // Priority: pp.paymentmethod (numeric ID) > t.payment_method (string label).
-        final String ppMethod = r['pp_method']?.toString() ?? '';
-        final String localMethod = (r['local_method']?.toString() ?? '').toLowerCase();
-
-        PaymentModeModel? matched;
-
-        // 1. Try matching by numeric ID from pos_payments
-        if (ppMethod.isNotEmpty) {
-          matched = paymentModes.firstWhereOrNull((m) => m.id == ppMethod);
-        }
-
-        // 2. Fall back: match by name from transactions.payment_method
-        if (matched == null && localMethod.isNotEmpty) {
-          matched = paymentModes.firstWhereOrNull(
-            (m) => m.name.toLowerCase() == localMethod,
-          );
-        }
-
-        final String groupKey = matched?.id ?? (ppMethod.isNotEmpty ? ppMethod : (localMethod.isNotEmpty ? localMethod : 'cash'));
+        final String ppMethod = (r['pp_method']?.toString() ?? 'Cash').toLowerCase();
+        
+        PaymentModeModel? matched = paymentModes.firstWhereOrNull(
+          (m) => m.name.toLowerCase() == ppMethod,
+        );
+        
+        // Fallback to cash if not matched
+        final String groupKey = matched?.id ?? '1';
         recordedTotals[groupKey] = (recordedTotals[groupKey] ?? 0) + amount;
       }
 
@@ -205,7 +193,7 @@ class RecapController extends GetxController {
         SELECT d.product_name, SUM(d.jumlah) as qty, SUM(d.subtotal) as total
         FROM transaction_details d
         INNER JOIN transactions t ON d.id_penjualan = t.id_penjualan
-        WHERE (substr(t.tgl_penjualan,1,19) >= ? OR substr(t.tgl_bayar,1,19) >= ?)
+        WHERE (REPLACE(substr(t.tgl_penjualan,1,19), 'T', ' ') >= ? OR REPLACE(substr(t.tgl_bayar,1,19), 'T', ' ') >= ?)
           AND t.status != 5
         GROUP BY d.id_produk, d.product_name
         ORDER BY SUM(d.subtotal) DESC
@@ -319,7 +307,7 @@ class RecapController extends GetxController {
       final orderTypesQuery = await _dbService.rawQuery('''
         SELECT order_type, SUM(bayar) as total
         FROM transactions
-        WHERE (tgl_penjualan >= ? OR tgl_bayar >= ?) AND status != 5
+        WHERE (REPLACE(substr(tgl_penjualan,1,19), 'T', ' ') >= ? OR REPLACE(substr(tgl_bayar,1,19), 'T', ' ') >= ?) AND status != 5
         GROUP BY order_type
       ''', [startTime, startTime]);
       for (var row in orderTypesQuery) {
@@ -351,7 +339,7 @@ class RecapController extends GetxController {
         SELECT SUM(d.discountTotal) as total
         FROM transaction_details d
         INNER JOIN transactions t ON d.id_penjualan = t.id_penjualan
-        WHERE (t.tgl_penjualan >= ? OR t.tgl_bayar >= ?)
+        WHERE (REPLACE(substr(t.tgl_penjualan,1,19), 'T', ' ') >= ? OR REPLACE(substr(t.tgl_bayar,1,19), 'T', ' ') >= ?)
           AND t.status IN (2, 3)
       ''', [startTime, startTime]);
       totalProductDiscount = (productDiscQuery.first['total'] as num?)?.toInt() ?? 0;
@@ -359,7 +347,7 @@ class RecapController extends GetxController {
       final transDiscQuery = await _dbService.rawQuery('''
         SELECT SUM(manual_discount_value) as total
         FROM transactions
-        WHERE (tgl_penjualan >= ? OR tgl_bayar >= ?)
+        WHERE (REPLACE(substr(tgl_penjualan,1,19), 'T', ' ') >= ? OR REPLACE(substr(tgl_bayar,1,19), 'T', ' ') >= ?)
           AND status IN (2, 3)
       ''', [startTime, startTime]);
       totalTransactionDiscount = (transDiscQuery.first['total'] as num?)?.toInt() ?? 0;
@@ -525,6 +513,149 @@ class RecapController extends GetxController {
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.primaryColor,
+                          padding: EdgeInsets.symmetric(vertical: 14.h),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12.r)),
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> confirmEndOfDay(BuildContext context) async {
+    // 1. Confirm Dialog
+    bool? confirm = await Get.dialog<bool>(
+      AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+        title: const Text('End of Day (Z-Report)?'),
+        content: const Text(
+            'Are you sure you want to close the store for today? This will calculate all shifts from 00:00 to 23:59, print the full Z-Report, and close the current shift without carrying over the balance to tomorrow.'),
+        actions: [
+          TextButton(onPressed: () => Get.back(result: false), child: const Text('CANCEL')),
+          ElevatedButton(
+            onPressed: () => Get.back(result: true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.r)),
+            ),
+            child: const Text('YES, END OF DAY', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // Call ShiftController's end of day method
+    final result = await _shiftController.executeEndOfDay(
+      getTotalAudited(), 
+      'End of Day closed from Reconciliation View'
+    );
+
+    if (result != null) {
+      // Reset local audit state and refresh history
+      auditedTotals.clear();
+      recordedTotals.clear();
+      await refreshHistory();
+
+      // Redirect to Dashboard index
+      if (Get.isRegistered<DashboardEmployeeController>()) {
+        Get.find<DashboardEmployeeController>().stateSelectedIndex.value = 0;
+      }
+
+      // Show Beautiful Print Notification
+      Get.dialog(
+        Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+          child: Container(
+            padding: EdgeInsets.all(24.w),
+            decoration: BoxDecoration(
+              color: AppTheme.cardColor(Get.context!),
+              borderRadius: BorderRadius.circular(20.r),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(16.w),
+                  decoration: BoxDecoration(
+                    color: Colors.deepPurple.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(CupertinoIcons.check_mark_circled_solid,
+                      color: Colors.deepPurple, size: 48.sp),
+                ),
+                SizedBox(height: 20.h),
+                Text(
+                  'End of Day Successful',
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontBold,
+                    fontSize: 18.sp,
+                    color: AppTheme.textColor(Get.context!),
+                  ),
+                ),
+                SizedBox(height: 12.h),
+                Text(
+                  'The store has been closed for today. Would you like to print the full Z-Report?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontMedium,
+                    fontSize: 14.sp,
+                    color: AppTheme.secondaryTextColor(Get.context!),
+                    height: 1.5,
+                  ),
+                ),
+                SizedBox(height: 32.h),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Get.back(),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(vertical: 14.h),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12.r)),
+                          side: BorderSide(color: AppTheme.borderColor(Get.context!)),
+                        ),
+                        child: Text(
+                          'LATER',
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontBold,
+                            fontSize: 14.sp,
+                            color: AppTheme.textColor(Get.context!),
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 16.w),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Get.back();
+                          if (Get.isRegistered<SettingController>()) {
+                            Get.find<SettingController>()
+                                .printEndOfDayReport(result['eodData']);
+                          }
+                        },
+                        icon: Icon(CupertinoIcons.printer_fill, size: 18.sp, color: Colors.white),
+                        label: Text(
+                          'PRINT NOW',
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontBold,
+                            fontSize: 14.sp,
+                            color: Colors.white,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.deepPurple,
                           padding: EdgeInsets.symmetric(vertical: 14.h),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12.r)),

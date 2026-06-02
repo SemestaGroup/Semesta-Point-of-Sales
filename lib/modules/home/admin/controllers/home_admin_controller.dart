@@ -113,15 +113,15 @@ class HomeAdminController extends GetxController {
       // ── Recent Transactions: show all except deleted(5); cancelled shown with their status
       final recent = await _dbService.rawQuery('''
         SELECT t.*, m.nama as member_name,
-               COALESCE(pp.paymentmethod, t.payment_method) as payment_method
+               COALESCE(
+                 (SELECT paymentmethod FROM pos_payments 
+                  WHERE (id_pos = t.id_pos AND id_pos IS NOT NULL AND id_pos != '') 
+                     OR (invoiceid = t.remote_number AND invoiceid IS NOT NULL AND invoiceid != '') 
+                  LIMIT 1),
+                 t.payment_method, 'Cash'
+               ) as payment_method
         FROM transactions t 
         LEFT JOIN members m ON t.id_member = m.id_member
-        LEFT JOIN (
-          SELECT id_pos, invoiceid, paymentmethod 
-          FROM pos_payments 
-          GROUP BY id_pos, invoiceid
-        ) pp ON (pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL) 
-             OR (pp.invoiceid = t.remote_number AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '')
         WHERE t.status != 5
         ORDER BY t.id_penjualan DESC LIMIT 8
       ''');
@@ -138,17 +138,14 @@ class HomeAdminController extends GetxController {
     try {
       // Deduplicate: one payment row per transaction, then group by method
       final todayBreakdown = await _dbService.rawQuery('''
-        SELECT COALESCE(pp.method, t.payment_method, 'Cash') as method, 
-               SUM(COALESCE(pp.amount, t.bayar)) as total, 
+        SELECT COALESCE(
+                 (SELECT paymentmethod FROM pos_payments WHERE id_pos = t.id_pos AND id_pos IS NOT NULL AND id_pos != '' LIMIT 1),
+                 (SELECT paymentmethod FROM pos_payments WHERE invoiceid = t.id_penjualan_remote AND invoiceid IS NOT NULL AND invoiceid != '' LIMIT 1),
+                 t.payment_method, 'Cash'
+               ) as method, 
+               SUM(t.bayar) as total, 
                COUNT(*) as cnt
         FROM transactions t
-        LEFT JOIN (
-          SELECT id_pos, invoiceid, paymentmethod as method,
-                 CAST(amount AS REAL) as amount
-          FROM pos_payments
-          GROUP BY id_pos, invoiceid
-        ) pp ON (pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL)
-             OR (pp.invoiceid = t.remote_number AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '')
         WHERE date(t.tgl_penjualan) = date(?) AND t.status = 2
         GROUP BY method
         ORDER BY total DESC
@@ -162,17 +159,14 @@ class HomeAdminController extends GetxController {
 
       // Same dedup for month
       final monthBreakdown = await _dbService.rawQuery('''
-        SELECT COALESCE(pp.method, t.payment_method, 'Cash') as method, 
-               SUM(COALESCE(pp.amount, t.bayar)) as total, 
+        SELECT COALESCE(
+                 (SELECT paymentmethod FROM pos_payments WHERE id_pos = t.id_pos AND id_pos IS NOT NULL AND id_pos != '' LIMIT 1),
+                 (SELECT paymentmethod FROM pos_payments WHERE invoiceid = t.id_penjualan_remote AND invoiceid IS NOT NULL AND invoiceid != '' LIMIT 1),
+                 t.payment_method, 'Cash'
+               ) as method, 
+               SUM(t.bayar) as total, 
                COUNT(*) as cnt
         FROM transactions t
-        LEFT JOIN (
-          SELECT id_pos, invoiceid, paymentmethod as method,
-                 CAST(amount AS REAL) as amount
-          FROM pos_payments
-          GROUP BY id_pos, invoiceid
-        ) pp ON (pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL)
-             OR (pp.invoiceid = t.remote_number AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '')
         WHERE t.tgl_penjualan LIKE ? AND t.status = 2
         GROUP BY method
         ORDER BY total DESC

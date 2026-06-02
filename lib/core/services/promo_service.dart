@@ -86,8 +86,8 @@ class PromoService extends GetxService {
     }
   }
 
-  /// Calculates the best price taking into account product discounts and active promotions.
-  /// Does NOT stack discounts. Returns the discount configuration that gives the lowest price.
+  /// Calculates the best price taking into account product discounts and the manually selected promotion.
+  /// Does NOT auto-apply all active promos. Returns the discount configuration that gives the lowest price.
   PromoDiscount calculateBestPrice({
     required int productId,
     required String? productBrandIdStr, // Since ProductModel does not have idBrand directly in the file, we can pass it or ignore if not available
@@ -95,6 +95,7 @@ class PromoService extends GetxService {
     required String orderType,
     required int productDiscountTotal,
     required String productDiscountType,
+    Map<String, dynamic>? selectedPromo,
   }) {
     // 1. Calculate price with product's own discount
     int productFinalPrice = _applyDiscount(dynamicPrice, productDiscountType, productDiscountTotal);
@@ -102,14 +103,23 @@ class PromoService extends GetxService {
     int bestDiscountTotal = productDiscountTotal;
     String bestDiscountType = productDiscountType;
 
-    // 2. Check all active promos to find if any gives a better price
-    for (var promo in activePromos) {
-      // Check Order Type
-      bool matchOrderType = false;
-      final rawOrderTypes = promo['order_types']?.toString();
-      if (rawOrderTypes != null && rawOrderTypes.isNotEmpty) {
-        try {
-          final List types = jsonDecode(rawOrderTypes);
+    // 2. If no promo is selected by the cashier, just return the product's own discount.
+    if (selectedPromo == null) {
+      return PromoDiscount(bestFinalPrice, bestDiscountTotal, bestDiscountType);
+    }
+
+    // 3. Check if the selected promo applies to this item
+    // Check Order Type
+    bool matchOrderType = false;
+    final rawOrderTypes = selectedPromo['order_types']?.toString();
+    if (rawOrderTypes != null && rawOrderTypes.isNotEmpty) {
+      try {
+        dynamic decoded = jsonDecode(rawOrderTypes);
+        if (decoded is String) {
+          decoded = jsonDecode(decoded);
+        }
+        if (decoded is List) {
+          final List types = decoded;
           final normalizedInput = orderType.replaceAll(' ', '').toLowerCase();
           for (var type in types) {
             final normalizedType = type.toString().replaceAll(' ', '').toLowerCase();
@@ -118,47 +128,50 @@ class PromoService extends GetxService {
               break;
             }
           }
-        } catch (_) {}
+        }
+      } catch (e) {
+        debugPrint("PromoService: Error parsing order_types - $e");
       }
-      // If the promo specifies order types and ours doesn't match, skip
-      if (rawOrderTypes != null && rawOrderTypes.isNotEmpty && !matchOrderType) {
-        continue;
-      }
+    }
+    
+    // If the promo specifies order types and ours doesn't match, skip
+    if (rawOrderTypes != null && rawOrderTypes.isNotEmpty && !matchOrderType) {
+      return PromoDiscount(bestFinalPrice, bestDiscountTotal, bestDiscountType);
+    }
 
-      // Check Items
-      final rawItems = promo['items']?.toString();
-      if (rawItems != null && rawItems.isNotEmpty) {
-        try {
-          dynamic decoded = jsonDecode(rawItems);
-          if (decoded is String) {
-            decoded = jsonDecode(decoded);
-          }
-          if (decoded is Map) {
-            final List itemsList = decoded['items'] ?? [];
-            for (var item in itemsList) {
-              if (item['item_id']?.toString() == productId.toString()) {
-                final promoDiscountType = item['discount_type']?.toString() ?? 'fixed';
-                final promoDiscountTotal = int.tryParse(item['discount']?.toString() ?? '0') ?? 0;
-                final promoDiscountValue = int.tryParse(item['discount_value']?.toString() ?? '0') ?? 0;
+    // Check Items
+    final rawItems = selectedPromo['items']?.toString();
+    if (rawItems != null && rawItems.isNotEmpty) {
+      try {
+        dynamic decoded = jsonDecode(rawItems);
+        if (decoded is String) {
+          decoded = jsonDecode(decoded);
+        }
+        if (decoded is Map) {
+          final List itemsList = decoded['items'] ?? [];
+          for (var item in itemsList) {
+            if (item['item_id']?.toString() == productId.toString()) {
+              final promoDiscountType = item['discount_type']?.toString() ?? 'fixed';
+              final promoDiscountTotal = int.tryParse(item['discount']?.toString() ?? '0') ?? 0;
+              final promoDiscountValue = int.tryParse(item['discount_value']?.toString() ?? '0') ?? 0;
 
-                // For final_price, we use discount_value. For percent, discount is the %.
-                int discountAmt = (promoDiscountType == 'final_price') 
-                    ? promoDiscountValue 
-                    : promoDiscountTotal;
+              // For final_price, we use discount_value. For percent, discount is the %.
+              int discountAmt = (promoDiscountType == 'final_price') 
+                  ? promoDiscountValue 
+                  : promoDiscountTotal;
 
-                int promoFinalPrice = _applyDiscount(dynamicPrice, promoDiscountType, discountAmt);
-                
-                if (promoFinalPrice < bestFinalPrice) {
-                  bestFinalPrice = promoFinalPrice;
-                  bestDiscountTotal = discountAmt;
-                  bestDiscountType = promoDiscountType;
-                }
+              int promoFinalPrice = _applyDiscount(dynamicPrice, promoDiscountType, discountAmt);
+              
+              if (promoFinalPrice < bestFinalPrice) {
+                bestFinalPrice = promoFinalPrice;
+                bestDiscountTotal = discountAmt;
+                bestDiscountType = promoDiscountType;
               }
             }
           }
-        } catch (e) {
-          debugPrint("PromoService: Error parsing promo items in calculateBestPrice - $e");
         }
+      } catch (e) {
+        debugPrint("PromoService: Error parsing promo items in calculateBestPrice - $e");
       }
     }
 

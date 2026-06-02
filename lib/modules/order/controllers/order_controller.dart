@@ -12,6 +12,7 @@ class OrderController extends GetxController {
 
 
   RxBool isLoading = false.obs;
+  final TextEditingController searchController = TextEditingController();
   RxBool isSyncing = false.obs;
   RxList<Map<String, dynamic>> openOrders = <Map<String, dynamic>>[].obs;
   RxBool filterActiveOnly = true.obs;
@@ -23,6 +24,43 @@ class OrderController extends GetxController {
     getOrders(forceRemote: false);
   }
 
+  Future<void> _autoCancelExpiredOrders() async {
+    try {
+      final String sql = """
+        SELECT * FROM transactions 
+        WHERE status != 2 AND status != 5 
+        AND datetime(REPLACE(tgl_penjualan, 'T', ' ')) < datetime('now', '-14 days', 'localtime')
+      """;
+      final expiredOrders = await _dbService.rawQuery(sql);
+      
+      if (expiredOrders.isEmpty) return;
+
+      for (var order in expiredOrders) {
+        final idPenjualan = order['id_penjualan'];
+        if (idPenjualan == null) continue;
+
+        await _dbService.update('transactions', 
+            {'status': 5, 'is_synced': 0}, 
+            'id_penjualan = ?', [idPenjualan]);
+
+        final remoteId = order['id_penjualan_remote'];
+        if (remoteId != null && remoteId.toString() != '0') {
+          final putBody = await _buildPutBody(order, 5);
+          final syncService = Get.find<SyncService>();
+          await syncService.enqueueCommand(
+            method: 'PUT',
+            endpoint: '/api/pos_order/$remoteId',
+            body: putBody,
+            localId: idPenjualan.toString(),
+          );
+        }
+      }
+      debugPrint("OrderController: Auto-cancelled ${expiredOrders.length} expired orders (> 14 days).");
+    } catch (e) {
+      debugPrint("OrderController: Failed to auto-cancel expired orders: $e");
+    }
+  }
+
   Future<void> getOrders({bool forceRemote = false, String? query}) async {
     try {
       if (forceRemote) {
@@ -30,6 +68,9 @@ class OrderController extends GetxController {
       } else {
         isLoading.value = true;
       }
+
+      // Auto cancel old orders first
+      await _autoCancelExpiredOrders();
  
       // 1. Pull latest unpaid orders from server IN THE BACKGROUND if forced
       if (forceRemote) {
@@ -76,9 +117,12 @@ class OrderController extends GetxController {
     // Active orders are those where status is NOT 5 (Cancelled) and NOT 2 (Paid)
     String where = "";
     if (filterActiveOnly.value) {
-      where = "(t.status != 5 AND t.status != 2)";
+      where = "(t.status != 5 AND t.status != 2) "
+              "AND substr(REPLACE(t.tgl_penjualan, 'T', ' '), 1, 7) = strftime('%Y-%m', 'now', 'localtime') "
+              "AND datetime(REPLACE(t.tgl_penjualan, 'T', ' ')) >= datetime('now', '-7 days', 'localtime')";
     } else {
-      where = "(datetime(t.tgl_penjualan) >= datetime('now', '-24 hours', 'localtime') OR (t.status != 5 AND t.status != 2))";
+      where = "substr(REPLACE(t.tgl_penjualan, 'T', ' '), 1, 7) = strftime('%Y-%m', 'now', 'localtime') "
+              "AND datetime(REPLACE(t.tgl_penjualan, 'T', ' ')) >= datetime('now', '-7 days', 'localtime')";
     }
     List<dynamic> whereArgs = [];
 

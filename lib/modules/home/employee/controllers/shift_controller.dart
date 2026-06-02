@@ -113,6 +113,62 @@ class ShiftController extends GetxController {
     }
   }
 
+  Future<Map<String, dynamic>?> checkContinuedShift() async {
+    final result = await _dbService.rawQuery(
+        "SELECT option_value FROM pos_options WHERE option_name = 'pos_continued_shift_data'");
+    if (result.isNotEmpty) {
+      final rawValue = result.first['option_value']?.toString() ?? '';
+      if (rawValue.isNotEmpty && rawValue != 'null') {
+        return jsonDecode(rawValue);
+      }
+    }
+    return null;
+  }
+
+  Future<void> openContinuedShift(String name, Map<String, dynamic> continuedData) async {
+    debugPrint('ShiftController: openContinuedShift called with name=$name');
+    final startingBalance = continuedData['carried_over_balance'] as int? ?? 0;
+    final originalStartTimeStr = continuedData['original_start_time'] as String;
+    
+    final newShift = ShiftSessionModel(
+      shiftName: name,
+      userId: _userService.getUserName(),
+      startTime: DateTime.parse(originalStartTimeStr),
+      startingBalance: startingBalance,
+      status: 0,
+    );
+
+    try {
+      final String shiftJson = jsonEncode(newShift.toJson());
+      await _dbService.insert('pos_options', {
+        'option_name': 'pos_active_session',
+        'option_value': shiftJson,
+      });
+      
+      await _dbService.rawQuery(
+        "DELETE FROM pos_options WHERE option_name = 'pos_continued_shift_data'");
+      
+      // Push active session to server
+      if (Get.isRegistered<SyncService>()) {
+        Get.find<SyncService>().enqueueCommand(
+          method: 'PUT',
+          endpoint: '/api/pos_options',
+          body: {'pos_active_session': shiftJson},
+          localId: 'pos_active_session_open',
+        );
+      } else {
+        await _apiService.updatePosOptions({
+          'pos_active_session': shiftJson
+        });
+      }
+    } catch (e) {
+      debugPrint('ShiftController: Failed to open continued shift: $e');
+    }
+
+    activeShift.value = newShift;
+    isOwnerTrialMode.value = false;
+  }
+
   Future<void> openShift(String name, int startingBalance) async {
     debugPrint('ShiftController: openShift called with name=$name, startingBalance=$startingBalance');
     final newShift = ShiftSessionModel(
@@ -183,10 +239,10 @@ class ShiftController extends GetxController {
       FROM transactions t
       WHERE t.status IN (2, 3)
         AND (
-          (t.tgl_bayar IS NOT NULL AND t.tgl_bayar != "" AND substr(t.tgl_bayar,1,19) >= ?)
+          (t.tgl_bayar IS NOT NULL AND t.tgl_bayar != "" AND REPLACE(substr(t.tgl_bayar,1,19), 'T', ' ') >= ?)
           OR (
             (t.tgl_bayar IS NULL OR t.tgl_bayar = "")
-            AND substr(t.tgl_penjualan,1,19) >= ?
+            AND REPLACE(substr(t.tgl_penjualan,1,19), 'T', ' ') >= ?
           )
         )
     ''', [startTime, startTime]);
@@ -262,7 +318,7 @@ class ShiftController extends GetxController {
           SUM(d.subtotal) as total
         FROM transaction_details d
         JOIN transactions t ON d.id_penjualan = t.id_penjualan
-        WHERE (substr(t.tgl_penjualan,1,19) >= ? OR substr(t.tgl_bayar,1,19) >= ?) AND t.status != 5
+        WHERE (REPLACE(substr(t.tgl_penjualan,1,19), 'T', ' ') >= ? OR REPLACE(substr(t.tgl_bayar,1,19), 'T', ' ') >= ?) AND t.status != 5
         GROUP BY d.id_produk, d.product_name
       ''', [startTime, startTime]);
       
@@ -282,16 +338,16 @@ class ShiftController extends GetxController {
     int productDiscount = 0;
     int transactionDiscount = 0;
     try {
-       final pDisc = await _dbService.rawQuery('''
+      final pDisc = await _dbService.rawQuery('''
         SELECT SUM(d.discountTotal) as total FROM transaction_details d
         JOIN transactions t ON d.id_penjualan = t.id_penjualan
-        WHERE (t.tgl_penjualan >= ? OR t.tgl_bayar >= ?) AND t.status IN (2, 3)
+        WHERE (REPLACE(substr(t.tgl_penjualan,1,19), 'T', ' ') >= ? OR REPLACE(substr(t.tgl_bayar,1,19), 'T', ' ') >= ?) AND t.status IN (2, 3)
       ''', [startTime, startTime]);
       productDiscount = (pDisc.first['total'] as num?)?.toInt() ?? 0;
 
       final tDisc = await _dbService.rawQuery('''
         SELECT SUM(manual_discount_value) as total FROM transactions
-        WHERE (tgl_penjualan >= ? OR tgl_bayar >= ?) AND status IN (2, 3)
+        WHERE (REPLACE(substr(tgl_penjualan,1,19), 'T', ' ') >= ? OR REPLACE(substr(tgl_bayar,1,19), 'T', ' ') >= ?) AND status IN (2, 3)
       ''', [startTime, startTime]);
       transactionDiscount = (tDisc.first['total'] as num?)?.toInt() ?? 0;
     } catch(_) {}
@@ -302,7 +358,7 @@ class ShiftController extends GetxController {
       final otRows = await _dbService.rawQuery('''
         SELECT order_type, SUM(bayar) as total
         FROM transactions
-        WHERE (substr(tgl_penjualan,1,19) >= ? OR substr(tgl_bayar,1,19) >= ?) AND t.status IN (2, 3)
+        WHERE (REPLACE(substr(tgl_penjualan,1,19), 'T', ' ') >= ? OR REPLACE(substr(tgl_bayar,1,19), 'T', ' ') >= ?) AND t.status IN (2, 3)
         GROUP BY order_type
       ''', [startTime, startTime]);
       for (var r in otRows) {
@@ -358,8 +414,10 @@ class ShiftController extends GetxController {
   }
 
   Future<Map<String, dynamic>?> closeShift(int actualCash, String note,
-      {String? reconciliationData}) async {
+      {String? reconciliationData, bool isSwitchPerson = false}) async {
     if (activeShift.value == null) return null;
+
+    final originalStartTime = activeShift.value!.startTime;
 
     // Generate full reconciliation data if not provided (e.g. from POS menu close)
     String? finalData = reconciliationData;
@@ -378,7 +436,7 @@ class ShiftController extends GetxController {
       idShift: activeShift.value!.idShift,
       shiftName: activeShift.value!.shiftName,
       userId: activeShift.value!.userId,
-      startTime: activeShift.value!.startTime,
+      startTime: originalStartTime,
       endTime: DateTime.now(),
       startingBalance: startingBal,
       closingBalance: actualCash,
@@ -397,6 +455,17 @@ class ShiftController extends GetxController {
     // 2. Clear active session locally
     await _dbService.rawQuery(
         "DELETE FROM pos_options WHERE option_name = 'pos_active_session'");
+
+    if (isSwitchPerson) {
+       final continuedData = jsonEncode({
+         'carried_over_balance': actualCash,
+         'original_start_time': originalStartTime.toIso8601String(),
+       });
+       await _dbService.insert('pos_options', {
+         'option_name': 'pos_continued_shift_data',
+         'option_value': continuedData,
+       });
+    }
 
     // Clear active session on server
     try {
@@ -433,6 +502,182 @@ class ShiftController extends GetxController {
     };
   }
 
+  Future<Map<String, dynamic>?> executeEndOfDay(int actualCash, String note) async {
+    try {
+      // 1. Generate full End of Day Data before closing shift
+      final eodData = await generateEndOfDayData();
+
+      // 2. Close the shift normally
+      final closeResult = await closeShift(actualCash, note, isSwitchPerson: false);
+      if (closeResult == null) return null;
+
+      return {
+        'closeResult': closeResult,
+        'eodData': eodData,
+      };
+    } catch (e) {
+      debugPrint("ShiftController: executeEndOfDay error: $e");
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>> generateEndOfDayData() async {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day, 0, 0, 0).toIso8601String().replaceAll('T', ' ').split('.')[0];
+    final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59).toIso8601String().replaceAll('T', ' ').split('.')[0];
+    final startOfYesterday = DateTime(now.year, now.month, now.day - 1, 0, 0, 0).toIso8601String().replaceAll('T', ' ').split('.')[0];
+    final endOfYesterday = DateTime(now.year, now.month, now.day - 1, 23, 59, 59).toIso8601String().replaceAll('T', ' ').split('.')[0];
+
+    // 1. Income by Payment Mode (Today)
+    final List<Map<String, dynamic>> modeMetadata = await _dbService.query('payment_modes', where: 'active = ?', whereArgs: ['1']);
+    final paymentModesList = <Map<String, dynamic>>[];
+    final Map<String, int> totals = {};
+
+    final paymentRows = await _dbService.rawQuery('''
+      SELECT t.bayar AS amount, t.payment_method AS local_method,
+        (SELECT paymentmethod FROM pos_payments WHERE id_pos = t.id_pos LIMIT 1) AS pp_method
+      FROM transactions t
+      WHERE t.status IN (2, 3)
+        AND (
+          (t.tgl_bayar IS NOT NULL AND t.tgl_bayar != "" AND REPLACE(substr(t.tgl_bayar,1,19), 'T', ' ') BETWEEN ? AND ?)
+          OR ((t.tgl_bayar IS NULL OR t.tgl_bayar = "") AND REPLACE(substr(t.tgl_penjualan,1,19), 'T', ' ') BETWEEN ? AND ?)
+        )
+    ''', [startOfDay, endOfDay, startOfDay, endOfDay]);
+
+    int todayIncome = 0;
+    for (var r in paymentRows) {
+      final amount = double.tryParse(r['amount']?.toString() ?? '0')?.toInt() ?? 0;
+      todayIncome += amount;
+      final ppMethod = r['pp_method']?.toString() ?? '';
+      final localMethod = (r['local_method']?.toString() ?? '').toLowerCase();
+      String? matchedId; String? matchedName;
+
+      if (ppMethod.isNotEmpty) {
+        final m = modeMetadata.firstWhereOrNull((m) => m['id']?.toString() == ppMethod);
+        if (m != null) { matchedId = m['id']?.toString(); matchedName = m['name']?.toString(); }
+      }
+      if (matchedId == null && localMethod.isNotEmpty) {
+        final m = modeMetadata.firstWhereOrNull((m) => (m['name']?.toString() ?? '').toLowerCase() == localMethod);
+        if (m != null) { matchedId = m['id']?.toString(); matchedName = m['name']?.toString(); }
+      }
+
+      final key = matchedId ?? (ppMethod.isNotEmpty ? ppMethod : (localMethod.isNotEmpty ? localMethod : '1'));
+      final name = matchedName ?? (localMethod.isNotEmpty ? r['local_method'] : (ppMethod == '1' ? 'Cash' : 'Other'));
+      totals[key] = (totals[key] ?? 0) + amount;
+      if (!paymentModesList.any((m) => m['id'] == key)) paymentModesList.add({'id': key, 'name': name, 'recorded': 0});
+    }
+    for (var m in paymentModesList) m['recorded'] = totals[m['id']] ?? 0;
+
+    // 2. Yesterday's Income
+    int yesterdayIncome = 0;
+    try {
+      final yRows = await _dbService.rawQuery('''
+        SELECT SUM(bayar) as total FROM transactions
+        WHERE status IN (2, 3)
+          AND (
+            (tgl_bayar IS NOT NULL AND tgl_bayar != "" AND REPLACE(substr(tgl_bayar,1,19), 'T', ' ') BETWEEN ? AND ?)
+            OR ((tgl_bayar IS NULL OR tgl_bayar = "") AND REPLACE(substr(tgl_penjualan,1,19), 'T', ' ') BETWEEN ? AND ?)
+          )
+      ''', [startOfYesterday, endOfYesterday, startOfYesterday, endOfYesterday]);
+      yesterdayIncome = (yRows.first['total'] as num?)?.toInt() ?? 0;
+    } catch (_) {}
+
+    // 3. Cash Flow (Expenses)
+    int totalExpenses = 0;
+    final List<Map<String, dynamic>> expensesList = [];
+    try {
+      final cfRows = await _dbService.rawQuery('''
+        SELECT expense_name, amount, direction FROM pos_cash_flow
+        WHERE created_at BETWEEN ? AND ? AND direction = 'out'
+      ''', [startOfDay, endOfDay]);
+      for (var r in cfRows) {
+        final amount = (r['amount'] as num?)?.toInt() ?? 0;
+        totalExpenses += amount;
+        expensesList.add({'name': r['expense_name'], 'amount': amount});
+      }
+    } catch (_) {}
+
+    // 4. Voided Orders
+    int voidCount = 0;
+    int voidTotal = 0;
+    try {
+      final vRows = await _dbService.rawQuery('''
+        SELECT COUNT(*) as count, SUM(total) as sum FROM transactions
+        WHERE status = 5 AND REPLACE(substr(tgl_penjualan,1,19), 'T', ' ') BETWEEN ? AND ?
+      ''', [startOfDay, endOfDay]);
+      voidCount = (vRows.first['count'] as num?)?.toInt() ?? 0;
+      voidTotal = (vRows.first['sum'] as num?)?.toInt() ?? 0;
+    } catch (_) {}
+
+    // 5. Products Sold
+    final List<Map<String, dynamic>> productsList = [];
+    try {
+      final pRows = await _dbService.rawQuery('''
+        SELECT d.product_name, SUM(d.jumlah) as qty, SUM(d.subtotal) as total
+        FROM transaction_details d
+        JOIN transactions t ON d.id_penjualan = t.id_penjualan
+        WHERE (REPLACE(substr(t.tgl_penjualan,1,19), 'T', ' ') BETWEEN ? AND ? OR REPLACE(substr(t.tgl_bayar,1,19), 'T', ' ') BETWEEN ? AND ?) AND t.status != 5
+        GROUP BY d.id_produk, d.product_name ORDER BY SUM(d.subtotal) DESC LIMIT 15
+      ''', [startOfDay, endOfDay, startOfDay, endOfDay]);
+      for (var row in pRows) {
+        productsList.add({'name': row['product_name'], 'qty': (row['qty'] as num?)?.toInt() ?? 0, 'total': (row['total'] as num?)?.toInt() ?? 0});
+      }
+    } catch (_) {}
+
+    // 6. Refunds
+    final List<Map<String, dynamic>> refundList = [];
+    int refundTotal = 0;
+    try {
+      final rRows = await _dbService.rawQuery('''
+        SELECT formatted_number, total FROM pos_credit_notes
+        WHERE datecreated BETWEEN ? AND ?
+      ''', [startOfDay, endOfDay]);
+      for (var r in rRows) {
+        final amt = (r['total'] as num?)?.toInt() ?? 0;
+        refundTotal += amt;
+        refundList.add({'name': r['formatted_number'], 'amount': amt});
+      }
+    } catch (_) {}
+
+    // 7. Discounts
+    int totalDiscount = 0;
+    try {
+      final dRows = await _dbService.rawQuery('''
+        SELECT SUM(manual_discount_value) as t_disc FROM transactions
+        WHERE (REPLACE(substr(tgl_penjualan,1,19), 'T', ' ') BETWEEN ? AND ?) AND status IN (2, 3)
+      ''', [startOfDay, endOfDay]);
+      totalDiscount = (dRows.first['t_disc'] as num?)?.toInt() ?? 0;
+    } catch (_) {}
+
+    // 8. Staff / Shifts Today
+    final List<String> staffList = [];
+    try {
+      final sRows = await _dbService.rawQuery('''
+        SELECT DISTINCT user_id FROM shift_sessions
+        WHERE REPLACE(substr(start_time,1,19), 'T', ' ') BETWEEN ? AND ?
+      ''', [startOfDay, endOfDay]);
+      for (var r in sRows) staffList.add(r['user_id']?.toString() ?? 'Unknown');
+      
+      // Also add current active shift staff if not added
+      if (activeShift.value != null && !staffList.contains(activeShift.value!.userId)) {
+        staffList.add(activeShift.value!.userId);
+      }
+    } catch (_) {}
+
+    return {
+      'date': now.toIso8601String(),
+      'staff': staffList,
+      'today_income': todayIncome,
+      'yesterday_income': yesterdayIncome,
+      'payment_modes': paymentModesList,
+      'expenses': { 'total': totalExpenses, 'list': expensesList },
+      'voids': { 'count': voidCount, 'total': voidTotal },
+      'refunds': { 'total': refundTotal, 'list': refundList },
+      'products': productsList,
+      'discounts': totalDiscount,
+    };
+  }
+
   Future<Map<String, int>> calculateRecap() async {
     if (activeShift.value == null) return {'cash': 0, 'nonCash': 0};
 
@@ -464,10 +709,10 @@ class ShiftController extends GetxController {
         FROM transactions t
         WHERE t.status IN (2, 3)
           AND (
-            (t.tgl_bayar IS NOT NULL AND t.tgl_bayar != '' AND substr(t.tgl_bayar,1,19) >= ?)
+            (t.tgl_bayar IS NOT NULL AND t.tgl_bayar != '' AND REPLACE(substr(t.tgl_bayar,1,19), 'T', ' ') >= ?)
             OR (
               (t.tgl_bayar IS NULL OR t.tgl_bayar = '')
-              AND substr(t.tgl_penjualan, 1, 19) >= ?
+              AND REPLACE(substr(t.tgl_penjualan, 1, 19), 'T', ' ') >= ?
             )
           )
       ''', [startTime, startTime]);

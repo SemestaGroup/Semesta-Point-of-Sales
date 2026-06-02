@@ -16,6 +16,13 @@ class DatabaseInspectorScreen extends StatelessWidget {
         title: const Text('SQLite Inspector'),
         backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.save_alt),
+            tooltip: 'Export Database (.sqlite)',
+            onPressed: () => controller.exportDatabase(),
+          ),
+        ],
       ),
       body: Column(
         children: [

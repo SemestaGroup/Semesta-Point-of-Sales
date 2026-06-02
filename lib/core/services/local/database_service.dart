@@ -62,16 +62,21 @@ class DatabaseService {
 
   Future<Database> _initDatabase() async {
     String path = join(await getDatabasesPath(), 'pos_database.db');
-    debugPrint('SQLite: Opening database at $path with version 43');
+    debugPrint('SQLite: Opening database at $path with version 45');
     return await openDatabase(
       path,
-      version: 44,
+      version: 45,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
   }
 
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 45) {
+      try {
+        await db.execute("ALTER TABLE members ADD COLUMN datecreated TEXT");
+      } catch (e) {}
+    }
     if (oldVersion < 44) {
       try {
         await db.execute("ALTER TABLE cash_flow ADD COLUMN category TEXT DEFAULT '1'");
@@ -587,6 +592,7 @@ class DatabaseService {
         jenis_kel TEXT,
         kategori_cust TEXT,
         points TEXT,
+        datecreated TEXT,
         id_pos TEXT,
         is_synced INTEGER DEFAULT 1
       )

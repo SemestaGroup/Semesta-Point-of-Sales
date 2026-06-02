@@ -262,6 +262,20 @@ class HomeScreen extends StatelessWidget {
                                             prefixIcon: Icon(CupertinoIcons.search,
                                                 color: AppTheme.primaryColor,
                                                 size: 20.sp),
+                                            suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                                              valueListenable: controller.searchProductController,
+                                              builder: (context, value, child) {
+                                                return value.text.isNotEmpty
+                                                    ? IconButton(
+                                                        icon: const Icon(Icons.clear, color: Colors.grey),
+                                                        onPressed: () {
+                                                          controller.searchProductController.clear();
+                                                          controller.searchProduct('');
+                                                        },
+                                                      )
+                                                    : const SizedBox.shrink();
+                                              },
+                                            ),
                                             border: InputBorder.none,
                                             contentPadding: EdgeInsets.symmetric(
                                                 vertical: 11.h),
@@ -778,12 +792,27 @@ class HomeScreen extends StatelessWidget {
                                   color: AppTheme.borderColor(context)),
                             ),
                             child: TextField(
+                              controller: controller.searchCustomerController,
                               autofocus:
                                   false, // Fix: Disable auto-focus to prevent keyboard pop-up
                               decoration: InputDecoration(
                                 hintText: "Search customer name or phone...",
                                 prefixIcon: const Icon(Icons.search,
                                     color: AppTheme.primaryColor),
+                                suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                                  valueListenable: controller.searchCustomerController,
+                                  builder: (context, value, child) {
+                                    return value.text.isNotEmpty
+                                        ? IconButton(
+                                            icon: const Icon(Icons.clear, color: Colors.grey),
+                                            onPressed: () {
+                                              controller.searchCustomerController.clear();
+                                              controller.searchMemberQuery.value = '';
+                                            },
+                                          )
+                                        : const SizedBox.shrink();
+                                  },
+                                ),
                                 border: InputBorder.none,
                                 contentPadding:
                                     EdgeInsets.symmetric(vertical: 14.h),
@@ -1020,6 +1049,158 @@ class HomeScreen extends StatelessWidget {
     }
   }
 
+  void _showPromoDialog(BuildContext context, HomeController controller) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24.r)),
+        backgroundColor: AppTheme.scaffoldBackgroundColor(context),
+        child: Container(
+          padding: EdgeInsets.all(28.w),
+          width: 400.w,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text("Apply Promo",
+                      style: AppTheme.titleLarge.copyWith(
+                          fontSize: 22.sp, color: AppTheme.primaryColor)),
+                  GestureDetector(
+                    onTap: () => Get.back(),
+                    child: Container(
+                      padding: EdgeInsets.all(6.w),
+                      decoration: BoxDecoration(
+                          color: Colors.grey.withValues(alpha: 0.1),
+                          shape: BoxShape.circle),
+                      child: Icon(Icons.close, size: 20.sp, color: Colors.grey),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 8.h),
+              Text("Select an available promo", style: AppTheme.labelMedium),
+              SizedBox(height: 24.h),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.6),
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Obx(() {
+                    final promos = controller.promoService.activePromos;
+                    if (promos.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 20.h),
+                          child: Text("No active promos available.", style: AppTheme.bodyLarge),
+                        ),
+                      );
+                    }
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (controller.appliedPromo.value != null)
+                          GestureDetector(
+                            onTap: () {
+                              controller.applyPromo(null);
+                              Get.back();
+                            },
+                            child: Container(
+                              margin: EdgeInsets.only(bottom: 12.h),
+                              padding: EdgeInsets.all(16.w),
+                              decoration: BoxDecoration(
+                                color: Colors.red.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(16.r),
+                                border: Border.all(color: Colors.red, width: 1.w),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(CupertinoIcons.clear_circled, color: Colors.red, size: 22.sp),
+                                  SizedBox(width: 16.w),
+                                  Text("Remove Promo",
+                                      style: AppTheme.bodyLarge.copyWith(
+                                        fontFamily: AppTheme.fontBold,
+                                        color: Colors.red,
+                                      )),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ...promos.map((promo) {
+                          bool isSelected = controller.appliedPromo.value != null && 
+                                            controller.appliedPromo.value!['id'] == promo['id'];
+
+                          return GestureDetector(
+                            onTap: () {
+                              controller.applyPromo(promo);
+                              Get.back();
+                            },
+                            child: Container(
+                              margin: EdgeInsets.only(bottom: 12.h),
+                              padding: EdgeInsets.all(16.w),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? AppTheme.primaryColor.withValues(alpha: 0.05)
+                                    : AppTheme.cardColor(context),
+                                borderRadius: BorderRadius.circular(16.r),
+                                border: Border.all(
+                                    color: isSelected
+                                        ? AppTheme.primaryColor
+                                        : AppTheme.borderColor(context),
+                                    width: isSelected ? 1.5.w : 1.w),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(CupertinoIcons.gift,
+                                      color: isSelected
+                                          ? AppTheme.primaryColor
+                                          : AppTheme.secondaryTextColor(context),
+                                      size: 22.sp),
+                                  SizedBox(width: 16.w),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(promo['name'] ?? 'Promo',
+                                            style: AppTheme.bodyLarge.copyWith(
+                                              fontFamily: isSelected
+                                                  ? AppTheme.fontBold
+                                                  : AppTheme.fontMedium,
+                                              color: isSelected
+                                                  ? AppTheme.primaryColor
+                                                  : AppTheme.textColor(context),
+                                            )),
+                                        if (promo['description'] != null && promo['description'].toString().isNotEmpty)
+                                          Text(promo['description'].toString(),
+                                              style: AppTheme.labelMedium.copyWith(
+                                                  fontSize: 12.sp,
+                                                  color: AppTheme.secondaryTextColor(context))),
+                                      ],
+                                    ),
+                                  ),
+                                  if (isSelected)
+                                    Icon(Icons.check_circle,
+                                        color: AppTheme.primaryColor,
+                                        size: 20.sp),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ],
+                    );
+                  }),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showMoreMenu(
       BuildContext context, HomeController controller, TapDownDetails details) {
     final RenderBox overlay =
@@ -1033,6 +1214,22 @@ class HomeScreen extends StatelessWidget {
         Offset.zero & overlay.size,
       ),
       items: <PopupMenuEntry<dynamic>>[
+        PopupMenuItem(
+          height: 38.h,
+          onTap: () => _showPromoDialog(context, controller),
+          child: Row(
+            children: [
+              Icon(CupertinoIcons.gift,
+                  size: 18.sp, color: AppTheme.primaryColor),
+              SizedBox(width: 12.w),
+              Text("Apply Promo",
+                  style: TextStyle(
+                      fontSize: 14.sp,
+                      color: AppTheme.textColor(context),
+                      fontFamily: AppTheme.fontMedium))
+            ],
+          ),
+        ),
         PopupMenuItem(
           height: 38.h,
           onTap: () => _showDiscountDialog(context, controller),
@@ -1844,16 +2041,11 @@ class HomeScreen extends StatelessWidget {
     final bool showPrice = display['show_price'] as bool? ?? false;
     final bool showStock = display['show_stock'] as bool? ?? false;
 
-    // Check if product has an active promo
-    final bool hasPromo = Get.isRegistered<PromoService>() 
-        ? Get.find<PromoService>().promoProductIds.contains(productItem.idProduk)
-        : false;
-
     // Check if product has a regular discount
     final bool hasProductDiscount = productItem.discountTotal > 0;
     
-    final bool hasDiscount = hasPromo || hasProductDiscount;
-    final String badgeLabel = hasPromo ? 'PROMO' : 'DISC';
+    final bool hasDiscount = hasProductDiscount;
+    final String badgeLabel = 'DISC';
 
     // Check if product has children
     final bool hasChildren = productItem.children != null && 
@@ -2153,7 +2345,9 @@ class HomeScreen extends StatelessWidget {
                           item.hargaAwal > 0 ? item.hargaAwal : item.hargaJual;
                       final nominalDiscount = item.discountType == 'percent'
                           ? (base * item.discountTotal / 100).round()
-                          : item.discountTotal;
+                          : (item.discountType == 'final_price' 
+                              ? (base - item.discountTotal) 
+                              : item.discountTotal);
                       final label = item.discountType == 'percent'
                           ? 'Disc ${item.discountTotal}% = -${formatRupiah(nominalDiscount)}'
                           : 'Disc -${formatRupiah(nominalDiscount)}';
@@ -2666,6 +2860,30 @@ class HomeScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Obx(() {
+            final promo = controller.appliedPromo.value;
+            if (promo == null) return const SizedBox.shrink();
+            return Padding(
+              padding: EdgeInsets.only(bottom: 4.h),
+              child: Row(
+                children: [
+                  Icon(CupertinoIcons.gift_fill, size: 14.sp, color: AppTheme.primaryColor),
+                  SizedBox(width: 6.w),
+                  Expanded(
+                    child: Text("Promo: ${promo['name']}",
+                      style: AppTheme.labelMedium.copyWith(
+                        color: AppTheme.primaryColor,
+                        fontFamily: AppTheme.fontBold,
+                        fontSize: 11.sp,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
           Obx(() => _buildSummaryRow(
               context, "Subtotal", formatRupiah(controller.subtotalRaw.value))),
           SizedBox(height: 2.h),
@@ -3021,7 +3239,34 @@ class HomeScreen extends StatelessWidget {
 
   /// Navigate to the elegant full-page Open Shift Audit screen.
   void _navigateToOpenShift(
-      ShiftController shiftController, String candidateName) {
+      ShiftController shiftController, String candidateName) async {
+    final continuedData = await shiftController.checkContinuedShift();
+    if (continuedData != null) {
+      Get.dialog(
+        AlertDialog(
+          title: Text('Lanjutkan Shift', style: TextStyle(fontFamily: AppTheme.fontBold)),
+          content: Text('Anda melanjutkan dari shift sebelumnya. Uang di laci dan data penjualan akan diteruskan tanpa perlu dihitung ulang.\n\nShift Anda: $candidateName'),
+          actions: [
+            TextButton(
+              onPressed: () => Get.back(),
+              child: Text('Batal', style: TextStyle(color: AppTheme.textColor(Get.context!))),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+              onPressed: () async {
+                Get.back();
+                Get.dialog(const Center(child: CircularProgressIndicator()), barrierDismissible: false);
+                await shiftController.openContinuedShift(candidateName, continuedData);
+                Get.back();
+              },
+              child: const Text('Mulai Berjualan', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     // Ensure the audit controller is fresh each time
     if (Get.isRegistered<ShiftAuditController>()) {
       Get.delete<ShiftAuditController>();

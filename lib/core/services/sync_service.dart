@@ -274,7 +274,7 @@ class SyncService extends GetxService {
 
         // 1. Check if the order already exists locally
         final localCheck = await _dbService.rawQuery(
-            "SELECT id_penjualan, is_synced, id_penjualan_remote, status FROM transactions WHERE id_pos = ? OR id_penjualan_remote = ?",
+            "SELECT id_penjualan, is_synced, id_penjualan_remote, status FROM transactions WHERE (id_pos = ? AND id_pos IS NOT NULL AND id_pos != '') OR id_penjualan_remote = ?",
             [idPos, remoteId]);
 
         int? localIdPenjualan;
@@ -329,15 +329,27 @@ class SyncService extends GetxService {
           }
         }
 
-        // 2. Fetch full items detail for this order
-        final detailResp =
-            await _apiService.getPosOrderDetails(remoteId.toString());
-        if (detailResp.responsestate != Constants.successState ||
-            detailResp.data == null) {
-          continue;
-        }
+        final tglPenjualanStr = orderJson['datecreated']?.toString() ?? orderJson['date']?.toString() ?? DateTime.now().toString();
+        final dt = DateTime.tryParse(tglPenjualanStr);
+        final now = DateTime.now();
+        final isCurrentMonth = dt != null && dt.year == now.year && dt.month == now.month;
 
-        final fullOrderData = detailResp.data;
+        Map<String, dynamic> fullOrderData;
+
+        if (isCurrentMonth) {
+          // 2. Fetch full items detail for this order if in current month
+          final detailResp =
+              await _apiService.getPosOrderDetails(remoteId.toString());
+          if (detailResp.responsestate != Constants.successState ||
+              detailResp.data == null) {
+            continue;
+          }
+          fullOrderData = detailResp.data;
+        } else {
+          // Skip fetching details for past months to speed up sync.
+          // The header will still be inserted with 0 items, preserving total income.
+          fullOrderData = orderJson as Map<String, dynamic>;
+        }
 
         final tglPenjualan = fullOrderData['datecreated'] ??
             fullOrderData['date'] ??
@@ -1403,6 +1415,7 @@ class SyncService extends GetxService {
               'jenis_kel': item.jenisKel,
               'kategori_cust': item.kategoriCust,
               'points': item.points?.toString(),
+              'datecreated': item.datecreated,
               'is_synced': 1,
             },
             conflictAlgorithm: ConflictAlgorithm.replace);
@@ -1957,12 +1970,36 @@ class SyncService extends GetxService {
 
       if (deletedCount > 0) {
         debugPrint("SyncService: Cleaned up $deletedCount old closed orders.");
-        // 2. Orphan cleanup for transaction_details
-        await db.execute("""
-          DELETE FROM transaction_details 
-          WHERE id_penjualan NOT IN (SELECT id_penjualan FROM transactions)
-        """);
       }
+      
+      // 2. Remove DUPLICATE transactions (keep the original local insertion which has id_pos and payment_method)
+      await db.execute("""
+        DELETE FROM transactions
+        WHERE id_penjualan NOT IN (
+          SELECT MIN(id_penjualan)
+          FROM transactions
+          WHERE id_penjualan_remote IS NOT NULL
+          GROUP BY id_penjualan_remote
+        )
+        AND id_penjualan_remote IS NOT NULL
+      """);
+
+      await db.execute("""
+        DELETE FROM transactions
+        WHERE id_penjualan NOT IN (
+          SELECT MIN(id_penjualan)
+          FROM transactions
+          WHERE id_pos IS NOT NULL AND id_pos != ''
+          GROUP BY id_pos
+        )
+        AND id_pos IS NOT NULL AND id_pos != ''
+      """);
+
+      // 3. Orphan cleanup for transaction_details
+      await db.execute("""
+        DELETE FROM transaction_details 
+        WHERE id_penjualan NOT IN (SELECT id_penjualan FROM transactions)
+      """);
     } catch (e) {
       debugPrint("SyncService: Error during order cleanup: $e");
     }

@@ -61,6 +61,8 @@ class SettingController extends GetxController {
   String cachedMasterApkUrl = "";
   String cachedMasterChangelog = "";
 
+  RxList<String> availableBrands = <String>[].obs;
+
   UserService get userService {
     if (!Get.isRegistered<UserService>()) {
       Get.put(UserService(), permanent: true);
@@ -75,6 +77,7 @@ class SettingController extends GetxController {
 
     // 1. Load local settings immediately
     _loadLocalSettings();
+    _fetchAvailableBrands();
 
     // 2. Reactively update text controllers if background sync finishes
     ever(appService.appModel, (AppModel model) {
@@ -125,14 +128,23 @@ class SettingController extends GetxController {
       companyDiscFieldController.text = model.diskon.toString();
       companyVersionFieldController.text = model.version;
 
-
-
       // Auto-connect defined network printers
       autoConnectAll();
     } catch (e) {
       debugPrint("SettingController: _loadLocalSettings error: $e");
     } finally {
       isLoading.value = false;
+    }
+  }
+
+  Future<void> _fetchAvailableBrands() async {
+    try {
+      final db = Get.find<DatabaseService>();
+      final result = await db.rawQuery(
+          "SELECT DISTINCT nama_brand FROM brands WHERE nama_brand IS NOT NULL AND nama_brand != ''");
+      availableBrands.value = result.map((e) => e['nama_brand'].toString()).toList();
+    } catch (e) {
+      debugPrint("SettingController: Failed to fetch brands: $e");
     }
   }
 
@@ -485,7 +497,7 @@ class SettingController extends GetxController {
 
   Future<void> addPrinter(PrinterDevice device) async {
     assignedPrinters.add(device);
-    await _savePrinterConfigs();
+    await savePrinterConfigs();
     autoConnectAll();
   }
 
@@ -498,11 +510,11 @@ class SettingController extends GetxController {
         networkSockets.remove(p.address);
       }
       assignedPrinters.removeAt(idx);
-      await _savePrinterConfigs();
+      await savePrinterConfigs();
     }
   }
 
-  Future<void> _savePrinterConfigs() async {
+  Future<void> savePrinterConfigs() async {
     final String printerJson =
         jsonEncode(assignedPrinters.map((e) => e.toJson()).toList());
     await userService.saveString('pos_printer_configs', printerJson);
@@ -527,12 +539,12 @@ class SettingController extends GetxController {
     int startIndex = 1,
     int totalLabels = 1,
     String? productNote,
+    String? orderNote,
   }) async {
     final profile = await CapabilityProfile.load();
     final paper = PaperSize.mm58;
     final generator = Generator(paper, profile);
     final int maxChars = 32;
-    final String lineSeparator = '-' * maxChars;
     List<int> bytes = [];
 
     bytes += generator.reset();
@@ -540,61 +552,84 @@ class SettingController extends GetxController {
     for (int i = 0; i < copies; i++) {
       int currentCounter = startIndex + i;
       String labelCounter = '$currentCounter/$totalLabels';
-      
+
       String topRow = _formatRow(line1, labelCounter, maxChars);
 
       // Row 1: Date/Time + Counter
-      bytes += generator.text(topRow,
-          styles: const PosStyles(align: PosAlign.left));
-      // bytes += generator.feed(1);
+      bytes +=
+          generator.text(topRow, styles: const PosStyles(align: PosAlign.left));
 
       // Row 2: Customer Name
-      bytes += generator.text(line2,
-          styles: const PosStyles(align: PosAlign.left));
-      
+      bytes +=
+          generator.text(line2, styles: const PosStyles(align: PosAlign.left));
+
       // Row 3: Order Code
-      bytes += generator.text(line3,
-          styles: const PosStyles(align: PosAlign.left));
-      
-      // bytes += generator.feed(1);
-      // bytes += generator.text(lineSeparator,
-      //     styles: const PosStyles(align: PosAlign.left));
+      bytes +=
+          generator.text(line3, styles: const PosStyles(align: PosAlign.left));
 
-      // Row 4: Product Name (Bold)
-      if (line4.contains('|')) {
-        String part1 = line4;
-        String part2 = "";
-        if (line4.length > 24) {
-          part1 = line4.substring(0, 24);
-          part2 = line4.substring(24).trimLeft();
-        }
-        bytes += generator.text(part1, styles: const PosStyles(align: PosAlign.left, bold: true));
-        if (part2.isNotEmpty) {
-          if (part2.length > 26) {
-             part2 = '${part2.substring(0, 23)}..';
-          }
-          bytes += generator.text(part2, styles: const PosStyles(align: PosAlign.left, bold: true));
-        }
-      } else {
-        String name = line4;
-        if (name.length > 24) {
-           name = '${name.substring(0, 21)}..';
-        }
-        bytes += generator.text(name, styles: const PosStyles(align: PosAlign.left, bold: true));
+      // Row 4: Product Name (Bold) - Word-wrapped, no truncation
+      List<String> wrappedName = _wrapTextByWord(line4, maxChars);
+      for (final wline in wrappedName) {
+        bytes += generator.text(wline,
+            styles: const PosStyles(align: PosAlign.left, bold: true));
       }
 
-      if (productNote != null && productNote.trim().isNotEmpty) {
-        bytes += generator.text(
-          "Note: ${productNote.trim()}",
-          styles: const PosStyles(align: PosAlign.left, bold: true), //fontType: PosFontType.fontB
-        );
+      // Order Note (if any)
+      final hasOrderNote = orderNote != null && orderNote.trim().isNotEmpty;
+      if (hasOrderNote) {
+        List<String> wrappedOrderNote = _wrapTextByWord('Order: ${orderNote.trim()}', maxChars);
+        for (final wline in wrappedOrderNote) {
+          bytes += generator.text(wline,
+              styles: const PosStyles(align: PosAlign.left));
+        }
       }
-      
+
+      // Item Note (if any)
+      final hasItemNote = productNote != null && productNote.trim().isNotEmpty;
+      if (hasItemNote) {
+        List<String> wrappedItemNote = _wrapTextByWord('Item: ${productNote.trim()}', maxChars);
+        for (final wline in wrappedItemNote) {
+          bytes += generator.text(wline,
+              styles: const PosStyles(align: PosAlign.left));
+        }
+      }
+
       bytes += generator.feed(1);
       bytes += generator.cut();
     }
 
     return bytes;
+  }
+
+  /// Word-wrap text to fit within maxChars per line without truncation
+  List<String> _wrapTextByWord(String text, int maxChars) {
+    if (text.length <= maxChars) return [text];
+
+    List<String> lines = [];
+    List<String> words = text.split(' ');
+    String currentLine = '';
+
+    for (String word in words) {
+      if (currentLine.isEmpty) {
+        currentLine = word;
+      } else if ('$currentLine $word'.length <= maxChars) {
+        currentLine = '$currentLine $word';
+      } else {
+        lines.add(currentLine);
+        currentLine = word;
+      }
+    }
+    if (currentLine.isNotEmpty) lines.add(currentLine);
+    return lines;
+  }
+
+  Future<void> printTest(PrinterDevice printer) async {
+    try {
+      final bytes = await _buildTestBytes(printer);
+      await printToTarget(printer, prebuiltBytes: bytes);
+    } catch (e) {
+      Get.snackbar('Print Test Failed', 'Error: $e');
+    }
   }
 
   /// Builds ESC/POS bytes for a test page, role-aware.
@@ -645,12 +680,11 @@ class SettingController extends GetxController {
     return centeredLines.join('\n');
   }
 
-
   Future<List<int>> _buildTestBytes(PrinterDevice printer) async {
     final profile = await CapabilityProfile.load();
 
     // --- Label test: ESC/POS mode for regular thermal label printers ---
-    if (printer.role == 'label') {
+    if (printer.roles.contains('label')) {
       final now = DateTime.now();
       final dateTimeStr =
           '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}'
@@ -675,14 +709,14 @@ class SettingController extends GetxController {
     String address = userService.getPrefString(Constants.posAddress);
     if (address == 'Guest') address = '';
     String phone = userService.getPrefString(Constants.posPhoneNumber);
-    if (phone == 'Guest') phone = '';
-
-    final isKitchen = printer.role == 'kitchen';
+    final isLabel = printer.roles.contains('label');
+    final isKitchen = printer.roles.contains('kitchen');
     final title = isKitchen ? 'KITCHEN TEST' : 'TEST PRINT';
     const lineSep = '------------------------------------------';
 
     bytes += generator.text(
-        _formatCenter(isKitchen ? '*** KITCHEN ***' : companyName.toUpperCase(), 32),
+        _formatCenter(
+            isKitchen ? '*** KITCHEN ***' : companyName.toUpperCase(), 32),
         styles: const PosStyles(
             align: PosAlign.left, bold: true, height: PosTextSize.size2));
 
@@ -715,13 +749,15 @@ class SettingController extends GetxController {
       bytes += generator.text(_formatCenter(lineSep, 32),
           styles: const PosStyles(align: PosAlign.left));
     } else {
-      bytes += generator.text(_formatCenter('Role: ${printer.role.toUpperCase()}', 32),
+      bytes += generator.text(
+          _formatCenter('Roles: ${printer.roles.map((e) => e.toUpperCase()).join(", ")}', 32),
           styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text(_formatCenter('Connection: ${printer.type}', 32),
           styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text(_formatCenter(lineSep, 32),
           styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text(_formatCenter('Printer connected successfully!', 32),
+      bytes += generator.text(
+          _formatCenter('Printer connected successfully!', 32),
           styles: const PosStyles(align: PosAlign.left));
     }
 
@@ -754,6 +790,193 @@ class SettingController extends GetxController {
         errMsg: 'Printer: ${printer.name} | $e',
       );
     }
+  }
+
+  /// Prints the full End of Day (Z-Report)
+  Future<void> printEndOfDayReport(Map<String, dynamic> eodData) async {
+    final printer = getPrinterForRole('report') ?? getPrinterForRole('cashier');
+    if (printer == null) {
+      Get.snackbar(
+          'Printer Error', 'No active Report/Cashier printer found for End of Day.',
+          backgroundColor: Colors.red.withValues(alpha: 0.1),
+          icon: const Icon(Icons.print_disabled, color: Colors.orange));
+      return;
+    }
+
+    try {
+      final bytes = await _buildEndOfDayBytes(printer, eodData);
+      await printToTarget(printer, prebuiltBytes: bytes);
+    } catch (e) {
+      debugPrint('SettingController: End of Day printing failed: $e');
+      Get.snackbar('Print Error', 'Failed to print End of Day Report: $e');
+    }
+  }
+
+  Future<List<int>> _buildEndOfDayBytes(
+      PrinterDevice printer, Map<String, dynamic> eodData) async {
+    final profile = await CapabilityProfile.load();
+    final is80mm = printer.paperSize == 80;
+    final paperSize = is80mm ? PaperSize.mm80 : PaperSize.mm58;
+
+    final int maxChars = is80mm ? 48 : 32;
+    final int labelWidth = is80mm ? 30 : 20;
+    final int valueWidth = maxChars - labelWidth;
+    final String lineSep = '-' * maxChars;
+
+    final generator = Generator(paperSize, profile);
+    List<int> bytes = [];
+
+    String f(int val) {
+      String s = val.abs().toString();
+      String res = "";
+      int count = 0;
+      for (int i = s.length - 1; i >= 0; i--) {
+        count++;
+        res = s[i] + res;
+        if (count % 3 == 0 && i != 0) res = ".$res";
+      }
+      return 'Rp. ${val < 0 ? "-" : ""}$res';
+    }
+
+    void printRow(String label, String value,
+        {bool bold = false, bool fontB = false}) {
+      String lab = label;
+      if (lab.length > labelWidth) {
+        lab = '${lab.substring(0, labelWidth - 2)}..';
+      }
+      bytes += generator.text(
+        lab.padRight(labelWidth) + value.padLeft(valueWidth),
+        styles: PosStyles(
+            bold: bold,
+            fontType: fontB ? PosFontType.fontB : PosFontType.fontA),
+      );
+    }
+
+    String companyName = userService.getPrefString(Constants.posCompanyName);
+    if (companyName == 'Guest' || companyName.isEmpty) companyName = 'FLINKPOS';
+
+    String address = userService.getPrefString(Constants.posAddress);
+    if (address == 'Guest') address = '';
+
+    bytes += generator.reset();
+
+    // 1. HEADER
+    bytes += generator.text(_formatCenter(companyName.toUpperCase(), maxChars),
+        styles: const PosStyles(
+            align: PosAlign.left, bold: true, height: PosTextSize.size2));
+    if (address.isNotEmpty) {
+      bytes += generator.text(_formatCenter(address, maxChars),
+          styles: const PosStyles(align: PosAlign.left));
+    }
+    bytes += generator.text(_formatCenter(lineSep, maxChars),
+        styles: const PosStyles(align: PosAlign.left));
+    bytes += generator.text(_formatCenter('END OF DAY (Z-REPORT)', maxChars),
+        styles: const PosStyles(align: PosAlign.left, bold: true));
+    bytes += generator.text(_formatCenter(lineSep, maxChars),
+        styles: const PosStyles(align: PosAlign.left));
+
+    // 2. INFO
+    final dateStr = (eodData['date'] as String).substring(0, 10);
+    printRow('Date:', dateStr);
+    final staffList = (eodData['staff'] as List<dynamic>).join(', ');
+    printRow('Staff Today:', staffList);
+    bytes += generator.text(_formatCenter(lineSep, maxChars),
+        styles: const PosStyles(align: PosAlign.left));
+
+    // 3. INCOME SUMMARY
+    bytes += generator.text(_formatCenter('INCOME SUMMARY', maxChars),
+        styles: const PosStyles(align: PosAlign.left, bold: true));
+    final paymentModes = eodData['payment_modes'] as List<dynamic>;
+    for (var mode in paymentModes) {
+      final amt = (mode['recorded'] as num?)?.toInt() ?? 0;
+      if (amt > 0) {
+        printRow('${mode['name']}:', f(amt));
+      }
+    }
+    final todayTotal = (eodData['today_income'] as num?)?.toInt() ?? 0;
+    printRow('TOTAL INCOME:', f(todayTotal), bold: true);
+    
+    // YESTERDAY COMPARISON
+    final yesterdayTotal = (eodData['yesterday_income'] as num?)?.toInt() ?? 0;
+    if (yesterdayTotal > 0) {
+      printRow('Yesterday Income:', f(yesterdayTotal));
+      final diff = todayTotal - yesterdayTotal;
+      final perc = (diff / yesterdayTotal * 100).toStringAsFixed(1);
+      final diffSign = diff >= 0 ? '+' : '';
+      printRow('Growth:', '$diffSign$perc%', bold: true);
+    }
+    bytes += generator.text(_formatCenter(lineSep, maxChars),
+        styles: const PosStyles(align: PosAlign.left));
+
+    // 4. CASH FLOW (EXPENSES)
+    final expenses = eodData['expenses'] as Map<String, dynamic>;
+    final expensesList = expenses['list'] as List<dynamic>;
+    if (expensesList.isNotEmpty) {
+      bytes += generator.text(_formatCenter('EXPENSES', maxChars),
+          styles: const PosStyles(align: PosAlign.left, bold: true));
+      for (var e in expensesList) {
+        printRow(e['name'], f((e['amount'] as num?)?.toInt() ?? 0));
+      }
+      printRow('TOTAL EXPENSES:', f((expenses['total'] as num?)?.toInt() ?? 0), bold: true);
+      bytes += generator.text(_formatCenter(lineSep, maxChars),
+          styles: const PosStyles(align: PosAlign.left));
+    }
+
+    // 5. DISCOUNTS & REFUNDS
+    final discounts = (eodData['discounts'] as num?)?.toInt() ?? 0;
+    final refunds = eodData['refunds'] as Map<String, dynamic>;
+    final voids = eodData['voids'] as Map<String, dynamic>;
+    
+    if (discounts > 0 || refunds['total'] > 0 || voids['count'] > 0) {
+      bytes += generator.text(_formatCenter('DISCOUNTS & CANCELLATIONS', maxChars),
+          styles: const PosStyles(align: PosAlign.left, bold: true));
+      if (discounts > 0) printRow('Total Discounts:', '-${f(discounts)}');
+      
+      final refTotal = (refunds['total'] as num?)?.toInt() ?? 0;
+      if (refTotal > 0) {
+        printRow('Total Refunds:', '-${f(refTotal)}');
+        final refList = refunds['list'] as List<dynamic>;
+        for (var r in refList) {
+          printRow(' - ${r['name']}', '-${f((r['amount'] as num?)?.toInt() ?? 0)}', fontB: true);
+        }
+      }
+
+      final voidCount = (voids['count'] as num?)?.toInt() ?? 0;
+      if (voidCount > 0) {
+        printRow('Voided Orders:', '$voidCount orders');
+        printRow('Voided Amount:', f((voids['total'] as num?)?.toInt() ?? 0));
+      }
+      bytes += generator.text(_formatCenter(lineSep, maxChars),
+          styles: const PosStyles(align: PosAlign.left));
+    }
+
+    // 6. TOP PRODUCTS
+    final products = eodData['products'] as List<dynamic>;
+    if (products.isNotEmpty) {
+      bytes += generator.text(_formatCenter('PRODUCTS SOLD', maxChars),
+          styles: const PosStyles(align: PosAlign.left, bold: true));
+      for (var p in products) {
+        final qty = p['qty'] ?? 0;
+        final name = p['name'] ?? 'Item';
+        final total = p['total'] ?? 0;
+        String lab = '${qty}x $name';
+        if (lab.length > labelWidth + 3) lab = '${lab.substring(0, labelWidth + 1)}..';
+        printRow(lab, f(total).replaceAll('Rp. ', ''), fontB: true);
+      }
+      bytes += generator.text(_formatCenter(lineSep, maxChars),
+          styles: const PosStyles(align: PosAlign.left));
+    }
+
+    // FOOTER
+    bytes += generator.text(
+        _formatCenter('Printed on: ${DateTime.now().toString().split('.')[0]}', maxChars),
+        styles: const PosStyles(align: PosAlign.left));
+    
+    bytes += generator.feed(3);
+    if (printer.isAutoCut) {
+      bytes += generator.cut();
+    }
+    return bytes;
   }
 
   Future<List<int>> _buildZReportBytes(PrinterDevice printer,
@@ -918,7 +1141,8 @@ class SettingController extends GetxController {
       final cnList = creditNotes['list'] as List<dynamic>? ?? [];
       final cnTotal = creditNotes['total'] ?? 0;
       if (cnList.isNotEmpty) {
-        bytes += generator.text(_formatCenter('CREDIT NOTES (REFUNDS)', maxChars),
+        bytes += generator.text(
+            _formatCenter('CREDIT NOTES (REFUNDS)', maxChars),
             styles: const PosStyles(align: PosAlign.left, bold: true));
         for (var cn in cnList) {
           printRow(
@@ -986,7 +1210,8 @@ class SettingController extends GetxController {
 
     bytes += generator.hr();
     bytes += generator.text(
-        _formatCenter('Printed on: ${DateTime.now().toString().split('.')[0]}', maxChars),
+        _formatCenter(
+            'Printed on: ${DateTime.now().toString().split('.')[0]}', maxChars),
         styles: const PosStyles(align: PosAlign.left));
     bytes += generator.feed(3);
     bytes += generator.cut();
@@ -1006,8 +1231,8 @@ class SettingController extends GetxController {
         // Step 1: Connect
         final connected = await _connectToBluetooth(printer);
         if (!connected) {
-          Get.snackbar('Printer Error',
-              'Could not connect to "${printer.name}". Make sure it is powered on and paired.');
+          Get.snackbar('Printer Warning',
+              'Printer ${printer.name} with roles ${printer.roles.join(", ")} failed. Make sure it is powered on and paired.');
           return;
         }
         // Step 2: Send bytes
@@ -1022,11 +1247,14 @@ class SettingController extends GetxController {
             writeSuccess = true;
             break;
           } catch (writeErr) {
-            debugPrint('BT writeBytes ATTEMPT $writeAttempt failed for ${printer.name}: $writeErr');
+            debugPrint(
+                'BT writeBytes ATTEMPT $writeAttempt failed for ${printer.name}: $writeErr');
             if (writeAttempt < 2) {
               // Force a fresh reconnect and retry once
               connectedBluetoothAddress = null;
-              try { await bluetooth.disconnect(); } catch (_) {}
+              try {
+                await bluetooth.disconnect();
+              } catch (_) {}
               await Future.delayed(const Duration(milliseconds: 1500));
               final reconnected = await _connectToBluetooth(printer);
               if (!reconnected) break;
@@ -1045,7 +1273,9 @@ class SettingController extends GetxController {
             icon: const Icon(Icons.print_disabled, color: Colors.white),
           );
           connectedBluetoothAddress = null;
-          try { await bluetooth.disconnect(); } catch (_) {}
+          try {
+            await bluetooth.disconnect();
+          } catch (_) {}
           return;
         }
 
@@ -1108,7 +1338,7 @@ class SettingController extends GetxController {
         category: 'printer',
         errCode: 'PRINT_TO_TARGET_FAIL',
         errMsg:
-            'Printer: ${printer.name} (${printer.type}/${printer.role}) | isTestPrint=$isTestPrint | $e',
+            'Printer: ${printer.name} (${printer.type}/${printer.roles.join(", ")}) | isTestPrint=$isTestPrint | $e',
       );
       Get.snackbar('Print Error', 'Failed to print on "${printer.name}": $e');
     }
@@ -1125,12 +1355,28 @@ class SettingController extends GetxController {
 
   /// Returns true if at least one printer with [role] is configured and active.
   bool hasPrinterForRole(String role) {
-    return assignedPrinters.any((p) => p.role == role && p.isActive);
+    return assignedPrinters.any((p) => p.roles.contains(role) && p.isActive);
+  }
+
+  List<PrinterDevice> getPrintersForRole(String role) {
+    return assignedPrinters.where((p) => p.roles.contains(role) && p.isActive).toList();
   }
 
   PrinterDevice? getPrinterForRole(String role) {
     return assignedPrinters
-        .firstWhereOrNull((p) => p.role == role && p.isActive);
+        .firstWhereOrNull((p) => p.roles.contains(role) && p.isActive);
+  }
+
+  PrinterDevice? getPrinterForRoleAndBrand(String role, String brand) {
+    // 1. Exact match: printer's brands list contains this specific brand
+    final exactMatch = assignedPrinters.firstWhereOrNull(
+        (p) => p.roles.contains(role) && p.isActive && p.brands.contains(brand));
+    if (exactMatch != null) return exactMatch;
+
+    // 2. Fallback match: printer has NO brands assigned (acts as a generic/catch-all printer)
+    final genericMatch = assignedPrinters.firstWhereOrNull(
+        (p) => p.roles.contains(role) && p.isActive && p.brands.isEmpty);
+    return genericMatch;
   }
 
   void formValidate() async {

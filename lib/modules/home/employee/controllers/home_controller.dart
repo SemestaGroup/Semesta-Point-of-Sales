@@ -25,6 +25,7 @@ import 'package:semesta_pos/core/services/local/database_service.dart';
 import 'package:semesta_pos/core/services/remote/api_service.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
 import 'package:semesta_pos/core/models/payment/pos_payment_model.dart';
+import 'package:semesta_pos/core/models/printer/printer_device.dart';
 import 'package:semesta_pos/core/services/sync_service.dart';
 import 'package:semesta_pos/core/services/promo_service.dart';
 import 'package:semesta_pos/modules/order/controllers/order_controller.dart';
@@ -107,6 +108,7 @@ class HomeController extends GetxController {
       orderType: orderType,
       productDiscountTotal: productDiscountTotal,
       productDiscountType: productDiscountType,
+      selectedPromo: appliedPromo.value,
     );
   }
 
@@ -134,10 +136,14 @@ class HomeController extends GetxController {
   final nameController = TextEditingController();
   final phoneController = TextEditingController();
   final addressController = TextEditingController();
+  final searchCustomerController = TextEditingController();
 
   // Custom Discount States
   RxInt manualDiscountValue = 0.obs;
   final RxBool manualDiscountIsPercent = false.obs;
+
+  // Manual Promo State
+  Rx<Map<String, dynamic>?> appliedPromo = Rx<Map<String, dynamic>?>(null);
 
   final RxBool isRefundMode = false.obs;
   RxBool isSavingSettings = false.obs;
@@ -445,8 +451,10 @@ class HomeController extends GetxController {
             .where((c) => activeCatIds.contains(c['id_kategori']))
             .toList();
         list.sort((a, b) {
-          final nameA = (a['nama_kategori']?.toString() ?? '').toLowerCase().trim();
-          final nameB = (b['nama_kategori']?.toString() ?? '').toLowerCase().trim();
+          final nameA =
+              (a['nama_kategori']?.toString() ?? '').toLowerCase().trim();
+          final nameB =
+              (b['nama_kategori']?.toString() ?? '').toLowerCase().trim();
           return nameA.compareTo(nameB);
         });
         categoryList.value = list;
@@ -495,11 +503,13 @@ class HomeController extends GetxController {
             uniqueCats[name.toLowerCase()] = cat;
           }
         }
-        
+
         final list = uniqueCats.values.toList();
         list.sort((a, b) {
-          final nameA = (a['nama_kategori']?.toString() ?? '').toLowerCase().trim();
-          final nameB = (b['nama_kategori']?.toString() ?? '').toLowerCase().trim();
+          final nameA =
+              (a['nama_kategori']?.toString() ?? '').toLowerCase().trim();
+          final nameB =
+              (b['nama_kategori']?.toString() ?? '').toLowerCase().trim();
           return nameA.compareTo(nameB);
         });
         categoryList.value = list;
@@ -997,6 +1007,7 @@ class HomeController extends GetxController {
     selectedOrderType.value = "Dine In";
     manualDiscountValue.value = 0;
     manualDiscountIsPercent.value = false;
+    appliedPromo.value = null; // Clear manually applied promo
     manualCashAmount.value = 0;
     currentIdPos = null;
     currentRemoteId.value = 0;
@@ -1014,6 +1025,25 @@ class HomeController extends GetxController {
         Get.find<DashboardAdminController>().updateActiveOrderCount();
       }
     } catch (_) {}
+  }
+
+  void applyPromo(Map<String, dynamic>? promo) {
+    appliedPromo.value = promo;
+    // Recalculate prices for all items currently in cart
+    for (int i = 0; i < penjualanDetailModelList.length; i++) {
+      var item = penjualanDetailModelList[i];
+      final promoDiscount = _calculateBestPriceForCartItem(
+          item.idProduk, item.hargaAwal, selectedOrderType.value);
+      
+      penjualanDetailModelList[i] = item.copyWith(
+        hargaJual: promoDiscount.finalPrice,
+        discountTotal: promoDiscount.discountTotal,
+        discountType: promoDiscount.discountType,
+        subtotal: promoDiscount.finalPrice * item.jumlah,
+      );
+    }
+    penjualanDetailModelList.refresh();
+    calculateTotals();
   }
 
   void clearOrder() {
@@ -1460,7 +1490,8 @@ class HomeController extends GetxController {
               : '-';
 
       // Use the actual transaction date, falling back to now if missing
-      final String tglStr = map['tgl_penjualan']?.toString() ?? DateTime.now().toIso8601String();
+      final String tglStr =
+          map['tgl_penjualan']?.toString() ?? DateTime.now().toIso8601String();
       final String today = tglStr.split('T')[0].split(' ')[0];
       final syncService = Get.find<SyncService>();
 
@@ -1822,7 +1853,8 @@ class HomeController extends GetxController {
           final int currentPoints =
               int.tryParse(selectedMember.value!.points ?? '0') ?? 0;
           final int newPoints = currentPoints + earnedPoints;
-          selectedMember.value = selectedMember.value!.copyWith(points: newPoints.toString());
+          selectedMember.value =
+              selectedMember.value!.copyWith(points: newPoints.toString());
 
           await _dbService.update(
             'members',
@@ -1945,8 +1977,38 @@ class HomeController extends GetxController {
       {PenjualanModel? penjualan}) async {
     try {
       final settingCtrl = Get.find<SettingController>();
-      final labelPrinter = settingCtrl.getPrinterForRole('label');
-      if (labelPrinter == null) {
+      
+      // 1. Fetch Brands for items
+      List<String> idProduks = items.map((e) => e.idProduk.toString()).toSet().toList();
+      String idProduksStr = idProduks.join(',');
+
+      Map<int, String> itemBrands = {};
+      try {
+        final dbService = Get.find<DatabaseService>();
+        final result = await dbService.rawQuery(
+            "SELECT p.id_produk, b.nama_brand FROM products p LEFT JOIN brands b ON p.id_brand = b.id_brand WHERE p.id_produk IN ($idProduksStr)");
+        for (var row in result) {
+          itemBrands[row['id_produk'] as int] = row['nama_brand']?.toString() ?? '';
+        }
+      } catch (e) {
+        debugPrint('printLabels error fetching brands: $e');
+      }
+
+      // 2. Group Items by PrinterDevice
+      Map<PrinterDevice, List<PenjualanDetailModel>> printJobs = {};
+
+      for (var item in items) {
+        String brand = itemBrands[item.idProduk] ?? '';
+        PrinterDevice? printer = settingCtrl.getPrinterForRoleAndBrand('label', brand);
+
+        if (printer != null) {
+          printJobs.putIfAbsent(printer, () => []).add(item);
+        } else {
+          debugPrint('No label printer found for item ${item.productName} (brand: $brand).');
+        }
+      }
+
+      if (printJobs.isEmpty) {
         Get.snackbar('No Label Printer',
             'Please configure a printer with the Label role in Settings.');
         return;
@@ -1970,40 +2032,51 @@ class HomeController extends GetxController {
               : 'Customer #${penjualan.idMember}')
           : (selectedMember.value?.nama ?? 'Walk In');
 
-      List<int> allBytes = [];
-      int totalLabels = 0;
-      for (var item in items) {
-        totalLabels += item.jumlah;
+      // 3. Process Print Jobs per Printer
+      for (final entry in printJobs.entries) {
+        final labelPrinter = entry.key;
+        final printerItems = entry.value;
+
+        int totalLabels = 0;
+        for (var item in printerItems) {
+          totalLabels += item.jumlah;
+        }
+
+        List<int> allBytes = [];
+        int currentIndex = 1;
+        
+        for (var item in printerItems) {
+          final orderTypeStr = item.orderType.isNotEmpty
+              ? item.orderType
+              : (penjualan?.orderType ?? selectedOrderType.value);
+
+          final customerWithOrderType = '$customerName ($orderTypeStr)';
+
+          // Resolve order-level note
+          final resolvedOrderNote = (penjualan?.orderNote ?? orderNote.value).trim();
+
+          // Build ESC/POS bytes via SettingController helper
+          final bytes = await settingCtrl.buildLabelEscPos(
+            line1: dateTimeStr,
+            line2: customerWithOrderType,
+            line3: orderCode,
+            line4: normalizeUIName(item.description?.isNotEmpty == true
+                ? item.description!
+                : (item.productName ?? '')),
+            productNote: item.note,
+            orderNote: resolvedOrderNote,
+            isAutoCut: labelPrinter.isAutoCut,
+            copies: item.jumlah, // Use item quantity for copies
+            startIndex: currentIndex,
+            totalLabels: totalLabels,
+          );
+          allBytes.addAll(bytes);
+          currentIndex += item.jumlah;
+        }
+
+        // Delegate to SettingController for sequential BT connect→print→disconnect (once per order)
+        await settingCtrl.printToTarget(labelPrinter, prebuiltBytes: allBytes);
       }
-
-      int currentIndex = 1;
-      for (var item in items) {
-        final orderTypeStr = item.orderType.isNotEmpty
-            ? item.orderType
-            : (penjualan?.orderType ?? selectedOrderType.value);
-
-        final customerWithOrderType = '$customerName ($orderTypeStr)';
-
-        // Build ESC/POS bytes via SettingController helper
-        final bytes = await settingCtrl.buildLabelEscPos(
-          line1: dateTimeStr,
-          line2: customerWithOrderType,
-          line3: orderCode,
-          line4: normalizeUIName(item.description?.isNotEmpty == true
-              ? item.description!
-              : (item.productName ?? '')),
-          productNote: item.note,
-          isAutoCut: labelPrinter.isAutoCut,
-          copies: item.jumlah, // Use item quantity for copies
-          startIndex: currentIndex,
-          totalLabels: totalLabels,
-        );
-        allBytes.addAll(bytes);
-        currentIndex += item.jumlah;
-      }
-
-      // Delegate to SettingController for sequential BT connect→print→disconnect (once per order)
-      await settingCtrl.printToTarget(labelPrinter, prebuiltBytes: allBytes);
     } catch (e) {
       Get.snackbar('Print Label Error', 'Failed to print labels: $e');
     }
@@ -2105,16 +2178,18 @@ class HomeController extends GetxController {
   }) async {
     try {
       final settingCtrl = Get.find<SettingController>();
-      final cashierPrinter = settingCtrl.getPrinterForRole('cashier');
-      if (cashierPrinter == null) {
+      final cashierPrinters = settingCtrl.getPrintersForRole('cashier');
+      if (cashierPrinters.isEmpty) {
         Get.snackbar('No Cashier Printer',
             'Please configure a printer with the Cashier role in Settings.');
         return;
       }
 
       final profile = await CapabilityProfile.load();
+      
+      for (final cashierPrinter in cashierPrinters) {
       final isAutoCutPrinter = cashierPrinter.isAutoCut;
-      final paperSize = PaperSize.mm58;
+      final paperSize = cashierPrinter.paperSize == 80 ? PaperSize.mm80 : PaperSize.mm58;
 
       // Standardizing widths: 58mm -> 32 chars (Font A), 80mm -> 48 chars
       // We always format for 32 chars since the receipt design is meant for 58mm paper.
@@ -2243,8 +2318,7 @@ class HomeController extends GetxController {
         } catch (_) {}
       }
 
-      bytes += generator.text(
-          'Cashier   : $cashierName',
+      bytes += generator.text('Cashier   : $cashierName',
           styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text('Customer  : $customerName',
           styles: const PosStyles(align: PosAlign.left));
@@ -2266,15 +2340,21 @@ class HomeController extends GetxController {
       final itemsToPrint = details ?? penjualanDetailModelList;
       for (var item in itemsToPrint) {
         final int subtotal = item.subtotal;
-        
+
         final String rawDesc = item.description?.toString() ?? "";
         final String rawProd = item.productName?.toString() ?? "";
         final String rawNote = item.note?.toString() ?? "";
-        
-        String name = rawDesc.isNotEmpty ? rawDesc : (rawProd.isNotEmpty ? rawProd : rawNote);
+
+        String name = rawDesc.isNotEmpty
+            ? rawDesc
+            : (rawProd.isNotEmpty ? rawProd : rawNote);
         if (name.isEmpty) name = "Item";
 
-        String cleanName = name.replaceAll('_', ' ').replaceAll('|', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+        String cleanName = name
+            .replaceAll('_', ' ')
+            .replaceAll('|', ' ')
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
 
         int displaySubtotal = subtotal;
         int totalNominal = 0;
@@ -2294,14 +2374,16 @@ class HomeController extends GetxController {
           totalNominal = (nominalPerUnit * item.jumlah).toInt();
         }
 
-        final String itemPrice = formatRupiah(displaySubtotal).replaceAll('Rp. ', '');
+        final String itemPrice =
+            formatRupiah(displaySubtotal).replaceAll('Rp. ', '');
         final String prefix = '${item.jumlah.toInt()}x ';
 
         int maxWidth = 24 - prefix.length;
         List<String> wrappedLines = _wrapText(cleanName, maxWidth);
 
         if (wrappedLines.length == 1) {
-          bytes += generator.text(_formatRow('$prefix${wrappedLines[0]}', itemPrice, maxChars),
+          bytes += generator.text(
+              _formatRow('$prefix${wrappedLines[0]}', itemPrice, maxChars),
               styles: const PosStyles(align: PosAlign.left));
         } else {
           bytes += generator.text('$prefix${wrappedLines[0]}',
@@ -2309,7 +2391,8 @@ class HomeController extends GetxController {
           for (int i = 1; i < wrappedLines.length; i++) {
             String indent = ' ' * prefix.length;
             if (i == wrappedLines.length - 1) {
-              bytes += generator.text(_formatRow('$indent${wrappedLines[i]}', itemPrice, maxChars),
+              bytes += generator.text(
+                  _formatRow('$indent${wrappedLines[i]}', itemPrice, maxChars),
                   styles: const PosStyles(align: PosAlign.left));
             } else {
               bytes += generator.text('$indent${wrappedLines[i]}',
@@ -2324,8 +2407,7 @@ class HomeController extends GetxController {
                   '   disc',
                   '-${formatRupiah(totalNominal).replaceAll('Rp. ', '')}',
                   maxChars),
-              styles: const PosStyles(
-                  align: PosAlign.left, fontType: PosFontType.fontB));
+              styles: const PosStyles(align: PosAlign.left));
         }
       }
       bytes += generator.text(lineSeparator,
@@ -2392,15 +2474,14 @@ class HomeController extends GetxController {
       // 6. Points
       if (!isWalkIn) {
         final earnedPoints = (total / 10000).floor();
-        final prevPoints =
+        final currentPoints =
             int.tryParse(selectedMember.value?.points ?? '0') ?? 0;
-        final newTotal = prevPoints + earnedPoints;
         if (earnedPoints > 0) {
           bytes += generator.text(
               _formatCenter('Points Earned : +$earnedPoints pts', maxChars),
               styles: const PosStyles(align: PosAlign.left));
           bytes += generator.text(
-              _formatCenter('Current Points: $newTotal pts', maxChars),
+              _formatCenter('Current Points: $currentPoints pts', maxChars),
               styles: const PosStyles(align: PosAlign.left));
           bytes += generator.hr();
         }
@@ -2441,10 +2522,11 @@ class HomeController extends GetxController {
       }
 
       bytes += generator.feed(1);
-      bytes += generator.cut();
+      if (isAutoCutPrinter) bytes += generator.cut();
 
       // Delegate to SettingController for sequential BT connect→print→disconnect
       await settingCtrl.printToTarget(cashierPrinter, prebuiltBytes: bytes);
+      } // End of loop
     } catch (e) {
       ErrorLogService.log(
         category: 'printer',
@@ -2485,24 +2567,53 @@ class HomeController extends GetxController {
 
       // Printer mode: send ticket to registered kitchen thermal printer
       final settingCtrl = Get.find<SettingController>();
-      final kitchenPrinter = settingCtrl.getPrinterForRole('kitchen');
-      if (kitchenPrinter == null) {
+
+      final itemsToPrint = details ?? penjualanDetailModelList;
+      if (itemsToPrint.isEmpty) return;
+
+      // 1. Fetch Brands for items
+      List<String> idProduks =
+          itemsToPrint.map((e) => e.idProduk.toString()).toSet().toList();
+      String idProduksStr = idProduks.join(',');
+
+      Map<int, String> itemBrands = {};
+      try {
+        final dbService = Get.find<DatabaseService>();
+        final result = await dbService.rawQuery(
+            "SELECT p.id_produk, b.nama_brand FROM products p LEFT JOIN brands b ON p.id_brand = b.id_brand WHERE p.id_produk IN ($idProduksStr)");
+        for (var row in result) {
+          itemBrands[row['id_produk'] as int] = row['nama_brand']?.toString() ?? '';
+        }
+      } catch (e) {
+        debugPrint('printKitchenOrder error fetching brands: $e');
+      }
+
+      // 2. Group Items by PrinterDevice
+      Map<PrinterDevice, List<PenjualanDetailModel>> printJobs = {};
+
+      for (var item in itemsToPrint) {
+        String brand = itemBrands[item.idProduk] ?? '';
+        PrinterDevice? printer =
+            settingCtrl.getPrinterForRoleAndBrand('kitchen', brand);
+
+        if (printer != null) {
+          printJobs.putIfAbsent(printer, () => []).add(item);
+        } else {
+          debugPrint(
+              'No kitchen printer found for item ${item.productName} (brand: $brand).');
+        }
+      }
+
+      if (printJobs.isEmpty) {
         Get.snackbar('No Kitchen Printer',
             'Please configure a printer with the Kitchen role in Settings.');
         return;
       }
 
       final profile = await CapabilityProfile.load();
-      final isAutoCutPrinter = kitchenPrinter.isAutoCut;
-      final paperSize = PaperSize.mm58;
-      final generator = Generator(paperSize, profile);
-      List<int> bytes = [];
-
-      bytes += generator.reset();
 
       final String companyName =
           userService.getPrefString(Constants.posCompanyName);
-
       final orderCode = penjualan?.idPos != null
           ? (penjualan!.idPos!.length >= 6
               ? penjualan.idPos!
@@ -2532,83 +2643,95 @@ class HomeController extends GetxController {
               : 'Customer #${penjualan.idMember}')
           : (selectedMember.value?.nama ?? 'Walk In');
 
-      final int maxChars = 32;
-      final String lineSep = '-' * maxChars;
+      // 3. Generate Bytes and print for each printer
+      for (final entry in printJobs.entries) {
+        final printer = entry.key;
+        final printerItems = entry.value;
 
-      bytes += generator.text(_formatCenter('KITCHEN ORDER', maxChars),
-          styles: const PosStyles(
-              align: PosAlign.left, bold: true, height: PosTextSize.size2));
-      bytes += generator.text(lineSep,
-          styles: const PosStyles(align: PosAlign.left));
+        final isAutoCutPrinter = printer.isAutoCut;
+        final paperSize = printer.paperSize == 80 ? PaperSize.mm80 : PaperSize.mm58;
+        final int maxChars = printer.paperSize == 80 ? 48 : 32;
+        final String lineSep = '-' * maxChars;
 
-      bytes += generator.text(
-          _formatRow('$dateStr $timeStr', 'Q: $queueNoStr', maxChars),
-          styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text('Order Type: $orderTypeStr',
-          styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text('Receipt No: $orderCode',
-          styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text('Customer  : $customerName',
-          styles: const PosStyles(align: PosAlign.left));
+        final generator = Generator(paperSize, profile);
+        List<int> bytes = [];
 
-      final orderNoteStr = penjualan?.orderNote ?? orderNote.value;
-      if (orderNoteStr.isNotEmpty) {
-        bytes += generator.text('Note      : $orderNoteStr',
+        bytes += generator.reset();
+
+        bytes += generator.text(_formatCenter('KITCHEN ORDER', maxChars),
+            styles: const PosStyles(
+                align: PosAlign.left, bold: true, height: PosTextSize.size2));
+        bytes += generator.text(lineSep,
             styles: const PosStyles(align: PosAlign.left));
-      }
 
-      bytes += generator.text(lineSep,
-          styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text(
+            _formatRow('$dateStr $timeStr', 'Q: $queueNoStr', maxChars),
+            styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text('Order Type: $orderTypeStr',
+            styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text('Receipt No: $orderCode',
+            styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text('Customer  : $customerName',
+            styles: const PosStyles(align: PosAlign.left));
 
-      final itemsToPrint = details ?? penjualanDetailModelList;
-      for (var item in itemsToPrint) {
-        final String prefix = '${item.jumlah.toInt()}x ';
-        String rawName = item.description?.isNotEmpty == true
-            ? item.description!
-            : (item.productName ?? "Item");
-
-        if (rawName.contains('|')) {
-          int maxPart1 = 24 - prefix.length;
-          String part1 = rawName;
-          String part2 = "";
-          
-          if (rawName.length > maxPart1) {
-            part1 = rawName.substring(0, maxPart1);
-            part2 = rawName.substring(maxPart1).trimLeft();
-          }
-          
-          final String itemLabel1 = '$prefix$part1';
-          bytes += generator.text(itemLabel1, styles: const PosStyles(align: PosAlign.left));
-          
-          String indent = ' ' * prefix.length;
-          String indentedPart2 = '$indent$part2';
-          bytes += generator.text(_formatRow(indentedPart2, '[ ]', maxChars),
-              styles: const PosStyles(align: PosAlign.left));
-        } else {
-          final int maxNameLen = 24 - prefix.length;
-          String name = rawName;
-          if (name.length > maxNameLen) {
-            name = '${name.substring(0, maxNameLen - 3)}..';
-          }
-          final String itemLabel = '$prefix$name';
-          bytes += generator.text(_formatRow(itemLabel, '[ ]', maxChars),
+        final orderNoteStr = penjualan?.orderNote ?? orderNote.value;
+        if (orderNoteStr.isNotEmpty) {
+          bytes += generator.text('Note      : $orderNoteStr',
               styles: const PosStyles(align: PosAlign.left));
         }
 
-        if (item.note.isNotEmpty) {
-          bytes += generator.text('   * ${item.note}',
-              styles: const PosStyles(
-                  align: PosAlign.left, fontType: PosFontType.fontB));
+        bytes += generator.text(lineSep,
+            styles: const PosStyles(align: PosAlign.left));
+
+        for (var item in printerItems) {
+          final String prefix = '${item.jumlah.toInt()}x ';
+          String rawName = item.description?.isNotEmpty == true
+              ? item.description!
+              : (item.productName ?? "Item");
+
+          if (rawName.contains('|')) {
+            int maxPart1 = 24 - prefix.length;
+            String part1 = rawName;
+            String part2 = "";
+
+            if (rawName.length > maxPart1) {
+              part1 = rawName.substring(0, maxPart1);
+              part2 = rawName.substring(maxPart1).trimLeft();
+            }
+
+            final String itemLabel1 = '$prefix$part1';
+            bytes += generator.text(itemLabel1,
+                styles: const PosStyles(align: PosAlign.left));
+
+            String indent = ' ' * prefix.length;
+            String indentedPart2 = '$indent$part2';
+            bytes += generator.text(_formatRow(indentedPart2, '[ ]', maxChars),
+                styles: const PosStyles(align: PosAlign.left));
+          } else {
+            final int maxNameLen = 24 - prefix.length;
+            String name = rawName;
+            if (name.length > maxNameLen) {
+              name = '${name.substring(0, maxNameLen - 3)}..';
+            }
+            final String itemLabel = '$prefix$name';
+            bytes += generator.text(_formatRow(itemLabel, '[ ]', maxChars),
+                styles: const PosStyles(align: PosAlign.left));
+          }
+
+          if (item.note.isNotEmpty) {
+            bytes += generator.text('   * ${item.note}',
+                styles: const PosStyles(align: PosAlign.left));
+          }
         }
+
+        bytes += generator.text(lineSep,
+            styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.feed(3);
+        if (isAutoCutPrinter) bytes += generator.cut();
+
+        // Delegate to SettingController for sequential BT connect→print→disconnect
+        await settingCtrl.printToTarget(printer, prebuiltBytes: bytes);
       }
-
-      bytes += generator.text(lineSep,
-          styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.feed(3);
-      bytes += generator.cut();
-
-      // Delegate to SettingController for sequential BT connect→print→disconnect
-      await settingCtrl.printToTarget(kitchenPrinter, prebuiltBytes: bytes);
     } catch (e) {
       ErrorLogService.log(
         category: 'printer',
@@ -3393,6 +3516,9 @@ class HomeController extends GetxController {
       customerLabel.value = resolvedMember.nama ?? '';
       isAddingCustomer.value = false;
       clearCustomerForm();
+
+      // Close the customer dialog popup
+      Get.back();
 
       // Notify MemberController if it exists
       if (Get.isRegistered<MemberController>()) {

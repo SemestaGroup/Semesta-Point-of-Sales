@@ -43,7 +43,9 @@ class DashboardEmployeeController extends GetxController {
     try {
       final dbService = Get.find<DatabaseService>();
       final result = await dbService.rawQuery(
-        "SELECT COUNT(*) as count FROM transactions WHERE status IS NULL OR (status != 5 AND status != 2)"
+        "SELECT COUNT(*) as count FROM transactions WHERE (status IS NULL OR (status != 5 AND status != 2)) "
+        "AND substr(REPLACE(tgl_penjualan, 'T', ' '), 1, 7) = strftime('%Y-%m', 'now', 'localtime') "
+        "AND datetime(REPLACE(tgl_penjualan, 'T', ' ')) >= datetime('now', '-7 days', 'localtime')"
       );
       if (result.isNotEmpty) {
         activeOrderCount.value = result.first['count'] as int;

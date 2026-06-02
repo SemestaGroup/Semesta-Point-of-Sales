@@ -20,7 +20,8 @@ class ProductController extends GetxController {
   final userService = Get.put(UserService());
   RxString imageFile = ''.obs;
   final ImagePicker picker = ImagePicker();
-  TextEditingController namaProductController = TextEditingController();
+  final TextEditingController searchController = TextEditingController();
+  final TextEditingController namaProductController = TextEditingController();
   TextEditingController kategoriProductController = TextEditingController();
   TextEditingController merkProductController = TextEditingController();
   TextEditingController hrgBeliProductController = TextEditingController();

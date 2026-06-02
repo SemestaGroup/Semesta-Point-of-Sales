@@ -79,6 +79,30 @@ class RecapView extends StatelessWidget {
               SizedBox(width: 8.w),
               ElevatedButton.icon(
                 onPressed: () =>
+                    Get.find<RecapController>().confirmEndOfDay(context),
+                icon: Icon(Icons.storefront_rounded,
+                    size: 18.sp, color: Colors.white),
+                label: Text(
+                  "End of Day",
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontBold,
+                    fontSize: 14.sp,
+                    color: Colors.white,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple, 
+                  padding:
+                      EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10.r),
+                  ),
+                  elevation: 0,
+                ),
+              ),
+              SizedBox(width: 8.w),
+              ElevatedButton.icon(
+                onPressed: () =>
                     Get.find<RecapController>().confirmCloseShift(context),
                 icon: Icon(Icons.lock_outline_rounded,
                     size: 18.sp, color: Colors.white),

@@ -207,6 +207,7 @@ class _OrderScreenState extends State<OrderScreen> {
                           : Colors.grey.withValues(alpha: 0.1)),
                 ),
                 child: TextField(
+                  controller: controller.searchController,
                   onChanged: (value) => controller.getOrders(query: value),
                   style: TextStyle(fontSize: AppTheme.fontSizeLabelMedium),
                   decoration: InputDecoration(
@@ -217,6 +218,20 @@ class _OrderScreenState extends State<OrderScreen> {
                     prefixIcon: Icon(Icons.search_rounded,
                         size: AppTheme.fontSizeBodyLarge,
                         color: Colors.grey.shade400),
+                    suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: controller.searchController,
+                      builder: (context, value, child) {
+                        return value.text.isNotEmpty
+                            ? IconButton(
+                                icon: Icon(Icons.clear, size: 20.sp, color: Colors.grey),
+                                onPressed: () {
+                                  controller.searchController.clear();
+                                  controller.getOrders(query: '');
+                                },
+                              )
+                            : const SizedBox.shrink();
+                      },
+                    ),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(vertical: 12.h),
                   ),
