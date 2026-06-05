@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:semesta_pos/core/services/local/database_service.dart';
+import 'package:semesta_pos/core/services/sync_service.dart';
 import 'package:semesta_pos/styles/app_theme.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -83,6 +84,45 @@ class DatabaseInspectorController extends GetxController {
       }
     } catch(e) {
       Get.snackbar('Error', 'Gagal mengekspor database: $e');
+    }
+  }
+  Future<void> forceResync() async {
+    isLoading.value = true;
+    try {
+      final db = await _dbService.database;
+
+      // 1. Reset is_synced to 0
+      final tablesToReset = [
+        'transactions',
+        'pos_payments',
+        'members',
+        'shift_sessions',
+        'cash_flow'
+      ];
+      
+      for (var table in tablesToReset) {
+        await db.update(table, {'is_synced': 0});
+      }
+
+      // 2. Clear sync queue
+      await db.delete('sync_queue', where: "status IN ('failed', 'success')");
+      
+      // 3. Trigger SyncService
+      if (Get.isRegistered<SyncService>()) {
+        final syncService = Get.find<SyncService>();
+        await syncService.pushLocalMembers();
+        await syncService.pushLocalTransactions();
+        await syncService.pushLocalPayments();
+        await syncService.pushShiftLogs();
+        syncService.processQueue();
+      }
+
+      Get.snackbar('Success', 'Force resync triggered successfully');
+      fetchTableData(); // Refresh current table view
+    } catch (e) {
+      Get.snackbar('Error', 'Failed to trigger resync: $e');
+    } finally {
+      isLoading.value = false;
     }
   }
 }

@@ -133,9 +133,16 @@ class AuthController extends GetxController {
 
         await userService.initSharedPref();
 
+        String baseUrl = authData['base_url'];
+        if (authData['location']?.toString() == '1070') {
+          baseUrl = 'http://mengwieskrimku.flinkaja.com/';
+          authData['base_url'] = baseUrl;
+          debugPrint('AuthController: Applied Mengwi base_url override: $baseUrl');
+        }
+
         // Save the critical auth data to SharedPreferences for core service lookups
         await userService.saveAuthData(
-            authData['base_url'], Constants.staticAuthToken);
+            baseUrl, Constants.staticAuthToken);
         
         // PERSIST FULL SESSION TO SQLITE for offline profile and cashier name
         await userService.saveUserSession(authData);

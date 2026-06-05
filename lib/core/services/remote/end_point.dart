@@ -16,6 +16,7 @@ class EndPoint {
   static const posBrands = 'pos_brands';
   static const posItems = 'pos_items';
   static const posCustomers = 'pos_customers';
+  static const posShiftLogs = 'pos_shift_logs';
   static const posOrder = 'pos_order';
   static const posTransaction = 'pos_transaction';
   static const posOptions = 'pos_options';

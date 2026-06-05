@@ -387,6 +387,18 @@ class ShiftController extends GetxController {
       }
     } catch(_) {}
 
+    // 6. Voided Orders
+    int voidCount = 0;
+    int voidTotal = 0;
+    try {
+      final vRows = await _dbService.rawQuery('''
+        SELECT COUNT(*) as count, SUM(total_harga) as total FROM transactions
+        WHERE (REPLACE(substr(tgl_penjualan,1,19), 'T', ' ') >= ? OR REPLACE(substr(tgl_bayar,1,19), 'T', ' ') >= ?) AND status = 5
+      ''', [startTime, startTime]);
+      voidCount = (vRows.first['count'] as num?)?.toInt() ?? 0;
+      voidTotal = (vRows.first['total'] as num?)?.toInt() ?? 0;
+    } catch(_) {}
+
     return {
       'shift_name': activeShift.value!.shiftName,
       'staff': activeShift.value!.userId,
@@ -403,6 +415,10 @@ class ShiftController extends GetxController {
       'credit_notes': {
         'list': cnList,
         'total': cnTotal,
+      },
+      'voids': {
+        'count': voidCount,
+        'total': voidTotal,
       },
       'summary': {
         'expected_cash': activeShift.value!.startingBalance + (pms['cash'] ?? 0),
@@ -504,15 +520,80 @@ class ShiftController extends GetxController {
 
   Future<Map<String, dynamic>?> executeEndOfDay(int actualCash, String note) async {
     try {
-      // 1. Generate full End of Day Data before closing shift
-      final eodData = await generateEndOfDayData();
+      // 1. Generate full End of Day Data
+      final eodData = await generateEndOfDayData(actualCash: actualCash);
 
-      // 2. Close the shift normally
+      // 2. Close the active shift normally (if any)
       final closeResult = await closeShift(actualCash, note, isSwitchPerson: false);
-      if (closeResult == null) return null;
+      
+      final String userId = closeResult != null 
+          ? (closeResult['shift'] as ShiftSessionModel).userId 
+          : 'System';
 
+      // 3. Create 'End of Day' shift_sessions record
+      final now = DateTime.now();
+      final startOfDay = DateTime(now.year, now.month, now.day, 0, 0, 0);
+      
+      // Calculate total cash expected (only Cash income)
+      int expectedCash = 0;
+      final pms = eodData['payment_modes'] as List<dynamic>;
+      for (var pm in pms) {
+        final String name = (pm['name']?.toString() ?? '').toLowerCase();
+        final String id = pm['id']?.toString() ?? '';
+        if (id == '1' || id == '7' || name.contains('cash')) {
+          expectedCash += (pm['recorded'] as num?)?.toInt() ?? 0;
+        }
+      }
+      
+      final int totalDrawer = (eodData['total_actual_cash'] as num?)?.toInt() ?? 0;
+      final int totalOpening = (eodData['total_opening_balance'] as num?)?.toInt() ?? 0;
+      final int actualSalesCash = totalDrawer - totalOpening;
+      final int diff = actualSalesCash - expectedCash;
+      
+      // Map eodData to match the reconciliation_data schema used by history
+      final eodReconciliationData = {
+        'shift_name': 'End of Day',
+        'staff': (eodData['staff'] as List<String>).join(', '),
+        'payment_modes': eodData['payment_modes'],
+        'order_types': [], // EOD doesn't calculate this yet, can add later if needed
+        'products_sold': eodData['products'],
+        'discounts': eodData['discounts'],
+        'members': {
+          'additions': eodData['new_members']
+        },
+        'credit_notes': eodData['refunds'],
+        'voids': eodData['voids'],
+        'summary': {
+          'expected_cash': expectedCash,
+          'actual_cash': actualSalesCash,
+          'difference': diff,
+          'status': 2
+        },
+        'shifts_summary': eodData['shifts_summary'] // Add it here so we can view it in history if needed
+      };
+      
+      final eodShift = ShiftSessionModel(
+        // idShift is omitted to allow auto-increment
+        shiftName: 'End of Day',
+        userId: userId,
+        startTime: startOfDay,
+        endTime: now,
+        startingBalance: totalOpening, // Note: EOD's starting balance is the total of all starting balances
+        closingBalance: totalDrawer,
+        totalCashExpected: expectedCash,
+        totalCashActual: actualSalesCash,
+        totalNonCash: (eodData['today_income'] as int) - expectedCash,
+        status: 2, // Special status for End of Day
+        note: 'End of Day Auto-generated',
+        reconciliationData: jsonEncode([eodReconciliationData]),
+      );
+      
+      // Save EOD record to DB
+      await _dbService.insert('shift_sessions', eodShift.toJson());
+
+      // If closeResult was null, we still return a valid map to trigger the success UI and print
       return {
-        'closeResult': closeResult,
+        'closeResult': closeResult ?? {'shift': eodShift, 'rekap': {'cash': 0, 'nonCash': 0}},
         'eodData': eodData,
       };
     } catch (e) {
@@ -521,7 +602,7 @@ class ShiftController extends GetxController {
     }
   }
 
-  Future<Map<String, dynamic>> generateEndOfDayData() async {
+  Future<Map<String, dynamic>> generateEndOfDayData({int actualCash = 0}) async {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day, 0, 0, 0).toIso8601String().replaceAll('T', ' ').split('.')[0];
     final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59).toIso8601String().replaceAll('T', ' ').split('.')[0];
@@ -587,8 +668,8 @@ class ShiftController extends GetxController {
     final List<Map<String, dynamic>> expensesList = [];
     try {
       final cfRows = await _dbService.rawQuery('''
-        SELECT expense_name, amount, direction FROM pos_cash_flow
-        WHERE created_at BETWEEN ? AND ? AND direction = 'out'
+        SELECT expense_name, amount, direction FROM cash_flow
+        WHERE date BETWEEN ? AND ? AND direction = 'out'
       ''', [startOfDay, endOfDay]);
       for (var r in cfRows) {
         final amount = (r['amount'] as num?)?.toInt() ?? 0;
@@ -602,7 +683,7 @@ class ShiftController extends GetxController {
     int voidTotal = 0;
     try {
       final vRows = await _dbService.rawQuery('''
-        SELECT COUNT(*) as count, SUM(total) as sum FROM transactions
+        SELECT COUNT(*) as count, SUM(total_harga) as sum FROM transactions
         WHERE status = 5 AND REPLACE(substr(tgl_penjualan,1,19), 'T', ' ') BETWEEN ? AND ?
       ''', [startOfDay, endOfDay]);
       voidCount = (vRows.first['count'] as num?)?.toInt() ?? 0;
@@ -620,7 +701,14 @@ class ShiftController extends GetxController {
         GROUP BY d.id_produk, d.product_name ORDER BY SUM(d.subtotal) DESC LIMIT 15
       ''', [startOfDay, endOfDay, startOfDay, endOfDay]);
       for (var row in pRows) {
-        productsList.add({'name': row['product_name'], 'qty': (row['qty'] as num?)?.toInt() ?? 0, 'total': (row['total'] as num?)?.toInt() ?? 0});
+        final qty = (row['qty'] as num?)?.toInt() ?? 0;
+        final total = (row['total'] as num?)?.toInt() ?? 0;
+        productsList.add({
+          'name': row['product_name'], 
+          'qty': qty, 
+          'total': total,
+          'price': qty > 0 ? (total / qty).round() : 0,
+        });
       }
     } catch (_) {}
 
@@ -640,13 +728,22 @@ class ShiftController extends GetxController {
     } catch (_) {}
 
     // 7. Discounts
-    int totalDiscount = 0;
+    int totalTransactionDiscount = 0;
+    int totalProductDiscount = 0;
     try {
-      final dRows = await _dbService.rawQuery('''
+      final tDiscRows = await _dbService.rawQuery('''
         SELECT SUM(manual_discount_value) as t_disc FROM transactions
         WHERE (REPLACE(substr(tgl_penjualan,1,19), 'T', ' ') BETWEEN ? AND ?) AND status IN (2, 3)
       ''', [startOfDay, endOfDay]);
-      totalDiscount = (dRows.first['t_disc'] as num?)?.toInt() ?? 0;
+      totalTransactionDiscount = (tDiscRows.first['t_disc'] as num?)?.toInt() ?? 0;
+
+      final pDiscRows = await _dbService.rawQuery('''
+        SELECT SUM(d.discountTotal) as p_disc 
+        FROM transaction_details d
+        JOIN transactions t ON d.id_penjualan = t.id_penjualan
+        WHERE (REPLACE(substr(t.tgl_penjualan,1,19), 'T', ' ') BETWEEN ? AND ? OR REPLACE(substr(t.tgl_bayar,1,19), 'T', ' ') BETWEEN ? AND ?) AND t.status IN (2, 3)
+      ''', [startOfDay, endOfDay, startOfDay, endOfDay]);
+      totalProductDiscount = (pDiscRows.first['p_disc'] as num?)?.toInt() ?? 0;
     } catch (_) {}
 
     // 8. Staff / Shifts Today
@@ -664,6 +761,54 @@ class ShiftController extends GetxController {
       }
     } catch (_) {}
 
+    // 9. New Members
+    int newMembersCount = 0;
+    try {
+      final mRows = await _dbService.rawQuery('''
+        SELECT COUNT(*) as count FROM members
+        WHERE REPLACE(substr(datecreated,1,19), 'T', ' ') BETWEEN ? AND ?
+      ''', [startOfDay, endOfDay]);
+      newMembersCount = (mRows.first['count'] as num?)?.toInt() ?? 0;
+    } catch (_) {}
+
+    // 10. Shifts Summary (For Reconciliation)
+    final List<Map<String, dynamic>> shiftsSummary = [];
+    int totalActualCash = 0;
+    int totalOpeningBalance = 0;
+    try {
+      final shRows = await _dbService.rawQuery('''
+        SELECT id_shift, shift_name, starting_balance, total_cash_actual
+        FROM shift_sessions
+        WHERE REPLACE(substr(start_time,1,19), 'T', ' ') BETWEEN ? AND ?
+          AND shift_name != 'End of Day'
+      ''', [startOfDay, endOfDay]);
+      
+      for (var row in shRows) {
+        final ob = (row['starting_balance'] as num?)?.toInt() ?? 0;
+        final ac = (row['total_cash_actual'] as num?)?.toInt() ?? 0;
+        totalOpeningBalance += ob;
+        totalActualCash += ac;
+        shiftsSummary.add({
+          'id_shift': row['id_shift'],
+          'name': row['shift_name'] ?? 'Shift',
+          'opening_balance': ob,
+          'actual_cash': ac,
+        });
+      }
+      
+      // Add active shift if not already in shiftsSummary (check by id_shift instead of name to avoid collisions)
+      if (activeShift.value != null && !shiftsSummary.any((s) => s['id_shift'] == activeShift.value!.idShift)) {
+        shiftsSummary.add({
+          'id_shift': activeShift.value!.idShift,
+          'name': activeShift.value!.shiftName,
+          'opening_balance': activeShift.value!.startingBalance,
+          'actual_cash': actualCash, // True actual cash submitted by user
+        });
+        totalOpeningBalance += activeShift.value!.startingBalance;
+        totalActualCash += actualCash;
+      }
+    } catch (_) {}
+
     return {
       'date': now.toIso8601String(),
       'staff': staffList,
@@ -674,7 +819,14 @@ class ShiftController extends GetxController {
       'voids': { 'count': voidCount, 'total': voidTotal },
       'refunds': { 'total': refundTotal, 'list': refundList },
       'products': productsList,
-      'discounts': totalDiscount,
+      'discounts': {
+        'product': totalProductDiscount,
+        'transaction': totalTransactionDiscount,
+      },
+      'new_members': newMembersCount,
+      'shifts_summary': shiftsSummary,
+      'total_actual_cash': totalActualCash,
+      'total_opening_balance': totalOpeningBalance,
     };
   }
 
@@ -683,6 +835,7 @@ class ShiftController extends GetxController {
 
     final startTime = activeShift.value!.startTime
         .toIso8601String()
+        .replaceAll('T', ' ')
         .substring(0, 19);
 
     debugPrint('[ShiftController] calculateRecap: startTime=$startTime');
@@ -732,7 +885,9 @@ class ShiftController extends GetxController {
             ppMethod == '1' || // Standard Cash ID
             ppMethod == '7' || // Custom Cash ID
             localMethod.contains('cash') ||
-            localMethod.contains('tunai');
+            localMethod.contains('tunai') ||
+            localMethod == '1' ||
+            localMethod == '7';
 
         if (isCash) {
           cash += amount;
@@ -754,9 +909,9 @@ class ShiftController extends GetxController {
     if (activeShift.value != null) return activeShift.value!.shiftName;
 
     // To implement "looping sequential" logic: 1 -> 2 -> 3
-    // 1. Get the last closed shift from history
+    // 1. Get the last closed shift from history (order by start_time to ensure proper sequencing)
     final lastSessions = await _dbService.query('shift_sessions',
-        orderBy: 'id_shift DESC', limit: 1);
+        orderBy: 'start_time DESC', limit: 1);
 
     String lastShiftName = '';
     if (lastSessions.isNotEmpty) {

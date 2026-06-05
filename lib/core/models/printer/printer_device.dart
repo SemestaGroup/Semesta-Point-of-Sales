@@ -5,7 +5,8 @@ class PrinterDevice {
   final String address; // MAC for BT, IP for Network
   final int port; // Port for Network (default 9100)
   final List<String> roles; // 'cashier', 'kitchen', 'label'
-  final List<String> brands; // List of associated brands (for kitchen printers)
+  final List<String> brands; // Legacy fallback
+  final Map<String, List<String>> roleBrands; // Brands per role ('kitchen' -> ['A', 'B'])
   final bool isAutoCut; // true for large 80mm printers, false for standard 58mm
   final int paperSize; // 58 or 80
   final int fontSize; // 1 (normal), 2 (large), etc.
@@ -20,6 +21,7 @@ class PrinterDevice {
     this.port = 9100,
     this.roles = const [],
     this.brands = const [],
+    this.roleBrands = const {},
     this.isAutoCut = false,
     this.paperSize = 58,
     this.fontSize = 1,
@@ -36,6 +38,7 @@ class PrinterDevice {
       'port': port,
       'roles': roles,
       'brands': brands,
+      'roleBrands': roleBrands,
       'isAutoCut': isAutoCut,
       'paperSize': paperSize,
       'fontSize': fontSize,
@@ -61,6 +64,26 @@ class PrinterDevice {
       parsedRoles = [json['role'].toString()];
     }
 
+    Map<String, List<String>> parsedRoleBrands = {};
+    if (json['roleBrands'] != null) {
+      if (json['roleBrands'] is Map) {
+        (json['roleBrands'] as Map).forEach((key, value) {
+          if (value is List) {
+             parsedRoleBrands[key.toString()] = List<String>.from(value);
+          }
+        });
+      }
+    } else {
+      // Backwards compatibility migration
+      if (parsedRoles.isNotEmpty && parsedBrands.isNotEmpty) {
+        for (var role in parsedRoles) {
+          if (role == 'kitchen' || role == 'label') {
+            parsedRoleBrands[role] = List<String>.from(parsedBrands);
+          }
+        }
+      }
+    }
+
     return PrinterDevice(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -69,6 +92,7 @@ class PrinterDevice {
       port: json['port'] as int? ?? 9100,
       roles: parsedRoles,
       brands: parsedBrands,
+      roleBrands: parsedRoleBrands,
       isAutoCut: json['isAutoCut'] as bool? ?? false,
       paperSize: json['paperSize'] as int? ?? 58,
       fontSize: json['fontSize'] as int? ?? 1,
@@ -85,6 +109,7 @@ class PrinterDevice {
     int? port,
     List<String>? roles,
     List<String>? brands,
+    Map<String, List<String>>? roleBrands,
     bool? isAutoCut,
     int? paperSize,
     int? fontSize,
@@ -99,6 +124,7 @@ class PrinterDevice {
       port: port ?? this.port,
       roles: roles ?? this.roles,
       brands: brands ?? this.brands,
+      roleBrands: roleBrands ?? this.roleBrands,
       isAutoCut: isAutoCut ?? this.isAutoCut,
       paperSize: paperSize ?? this.paperSize,
       fontSize: fontSize ?? this.fontSize,

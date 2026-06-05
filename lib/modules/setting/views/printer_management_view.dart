@@ -328,6 +328,7 @@ class PrinterManagementView extends GetView<SettingController> {
   }
 
   void _showBrandsDialog(BuildContext context, PrinterDevice printerRef) {
+    controller.fetchAvailableBrands(); // Ensure fresh data before showing
     final printerId = printerRef.id;
     showDialog(
       context: context,
@@ -337,49 +338,96 @@ class PrinterManagementView extends GetView<SettingController> {
             final printer = controller.assignedPrinters.firstWhere((p) => p.id == printerId, orElse: () => printerRef);
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
-              title: Text('Printer Brands', style: TextStyle(fontSize: 16.sp, fontFamily: AppTheme.fontBold)),
+              title: Text('Printer Brands by Role', style: TextStyle(fontSize: 16.sp, fontFamily: AppTheme.fontBold)),
               content: SizedBox(
                 width: double.maxFinite,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Select which brands this printer will handle. If empty, it will print everything.',
-                      style: TextStyle(fontSize: 12.sp, color: AppTheme.secondaryTextColor(context)),
-                    ),
-                    SizedBox(height: 16.h),
-                    Wrap(
-                      spacing: 8.w,
-                      runSpacing: 8.h,
-                      children: controller.availableBrands.map((brand) {
-                        final isSelected = printer.brands.contains(brand);
-                        return FilterChip(
-                          label: Text(brand, style: TextStyle(fontSize: 11.sp)),
-                          selected: isSelected,
-                          onSelected: (val) {
-                            List<String> newBrands = List.from(printer.brands);
-                            if (val) {
-                              newBrands.add(brand);
-                            } else {
-                              newBrands.remove(brand);
-                            }
-                            final updated = printer.copyWith(brands: newBrands);
-                            _updatePrinter(printer, updated);
-                            setState(() {}); // update dialog
-                          },
-                          selectedColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-                          checkmarkColor: AppTheme.primaryColor,
-                          backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.02),
-                          side: BorderSide.none,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
-                          labelStyle: TextStyle(
-                            color: isSelected ? AppTheme.primaryColor : AppTheme.secondaryTextColor(context),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ],
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Select which brands this printer will handle per role. If empty, it will print everything for that role.',
+                        style: TextStyle(fontSize: 12.sp, color: AppTheme.secondaryTextColor(context)),
+                      ),
+                      SizedBox(height: 16.h),
+                      if (printer.roles.contains('kitchen')) ...[
+                        Text('Kitchen Brands', style: TextStyle(fontSize: 14.sp, fontFamily: AppTheme.fontMedium, color: AppTheme.textColor(context))),
+                        SizedBox(height: 8.h),
+                        Wrap(
+                          spacing: 8.w,
+                          runSpacing: 8.h,
+                          children: controller.availableBrands.map((brand) {
+                            final List<String> currentBrands = printer.roleBrands['kitchen'] ?? [];
+                            final isSelected = currentBrands.contains(brand);
+                            return FilterChip(
+                              label: Text(brand, style: TextStyle(fontSize: 11.sp)),
+                              selected: isSelected,
+                              onSelected: (val) {
+                                Map<String, List<String>> newRoleBrands = Map.from(printer.roleBrands);
+                                List<String> newBrands = List.from(currentBrands);
+                                if (val) {
+                                  newBrands.add(brand);
+                                } else {
+                                  newBrands.remove(brand);
+                                }
+                                newRoleBrands['kitchen'] = newBrands;
+                                final updated = printer.copyWith(roleBrands: newRoleBrands);
+                                _updatePrinter(printer, updated);
+                                setState(() {}); // update dialog
+                              },
+                              selectedColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                              checkmarkColor: AppTheme.primaryColor,
+                              backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.02),
+                              side: BorderSide.none,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+                              labelStyle: TextStyle(
+                                color: isSelected ? AppTheme.primaryColor : AppTheme.secondaryTextColor(context),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        SizedBox(height: 16.h),
+                      ],
+                      if (printer.roles.contains('label')) ...[
+                        Text('Label Brands', style: TextStyle(fontSize: 14.sp, fontFamily: AppTheme.fontMedium, color: AppTheme.textColor(context))),
+                        SizedBox(height: 8.h),
+                        Wrap(
+                          spacing: 8.w,
+                          runSpacing: 8.h,
+                          children: controller.availableBrands.map((brand) {
+                            final List<String> currentBrands = printer.roleBrands['label'] ?? [];
+                            final isSelected = currentBrands.contains(brand);
+                            return FilterChip(
+                              label: Text(brand, style: TextStyle(fontSize: 11.sp)),
+                              selected: isSelected,
+                              onSelected: (val) {
+                                Map<String, List<String>> newRoleBrands = Map.from(printer.roleBrands);
+                                List<String> newBrands = List.from(currentBrands);
+                                if (val) {
+                                  newBrands.add(brand);
+                                } else {
+                                  newBrands.remove(brand);
+                                }
+                                newRoleBrands['label'] = newBrands;
+                                final updated = printer.copyWith(roleBrands: newRoleBrands);
+                                _updatePrinter(printer, updated);
+                                setState(() {}); // update dialog
+                              },
+                              selectedColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                              checkmarkColor: AppTheme.primaryColor,
+                              backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.02),
+                              side: BorderSide.none,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+                              labelStyle: TextStyle(
+                                color: isSelected ? AppTheme.primaryColor : AppTheme.secondaryTextColor(context),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
               actions: [

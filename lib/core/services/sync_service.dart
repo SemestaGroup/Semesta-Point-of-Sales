@@ -113,6 +113,9 @@ class SyncService extends GetxService {
       // 7. Transaction (Payment history)
       syncStatus.value = "Fetching Transaction History...";
       await pullRemotePayments();
+      
+      // 7.5 Shift Logs
+      await pullShiftLogs();
       syncProgress.value = 0.95;
 
       // 8. Payment Modes
@@ -212,6 +215,7 @@ class SyncService extends GetxService {
       await pushLocalPayments();
       await pushShiftLogs();
       await pullRemoteOrders();
+      await pullShiftLogs();
       await syncStaff();
       await syncPromotions();
       await pullRemoteExpenses();
@@ -523,6 +527,54 @@ class SyncService extends GetxService {
         } catch (_) {}
       }
       syncStatus.value = "Orders Updated";
+    }
+  }
+
+  Future<void> pullShiftLogs() async {
+    syncStatus.value = "Pulling Shift Logs...";
+    debugPrint("SyncService: Pulling Remote Shift Logs...");
+    final response = await _apiService.getShiftLogs();
+
+    if (response.responsestate == Constants.successState && response.data != null) {
+      final List remoteLogs = response.data['data'] ?? [];
+      
+      for (var logJson in remoteLogs) {
+        final remoteId = int.tryParse(logJson['id']?.toString() ?? '0') ?? 0;
+        if (remoteId == 0) continue;
+
+        // Check if exists
+        final localCheck = await _dbService.query('shift_sessions',
+            where: 'id_remote = ?', whereArgs: [remoteId]);
+            
+        if (localCheck.isEmpty) {
+          // Parse summary
+          double expected = 0;
+          double actual = 0;
+          try {
+            final transactions = logJson['transactions'];
+            if (transactions != null && transactions is List && transactions.isNotEmpty) {
+               final summary = transactions[0]['summary'];
+               if (summary != null) {
+                  expected = double.tryParse(summary['expected_cash']?.toString() ?? summary['total_system_cash']?.toString() ?? '0') ?? 0;
+                  actual = double.tryParse(summary['actual_cash']?.toString() ?? summary['total_actual_cash']?.toString() ?? '0') ?? 0;
+               }
+            }
+          } catch (_) {}
+
+          await _dbService.insert('shift_sessions', {
+            'shift_name': logJson['shift']?.toString() ?? 'Shift',
+            'user_id': logJson['name']?.toString() ?? '',
+            'start_time': logJson['login_at']?.toString() ?? logJson['date']?.toString() ?? DateTime.now().toString(),
+            'end_time': logJson['logout_at']?.toString(),
+            'total_cash_expected': expected,
+            'total_cash_actual': actual,
+            'reconciliation_data': jsonEncode(logJson['transactions'] ?? []),
+            'is_synced': 1,
+            'id_remote': remoteId,
+          });
+        }
+      }
+      debugPrint("SyncService: Pulled ${remoteLogs.length} Remote Shift Logs.");
     }
   }
 
@@ -1422,6 +1474,37 @@ class SyncService extends GetxService {
       }
       await batch.commit(noResult: true);
       syncStatus.value = "Customers Updated";
+    }
+  }
+
+  Future<void> pushLocalMembers() async {
+    final unsynced = await _dbService.query('members', where: 'is_synced = ?', whereArgs: [0]);
+    for (var row in unsynced) {
+      final localId = row['id_member'];
+      
+      // Check if it's already in the queue
+      final existingQueue = await _dbService.query('sync_queue',
+          where: 'local_id = ? AND endpoint LIKE ?',
+          whereArgs: [localId.toString(), '%pos_customers%']);
+      if (existingQueue.isNotEmpty) continue; // Already explicitly queued
+      
+      // We always POST for forced resync since server data is gone for Mengwi
+      final map = {
+        'company': row['nama_member']?.toString() ?? '',
+        'phonenumber': row['telepon']?.toString() ?? '',
+        'id_pos': localId.toString(),
+      };
+      
+      if (row['alamat'] != null && row['alamat'].toString().isNotEmpty) {
+         map['address'] = row['alamat'].toString();
+      }
+
+      await enqueueCommand(
+        method: 'POST',
+        endpoint: '/api/pos_customers/',
+        body: map,
+        localId: localId.toString(),
+      );
     }
   }
 

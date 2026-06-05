@@ -114,11 +114,8 @@ class HomeAdminController extends GetxController {
       final recent = await _dbService.rawQuery('''
         SELECT t.*, m.nama as member_name,
                COALESCE(
-                 (SELECT paymentmethod FROM pos_payments 
-                  WHERE (id_pos = t.id_pos AND id_pos IS NOT NULL AND id_pos != '') 
-                     OR (invoiceid = t.remote_number AND invoiceid IS NOT NULL AND invoiceid != '') 
-                  LIMIT 1),
-                 t.payment_method, 'Cash'
+                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE (pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL AND pp.id_pos != '') OR (pp.invoiceid = t.remote_number AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '') LIMIT 1),
+                 NULLIF(t.payment_method, ''), 'Cash'
                ) as payment_method
         FROM transactions t 
         LEFT JOIN members m ON t.id_member = m.id_member
@@ -139,9 +136,9 @@ class HomeAdminController extends GetxController {
       // Deduplicate: one payment row per transaction, then group by method
       final todayBreakdown = await _dbService.rawQuery('''
         SELECT COALESCE(
-                 (SELECT paymentmethod FROM pos_payments WHERE id_pos = t.id_pos AND id_pos IS NOT NULL AND id_pos != '' LIMIT 1),
-                 (SELECT paymentmethod FROM pos_payments WHERE invoiceid = t.id_penjualan_remote AND invoiceid IS NOT NULL AND invoiceid != '' LIMIT 1),
-                 t.payment_method, 'Cash'
+                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL AND pp.id_pos != '' LIMIT 1),
+                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.invoiceid = t.id_penjualan_remote AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '' LIMIT 1),
+                 NULLIF(t.payment_method, ''), 'Cash'
                ) as method, 
                SUM(t.bayar) as total, 
                COUNT(*) as cnt
@@ -160,9 +157,9 @@ class HomeAdminController extends GetxController {
       // Same dedup for month
       final monthBreakdown = await _dbService.rawQuery('''
         SELECT COALESCE(
-                 (SELECT paymentmethod FROM pos_payments WHERE id_pos = t.id_pos AND id_pos IS NOT NULL AND id_pos != '' LIMIT 1),
-                 (SELECT paymentmethod FROM pos_payments WHERE invoiceid = t.id_penjualan_remote AND invoiceid IS NOT NULL AND invoiceid != '' LIMIT 1),
-                 t.payment_method, 'Cash'
+                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL AND pp.id_pos != '' LIMIT 1),
+                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.invoiceid = t.id_penjualan_remote AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '' LIMIT 1),
+                 NULLIF(t.payment_method, ''), 'Cash'
                ) as method, 
                SUM(t.bayar) as total, 
                COUNT(*) as cnt

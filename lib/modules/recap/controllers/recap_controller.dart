@@ -157,6 +157,10 @@ class RecapController extends GetxController {
         final String ppMethod = (r['pp_method']?.toString() ?? 'Cash').toLowerCase();
         
         PaymentModeModel? matched = paymentModes.firstWhereOrNull(
+          (m) => m.id == ppMethod,
+        );
+        
+        matched ??= paymentModes.firstWhereOrNull(
           (m) => m.name.toLowerCase() == ppMethod,
         );
         

@@ -189,9 +189,9 @@ class ReportController extends GetxController {
       String sql = '''
         SELECT t.*,
                COALESCE(
-                 (SELECT paymentmethod FROM pos_payments WHERE id_pos = t.id_pos AND id_pos IS NOT NULL AND id_pos != '' LIMIT 1),
-                 (SELECT paymentmethod FROM pos_payments WHERE invoiceid = t.id_penjualan_remote AND invoiceid IS NOT NULL AND invoiceid != '' LIMIT 1),
-                 t.payment_method, 'Cash'
+                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL AND pp.id_pos != '' LIMIT 1),
+                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.invoiceid = t.id_penjualan_remote AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '' LIMIT 1),
+                 NULLIF(t.payment_method, ''), 'Cash'
                ) as payment_method,
                (SELECT COUNT(*) FROM transaction_details td WHERE td.id_penjualan = t.id_penjualan AND td.is_refund = 1) as refund_count
         FROM transactions t
@@ -208,9 +208,9 @@ class ReportController extends GetxController {
       final filterMethod = selectedPaymentMethod.value;
       if (filterMethod.isNotEmpty && filterMethod != 'All') {
         sql += ''' AND LOWER(COALESCE(
-                 (SELECT paymentmethod FROM pos_payments WHERE id_pos = t.id_pos AND id_pos IS NOT NULL AND id_pos != '' LIMIT 1),
-                 (SELECT paymentmethod FROM pos_payments WHERE invoiceid = t.id_penjualan_remote AND invoiceid IS NOT NULL AND invoiceid != '' LIMIT 1),
-                 t.payment_method, 'Cash'
+                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL AND pp.id_pos != '' LIMIT 1),
+                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.invoiceid = t.id_penjualan_remote AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '' LIMIT 1),
+                 NULLIF(t.payment_method, ''), 'Cash'
                )) = LOWER(?)''';
         args.add(filterMethod);
       }
@@ -650,6 +650,8 @@ class ReportController extends GetxController {
       List<int> bytes = [];
 
       bytes += generator.reset();
+      // ESC M 0 = Select Font A (raw ESC/POS) - needed for MPT-II and similar 58mm printers
+      bytes += [0x1B, 0x4D, 0x00];
 
       // 1. Logo
       final logoUrl = userService.getPrefString('pos_brand_logo');

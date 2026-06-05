@@ -1531,6 +1531,38 @@ class ApiService extends GetxService {
     }
   }
 
+  Future<ResponseApiModel> getShiftLogs() async {
+    try {
+      final responseApi = await http.get(_getUri(EndPoint.posShiftLogs),
+          headers: _getAuthHeaders());
+      final dynamic responseJson = jsonDecode(responseApi.body);
+
+      if (responseApi.statusCode == 200) {
+        return ResponseApiModel(
+            responsestate: Constants.successState,
+            message: 'Success',
+            data: responseJson);
+      }
+      return ResponseApiModel(
+          responsestate: Constants.errorState,
+          message: 'Gagal memuat shift logs',
+          data: null);
+    } catch (e) {
+      debugPrint('getShiftLogs Error: $e');
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is HttpException ||
+          e is HandshakeException ||
+          e is http.ClientException) {
+        rethrow;
+      }
+      return const ResponseApiModel(
+          responsestate: Constants.serverErrState,
+          message: 'Server error',
+          data: null);
+    }
+  }
+
   Future<ResponseApiModel> getCreditNotes() async {
     final uri = _getUri(EndPoint.posCreditNotes);
     try {

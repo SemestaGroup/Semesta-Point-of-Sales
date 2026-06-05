@@ -18,6 +18,23 @@ class DatabaseInspectorScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            icon: const Icon(Icons.sync_problem),
+            tooltip: 'Force Resync All (Mengwi)',
+            onPressed: () {
+              Get.defaultDialog(
+                title: 'Force Resync',
+                middleText: 'Are you sure you want to force resync? This will reset all is_synced flags to 0 and push all local data to the server.',
+                textConfirm: 'Yes',
+                textCancel: 'No',
+                confirmTextColor: Colors.white,
+                onConfirm: () {
+                  Get.back();
+                  controller.forceResync();
+                },
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.save_alt),
             tooltip: 'Export Database (.sqlite)',
             onPressed: () => controller.exportDatabase(),

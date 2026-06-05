@@ -569,6 +569,34 @@ class RecapView extends StatelessWidget {
             final dateStr = DateFormat('dd MMM yyyy').format(startTime);
             final timeRange = "${DateFormat('HH:mm').format(startTime)} - ${endTime != null ? DateFormat('HH:mm').format(endTime) : 'Active'}";
 
+            // Compute System Cash from reconciliation_data if available (more accurate)
+            int systemCash = (shift['total_cash_expected'] as num?)?.toInt() ?? 0;
+            int actualCash = (shift['total_cash_actual'] as num?)?.toInt() ?? 0;
+
+            try {
+              final reconRaw = shift['reconciliation_data']?.toString() ?? '[]';
+              final reconList = jsonDecode(reconRaw) as List<dynamic>;
+              if (reconList.isNotEmpty) {
+                final reconData = reconList.first as Map<String, dynamic>;
+                final summary = reconData['summary'] as Map<String, dynamic>?;
+                if (summary != null) {
+                  if (summary['expected_cash'] != null) {
+                    systemCash = (summary['expected_cash'] as num).toInt();
+                  } else if (summary['total_system_cash'] != null) {
+                    systemCash = (summary['total_system_cash'] as num).toInt();
+                  }
+                  if (summary['actual_cash'] != null) {
+                    actualCash = (summary['actual_cash'] as num).toInt();
+                  } else if (summary['total_actual_cash'] != null) {
+                    actualCash = (summary['total_actual_cash'] as num).toInt();
+                  }
+                }
+              }
+            } catch (_) {}
+            
+            final difference = actualCash - systemCash;
+
+
             return InkWell(
               onTap: () => _showShiftDetailDialog(context, shift),
               borderRadius: BorderRadius.circular(16.r),
@@ -576,9 +604,9 @@ class RecapView extends StatelessWidget {
                 margin: EdgeInsets.only(bottom: 16.h),
                 padding: EdgeInsets.all(20.w),
                 decoration: BoxDecoration(
-                  color: AppTheme.cardColor(context),
+                  color: shift['shift_name'] == 'End of Day' ? Colors.purple.withValues(alpha: 0.05) : AppTheme.cardColor(context),
                   borderRadius: BorderRadius.circular(16.r),
-                  border: Border.all(color: AppTheme.borderColor(context)),
+                  border: Border.all(color: shift['shift_name'] == 'End of Day' ? Colors.purple.withValues(alpha: 0.3) : AppTheme.borderColor(context)),
                 ),
                 child: Column(
                   children: [
@@ -588,7 +616,15 @@ class RecapView extends StatelessWidget {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text("${shift['shift_name']} • ${shift['user_id'] ?? 'Kasir'}", style: AppTheme.titleLarge.copyWith(fontSize: 18.sp)),
+                            Row(
+                              children: [
+                                if (shift['shift_name'] == 'End of Day') ...[
+                                  Icon(Icons.auto_awesome, color: Colors.purple, size: 20.sp),
+                                  SizedBox(width: 8.w),
+                                ],
+                                Text("${shift['shift_name']} • ${shift['user_id'] ?? 'Kasir'}", style: AppTheme.titleLarge.copyWith(fontSize: 18.sp, color: shift['shift_name'] == 'End of Day' ? Colors.purple : null)),
+                              ],
+                            ),
                             Text("$dateStr | $timeRange", style: AppTheme.labelMedium),
                           ],
                         ),
@@ -637,9 +673,9 @@ class RecapView extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                          _buildHistoryStat("Opening", _formatRupiah(shift['starting_balance'] ?? 0)),
-                         _buildHistoryStat("System Cash", _formatRupiah(shift['total_cash_expected'] ?? 0)),
-                         _buildHistoryStat("Actual Cash", _formatRupiah(shift['total_cash_actual'] ?? 0)),
-                         _buildHistoryStat("Difference", _formatRupiah((shift['total_cash_actual'] ?? 0) - (shift['total_cash_expected'] ?? 0))),
+                         _buildHistoryStat("System Cash", _formatRupiah(systemCash)),
+                         _buildHistoryStat("Actual Cash", _formatRupiah(actualCash)),
+                         _buildHistoryStat("Difference", _formatRupiah(difference)),
                       ],
                     ),
                   ],

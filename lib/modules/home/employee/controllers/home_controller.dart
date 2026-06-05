@@ -1034,7 +1034,7 @@ class HomeController extends GetxController {
       var item = penjualanDetailModelList[i];
       final promoDiscount = _calculateBestPriceForCartItem(
           item.idProduk, item.hargaAwal, selectedOrderType.value);
-      
+
       penjualanDetailModelList[i] = item.copyWith(
         hargaJual: promoDiscount.finalPrice,
         discountTotal: promoDiscount.discountTotal,
@@ -1977,9 +1977,10 @@ class HomeController extends GetxController {
       {PenjualanModel? penjualan}) async {
     try {
       final settingCtrl = Get.find<SettingController>();
-      
+
       // 1. Fetch Brands for items
-      List<String> idProduks = items.map((e) => e.idProduk.toString()).toSet().toList();
+      List<String> idProduks =
+          items.map((e) => e.idProduk.toString()).toSet().toList();
       String idProduksStr = idProduks.join(',');
 
       Map<int, String> itemBrands = {};
@@ -1988,7 +1989,8 @@ class HomeController extends GetxController {
         final result = await dbService.rawQuery(
             "SELECT p.id_produk, b.nama_brand FROM products p LEFT JOIN brands b ON p.id_brand = b.id_brand WHERE p.id_produk IN ($idProduksStr)");
         for (var row in result) {
-          itemBrands[row['id_produk'] as int] = row['nama_brand']?.toString() ?? '';
+          itemBrands[row['id_produk'] as int] =
+              row['nama_brand']?.toString() ?? '';
         }
       } catch (e) {
         debugPrint('printLabels error fetching brands: $e');
@@ -1999,12 +2001,14 @@ class HomeController extends GetxController {
 
       for (var item in items) {
         String brand = itemBrands[item.idProduk] ?? '';
-        PrinterDevice? printer = settingCtrl.getPrinterForRoleAndBrand('label', brand);
+        PrinterDevice? printer =
+            settingCtrl.getPrinterForRoleAndBrand('label', brand);
 
         if (printer != null) {
           printJobs.putIfAbsent(printer, () => []).add(item);
         } else {
-          debugPrint('No label printer found for item ${item.productName} (brand: $brand).');
+          debugPrint(
+              'No label printer found for item ${item.productName} (brand: $brand).');
         }
       }
 
@@ -2044,7 +2048,7 @@ class HomeController extends GetxController {
 
         List<int> allBytes = [];
         int currentIndex = 1;
-        
+
         for (var item in printerItems) {
           final orderTypeStr = item.orderType.isNotEmpty
               ? item.orderType
@@ -2053,7 +2057,8 @@ class HomeController extends GetxController {
           final customerWithOrderType = '$customerName ($orderTypeStr)';
 
           // Resolve order-level note
-          final resolvedOrderNote = (penjualan?.orderNote ?? orderNote.value).trim();
+          final resolvedOrderNote =
+              (penjualan?.orderNote ?? orderNote.value).trim();
 
           // Build ESC/POS bytes via SettingController helper
           final bytes = await settingCtrl.buildLabelEscPos(
@@ -2186,346 +2191,349 @@ class HomeController extends GetxController {
       }
 
       final profile = await CapabilityProfile.load();
-      
+
       for (final cashierPrinter in cashierPrinters) {
-      final isAutoCutPrinter = cashierPrinter.isAutoCut;
-      final paperSize = cashierPrinter.paperSize == 80 ? PaperSize.mm80 : PaperSize.mm58;
+        final isAutoCutPrinter = cashierPrinter.isAutoCut;
+        final paperSize =
+            cashierPrinter.paperSize == 80 ? PaperSize.mm80 : PaperSize.mm58;
 
-      // Standardizing widths: 58mm -> 32 chars (Font A), 80mm -> 48 chars
-      // We always format for 32 chars since the receipt design is meant for 58mm paper.
-      final int maxChars = 32;
-      final String lineSeparator = '-' * maxChars;
+        // Standardizing widths: 58mm -> 32 chars (Font A), 80mm -> 48 chars
+        // We always format for 32 chars since the receipt design is meant for 58mm paper.
+        final int maxChars = 32;
+        final String lineSeparator = '-' * maxChars;
 
-      final generator = Generator(paperSize, profile);
-      List<int> bytes = [];
+        final generator = Generator(paperSize, profile);
+        List<int> bytes = [];
 
-      bytes += generator.reset();
+        bytes += generator.reset();
+        // ESC M 0 = Select Font A (raw ESC/POS) - needed for MPT-II and similar printers on 58mm
+        if (cashierPrinter.paperSize == 58) bytes += [0x1B, 0x4D, 0x00];
 
-      // 1. Logo
-      final logoUrl = userService.getPrefString('pos_brand_logo');
-      if (logoUrl.isNotEmpty) {
-        try {
-          final res = await http
-              .get(Uri.parse(logoUrl))
-              .timeout(const Duration(seconds: 4));
-          if (res.statusCode == 200) {
-            final decodedImage = img.decodeImage(res.bodyBytes);
-            if (decodedImage != null) {
-              final resized = img.copyResize(decodedImage, width: 250);
-              bytes += generator.image(resized);
+        // 1. Logo
+        final logoUrl = userService.getPrefString('pos_brand_logo');
+        if (logoUrl.isNotEmpty) {
+          try {
+            final res = await http
+                .get(Uri.parse(logoUrl))
+                .timeout(const Duration(seconds: 4));
+            if (res.statusCode == 200) {
+              final decodedImage = img.decodeImage(res.bodyBytes);
+              if (decodedImage != null) {
+                final resized = img.copyResize(decodedImage, width: 250);
+                bytes += generator.image(resized);
+              }
             }
+          } catch (_) {
+            debugPrint('Failed to download or print logo.');
           }
-        } catch (_) {
-          debugPrint('Failed to download or print logo.');
-        }
-      }
-
-      // 2. Header
-      String companyName = userService.getPrefString(Constants.posCompanyName);
-      if (companyName == 'Guest' || companyName.isEmpty) {
-        companyName = appService.appModel.value.namaPerusahaan;
-      }
-      if (companyName.isEmpty) {
-        companyName = 'FLINKPOS';
-      }
-      String address = userService.getPrefString(Constants.posAddress);
-      if (address == 'Guest') {
-        address = '';
-      }
-      String phone = userService.getPrefString(Constants.posPhoneNumber);
-      if (phone == 'Guest') {
-        phone = '';
-      }
-
-      bytes += generator.text(_formatCenter(companyName, maxChars),
-          styles: const PosStyles(
-              align: PosAlign.left, bold: true, height: PosTextSize.size2));
-      if (address.isNotEmpty) {
-        bytes += generator.text(_formatCenter(address, maxChars),
-            styles: const PosStyles(align: PosAlign.left));
-      }
-      if (phone.isNotEmpty) {
-        bytes += generator.text(_formatCenter(phone, maxChars),
-            styles: const PosStyles(align: PosAlign.left));
-      }
-      bytes += generator.text(_formatCenter('Closed Bill', maxChars),
-          styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text(lineSeparator,
-          styles: const PosStyles(align: PosAlign.left));
-
-      // 3. Order Info
-      final now = DateTime.now();
-      final dateStr =
-          '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
-      final timeStr =
-          '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-
-      final orderCode = penjualan?.idPos != null
-          ? (penjualan!.idPos!.length >= 6
-              ? penjualan.idPos!
-                  .substring(penjualan.idPos!.length - 6)
-                  .toUpperCase()
-              : penjualan.idPos!)
-          : (currentIdPos != null && currentIdPos!.length >= 6
-              ? currentIdPos!.substring(currentIdPos!.length - 6).toUpperCase()
-              : '---');
-
-      final orderTypeStr = penjualan?.orderType ?? selectedOrderType.value;
-      final isWalkIn = penjualan != null
-          ? (penjualan.idMember == 0 || penjualan.idMember == 1)
-          : (selectedMember.value == null ||
-              selectedMember.value!.idMember == 1);
-
-      String customerName = 'Walk In Customer';
-      if (penjualan != null) {
-        // If printing from DB, we might not have the name directly unless we query it.
-        // For now, if provided in controller state use it, else generic.
-        customerName = (selectedMember.value != null &&
-                selectedMember.value!.idMember == penjualan.idMember)
-            ? (selectedMember.value!.nama ?? 'Customer')
-            : 'Customer #${penjualan.idMember}';
-      } else {
-        customerName = isWalkIn
-            ? 'Walk In Customer'
-            : (selectedMember.value!.nama ?? 'Customer');
-      }
-
-      final queueNoStr =
-          (penjualan?.queueNumber ?? appService.queueNumber.value)
-              .toString()
-              .padLeft(3, '0');
-
-      bytes += generator.text(
-          _formatRow('$dateStr $timeStr', 'Q: $queueNoStr', maxChars),
-          styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text('Order Type: $orderTypeStr',
-          styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text('Receipt No: $orderCode',
-          styles: const PosStyles(align: PosAlign.left));
-      String cashierName = userService.getPrefString(Constants.userName);
-      if (penjualan != null && penjualan.idUser > 0) {
-        try {
-          final _dbService = Get.find<DatabaseService>();
-          final rows = await _dbService.rawQuery(
-              'SELECT firstname, lastname FROM staff WHERE id = ?',
-              [penjualan.idUser]);
-          if (rows.isNotEmpty) {
-            final fName = rows.first['firstname']?.toString() ?? '';
-            final lName = rows.first['lastname']?.toString() ?? '';
-            final full = '$fName $lName'.trim();
-            if (full.isNotEmpty) cashierName = full;
-          }
-        } catch (_) {}
-      }
-
-      bytes += generator.text('Cashier   : $cashierName',
-          styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text('Customer  : $customerName',
-          styles: const PosStyles(align: PosAlign.left));
-
-      final orderNoteStr = (penjualan?.orderNote ?? orderNote.value)
-          .replaceAll('<br />', ' ')
-          .replaceAll('<br>', ' ')
-          .replaceAll('&amp;', '&')
-          .replaceAll('&lt;', '<')
-          .replaceAll('&gt;', '>');
-      if (orderNoteStr.isNotEmpty) {
-        bytes += generator.text('Note      : $orderNoteStr',
-            styles: const PosStyles(align: PosAlign.left));
-      }
-      bytes += generator.text(lineSeparator,
-          styles: const PosStyles(align: PosAlign.left));
-
-      // 4. Items
-      final itemsToPrint = details ?? penjualanDetailModelList;
-      for (var item in itemsToPrint) {
-        final int subtotal = item.subtotal;
-
-        final String rawDesc = item.description?.toString() ?? "";
-        final String rawProd = item.productName?.toString() ?? "";
-        final String rawNote = item.note?.toString() ?? "";
-
-        String name = rawDesc.isNotEmpty
-            ? rawDesc
-            : (rawProd.isNotEmpty ? rawProd : rawNote);
-        if (name.isEmpty) name = "Item";
-
-        String cleanName = name
-            .replaceAll('_', ' ')
-            .replaceAll('|', ' ')
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .trim();
-
-        int displaySubtotal = subtotal;
-        int totalNominal = 0;
-
-        if (item.discountTotal > 0) {
-          final base = item.hargaAwal > 0 ? item.hargaAwal : item.hargaJual;
-          displaySubtotal = (base * item.jumlah).toInt();
-
-          int nominalPerUnit = 0;
-          if (item.discountType == 'percent') {
-            nominalPerUnit = (base * item.discountTotal / 100).round();
-          } else if (item.discountType == 'final_price') {
-            nominalPerUnit = base - item.discountTotal;
-          } else {
-            nominalPerUnit = item.discountTotal;
-          }
-          totalNominal = (nominalPerUnit * item.jumlah).toInt();
         }
 
-        final String itemPrice =
-            formatRupiah(displaySubtotal).replaceAll('Rp. ', '');
-        final String prefix = '${item.jumlah.toInt()}x ';
+        // 2. Header
+        String companyName =
+            userService.getPrefString(Constants.posCompanyName);
+        if (companyName == 'Guest' || companyName.isEmpty) {
+          companyName = appService.appModel.value.namaPerusahaan;
+        }
+        if (companyName.isEmpty) {
+          companyName = 'FLINKPOS';
+        }
+        String address = userService.getPrefString(Constants.posAddress);
+        if (address == 'Guest') {
+          address = '';
+        }
+        String phone = userService.getPrefString(Constants.posPhoneNumber);
+        if (phone == 'Guest') {
+          phone = '';
+        }
 
-        int maxWidth = 24 - prefix.length;
-        List<String> wrappedLines = _wrapText(cleanName, maxWidth);
-
-        if (wrappedLines.length == 1) {
-          bytes += generator.text(
-              _formatRow('$prefix${wrappedLines[0]}', itemPrice, maxChars),
+        bytes += generator.text(_formatCenter(companyName, maxChars),
+            styles: const PosStyles(
+                align: PosAlign.left, bold: true, height: PosTextSize.size2));
+        if (address.isNotEmpty) {
+          bytes += generator.text(_formatCenter(address, maxChars),
               styles: const PosStyles(align: PosAlign.left));
+        }
+        if (phone.isNotEmpty) {
+          bytes += generator.text(_formatCenter(phone, maxChars),
+              styles: const PosStyles(align: PosAlign.left));
+        }
+        bytes += generator.text(_formatCenter('Closed Bill', maxChars),
+            styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text(lineSeparator,
+            styles: const PosStyles(align: PosAlign.left));
+
+        // 3. Order Info
+        final now = DateTime.now();
+        final dateStr =
+            '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
+        final timeStr =
+            '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+        final orderCode = penjualan?.idPos != null
+            ? (penjualan!.idPos!.length >= 6
+                ? penjualan.idPos!
+                    .substring(penjualan.idPos!.length - 6)
+                    .toUpperCase()
+                : penjualan.idPos!)
+            : (currentIdPos != null && currentIdPos!.length >= 6
+                ? currentIdPos!
+                    .substring(currentIdPos!.length - 6)
+                    .toUpperCase()
+                : '---');
+
+        final orderTypeStr = penjualan?.orderType ?? selectedOrderType.value;
+        final isWalkIn = penjualan != null
+            ? (penjualan.idMember == 0 || penjualan.idMember == 1)
+            : (selectedMember.value == null ||
+                selectedMember.value!.idMember == 1);
+
+        String customerName = 'Walk In Customer';
+        if (penjualan != null) {
+          // If printing from DB, we might not have the name directly unless we query it.
+          // For now, if provided in controller state use it, else generic.
+          customerName = (selectedMember.value != null &&
+                  selectedMember.value!.idMember == penjualan.idMember)
+              ? (selectedMember.value!.nama ?? 'Customer')
+              : 'Customer #${penjualan.idMember}';
         } else {
-          bytes += generator.text('$prefix${wrappedLines[0]}',
-              styles: const PosStyles(align: PosAlign.left));
-          for (int i = 1; i < wrappedLines.length; i++) {
-            String indent = ' ' * prefix.length;
-            if (i == wrappedLines.length - 1) {
-              bytes += generator.text(
-                  _formatRow('$indent${wrappedLines[i]}', itemPrice, maxChars),
-                  styles: const PosStyles(align: PosAlign.left));
-            } else {
-              bytes += generator.text('$indent${wrappedLines[i]}',
-                  styles: const PosStyles(align: PosAlign.left));
+          customerName = isWalkIn
+              ? 'Walk In Customer'
+              : (selectedMember.value!.nama ?? 'Customer');
+        }
+
+        final queueNoStr = (penjualan?.queueNumber ?? appService.queueNumber.value).toString().padLeft(3, '0');
+
+        bytes += generator.text(_formatRow('$dateStr $timeStr', 'Q: $queueNoStr', maxChars), styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text('Order Type: $orderTypeStr', styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text('Receipt No: $orderCode', styles: const PosStyles(align: PosAlign.left));
+        String cashierName = userService.getPrefString(Constants.userName);
+        if (penjualan != null && penjualan.idUser > 0) {
+          try {
+            final _dbService = Get.find<DatabaseService>();
+            final rows = await _dbService.rawQuery(
+                'SELECT firstname, lastname FROM staff WHERE id = ?',
+                [penjualan.idUser]);
+            if (rows.isNotEmpty) {
+              final fName = rows.first['firstname']?.toString() ?? '';
+              final lName = rows.first['lastname']?.toString() ?? '';
+              final full = '$fName $lName'.trim();
+              if (full.isNotEmpty) cashierName = full;
             }
+          } catch (_) {}
+        }
+
+        bytes += generator.text('Cashier   : $cashierName',
+            styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text('Customer  : $customerName',
+            styles: const PosStyles(align: PosAlign.left));
+
+        final orderNoteStr = (penjualan?.orderNote ?? orderNote.value)
+            .replaceAll('<br />', ' ')
+            .replaceAll('<br>', ' ')
+            .replaceAll('&amp;', '&')
+            .replaceAll('&lt;', '<')
+            .replaceAll('&gt;', '>');
+        if (orderNoteStr.isNotEmpty) {
+          bytes += generator.text('Note      : $orderNoteStr',
+              styles: const PosStyles(align: PosAlign.left));
+        }
+        bytes += generator.text(lineSeparator,
+            styles: const PosStyles(align: PosAlign.left));
+
+        // 4. Items
+        final itemsToPrint = details ?? penjualanDetailModelList;
+        for (var item in itemsToPrint) {
+          final int subtotal = item.subtotal;
+
+          final String rawDesc = item.description?.toString() ?? "";
+          final String rawProd = item.productName?.toString() ?? "";
+          final String rawNote = item.note?.toString() ?? "";
+
+          String name = rawDesc.isNotEmpty
+              ? rawDesc
+              : (rawProd.isNotEmpty ? rawProd : rawNote);
+          if (name.isEmpty) name = "Item";
+
+          String cleanName = name
+              .replaceAll('_', ' ')
+              .replaceAll('|', ' ')
+              .replaceAll(RegExp(r'\s+'), ' ')
+              .trim();
+
+          int displaySubtotal = subtotal;
+          int totalNominal = 0;
+
+          if (item.discountTotal > 0) {
+            final base = item.hargaAwal > 0 ? item.hargaAwal : item.hargaJual;
+            displaySubtotal = (base * item.jumlah).toInt();
+
+            int nominalPerUnit = 0;
+            if (item.discountType == 'percent') {
+              nominalPerUnit = (base * item.discountTotal / 100).round();
+            } else if (item.discountType == 'final_price') {
+              nominalPerUnit = base - item.discountTotal;
+            } else {
+              nominalPerUnit = item.discountTotal;
+            }
+            totalNominal = (nominalPerUnit * item.jumlah).toInt();
+          }
+
+          final String itemPrice =
+              formatRupiah(displaySubtotal).replaceAll('Rp. ', '');
+          final String prefix = '${item.jumlah.toInt()}x ';
+
+          int maxWidth = 24 - prefix.length;
+          List<String> wrappedLines = _wrapText(cleanName, maxWidth);
+
+          if (wrappedLines.length == 1) {
+            bytes += generator.text(
+                _formatRow('$prefix${wrappedLines[0]}', itemPrice, maxChars),
+                styles: const PosStyles(align: PosAlign.left));
+          } else {
+            bytes += generator.text('$prefix${wrappedLines[0]}',
+                styles: const PosStyles(align: PosAlign.left));
+            for (int i = 1; i < wrappedLines.length; i++) {
+              String indent = ' ' * prefix.length;
+              if (i == wrappedLines.length - 1) {
+                bytes += generator.text(
+                    _formatRow(
+                        '$indent${wrappedLines[i]}', itemPrice, maxChars),
+                    styles: const PosStyles(align: PosAlign.left));
+              } else {
+                bytes += generator.text('$indent${wrappedLines[i]}',
+                    styles: const PosStyles(align: PosAlign.left));
+              }
+            }
+          }
+
+          if (totalNominal > 0) {
+            bytes += generator.text(
+                _formatRow(
+                    '   disc',
+                    '-${formatRupiah(totalNominal).replaceAll('Rp. ', '')}',
+                    maxChars),
+                styles: const PosStyles(align: PosAlign.left));
+          }
+        }
+        bytes += generator.text(lineSeparator,
+            styles: const PosStyles(align: PosAlign.left));
+
+        // 5. Totals
+        final subtotalToPrint =
+            details?.fold(0, (sum, item) => sum + item.subtotal) ??
+                subtotalRaw.value;
+
+        // Calculate order-level discount
+        int discountToPrint = 0;
+        if (penjualan != null) {
+          if (penjualan.manualDiscountValue > 0) {
+            discountToPrint = penjualan.discountType == 'percent'
+                ? (subtotalToPrint * penjualan.manualDiscountValue / 100)
+                    .round()
+                : penjualan.manualDiscountValue;
+          } else if (penjualan.diskon > 0) {
+            discountToPrint =
+                (subtotalToPrint * penjualan.diskon / 100).round();
+          }
+        } else {
+          if (manualDiscountValue.value > 0) {
+            discountToPrint = manualDiscountIsPercent.value
+                ? (subtotalToPrint * manualDiscountValue.value / 100).round()
+                : manualDiscountValue.value;
+          } else if (disscount.value > 0) {
+            discountToPrint = (subtotalToPrint * disscount.value / 100).round();
           }
         }
 
-        if (totalNominal > 0) {
-          bytes += generator.text(
-              _formatRow(
-                  '   disc',
-                  '-${formatRupiah(totalNominal).replaceAll('Rp. ', '')}',
-                  maxChars),
+        final String fSub =
+            formatRupiah(subtotalToPrint).replaceAll('Rp. ', '');
+        bytes += generator.text(_formatRow('Subtotal', fSub, maxChars),
+            styles: const PosStyles(align: PosAlign.left));
+
+        if (discountToPrint > 0) {
+          final String fDisc =
+              formatRupiah(discountToPrint).replaceAll('Rp. ', '');
+          bytes += generator.text(_formatRow('Discount', '-$fDisc', maxChars),
               styles: const PosStyles(align: PosAlign.left));
         }
-      }
-      bytes += generator.text(lineSeparator,
-          styles: const PosStyles(align: PosAlign.left));
 
-      // 5. Totals
-      final subtotalToPrint =
-          details?.fold(0, (sum, item) => sum + item.subtotal) ??
-              subtotalRaw.value;
+        final fTotal = formatRupiah(total).replaceAll('Rp. ', '');
+        bytes += generator.text(_formatRow('Total', fTotal, maxChars),
+            styles: const PosStyles(align: PosAlign.left, bold: true));
 
-      // Calculate order-level discount
-      int discountToPrint = 0;
-      if (penjualan != null) {
-        if (penjualan.manualDiscountValue > 0) {
-          discountToPrint = penjualan.discountType == 'percent'
-              ? (subtotalToPrint * penjualan.manualDiscountValue / 100).round()
-              : penjualan.manualDiscountValue;
-        } else if (penjualan.diskon > 0) {
-          discountToPrint = (subtotalToPrint * penjualan.diskon / 100).round();
-        }
-      } else {
-        if (manualDiscountValue.value > 0) {
-          discountToPrint = manualDiscountIsPercent.value
-              ? (subtotalToPrint * manualDiscountValue.value / 100).round()
-              : manualDiscountValue.value;
-        } else if (disscount.value > 0) {
-          discountToPrint = (subtotalToPrint * disscount.value / 100).round();
-        }
-      }
-
-      final String fSub = formatRupiah(subtotalToPrint).replaceAll('Rp. ', '');
-      bytes += generator.text(_formatRow('Subtotal', fSub, maxChars),
-          styles: const PosStyles(align: PosAlign.left));
-
-      if (discountToPrint > 0) {
-        final String fDisc =
-            formatRupiah(discountToPrint).replaceAll('Rp. ', '');
-        bytes += generator.text(_formatRow('Discount', '-$fDisc', maxChars),
+        final fDiterima = formatRupiah(diterima).replaceAll('Rp. ', '');
+        bytes += generator.text(_formatRow('Cash', fDiterima, maxChars),
             styles: const PosStyles(align: PosAlign.left));
-      }
 
-      final fTotal = formatRupiah(total).replaceAll('Rp. ', '');
-      bytes += generator.text(_formatRow('Total', fTotal, maxChars),
-          styles: const PosStyles(align: PosAlign.left, bold: true));
+        final fKembalian = formatRupiah(kembalian).replaceAll('Rp. ', '');
+        bytes += generator.text(
+            _formatRow('Change', kembalian > 0 ? fKembalian : '0', maxChars),
+            styles: const PosStyles(align: PosAlign.left));
 
-      final fDiterima = formatRupiah(diterima).replaceAll('Rp. ', '');
-      bytes += generator.text(_formatRow('Cash', fDiterima, maxChars),
-          styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text(lineSeparator,
+            styles: const PosStyles(align: PosAlign.left));
 
-      final fKembalian = formatRupiah(kembalian).replaceAll('Rp. ', '');
-      bytes += generator.text(
-          _formatRow('Change', kembalian > 0 ? fKembalian : '0', maxChars),
-          styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text(_formatRow('PAID', fTotal, maxChars),
+            styles: const PosStyles(align: PosAlign.left, bold: true));
 
-      bytes += generator.text(lineSeparator,
-          styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text(lineSeparator,
+            styles: const PosStyles(align: PosAlign.left));
 
-      bytes += generator.text(_formatRow('PAID', fTotal, maxChars),
-          styles: const PosStyles(align: PosAlign.left, bold: true));
+        // 6. Points
+        if (!isWalkIn) {
+          final earnedPoints = (total / 10000).floor();
+          final currentPoints =
+              int.tryParse(selectedMember.value?.points ?? '0') ?? 0;
+          if (earnedPoints > 0) {
+            bytes += generator.text(
+                _formatCenter('Points Earned : +$earnedPoints pts', maxChars),
+                styles: const PosStyles(align: PosAlign.left));
+            bytes += generator.text(
+                _formatCenter('Current Points: $currentPoints pts', maxChars),
+                styles: const PosStyles(align: PosAlign.left));
+            bytes += generator.hr();
+          }
+        }
 
-      bytes += generator.text(lineSeparator,
-          styles: const PosStyles(align: PosAlign.left));
-
-      // 6. Points
-      if (!isWalkIn) {
-        final earnedPoints = (total / 10000).floor();
-        final currentPoints =
-            int.tryParse(selectedMember.value?.points ?? '0') ?? 0;
-        if (earnedPoints > 0) {
-          bytes += generator.text(
-              _formatCenter('Points Earned : +$earnedPoints pts', maxChars),
+        // 7. Footer
+        final footerLine1 = userService.getPrefString('pos_receipt_footer_1');
+        if (footerLine1.isNotEmpty && footerLine1 != 'Guest') {
+          bytes += generator.text(_formatCenter(footerLine1, maxChars),
               styles: const PosStyles(align: PosAlign.left));
-          bytes += generator.text(
-              _formatCenter('Current Points: $currentPoints pts', maxChars),
-              styles: const PosStyles(align: PosAlign.left));
-          bytes += generator.hr();
         }
-      }
+        if (phone.isNotEmpty) {
+          bytes += generator.text(_formatCenter('HP : $phone', maxChars),
+              styles: const PosStyles(align: PosAlign.left));
+        }
+        final igAccount = userService.getPrefString('pos_ig_account');
+        if (igAccount.isNotEmpty && igAccount != 'Guest') {
+          bytes += generator.text(_formatCenter('IG : $igAccount', maxChars),
+              styles: const PosStyles(align: PosAlign.left));
+        }
 
-      // 7. Footer
-      final footerLine1 = userService.getPrefString('pos_receipt_footer_1');
-      if (footerLine1.isNotEmpty && footerLine1 != 'Guest') {
-        bytes += generator.text(_formatCenter(footerLine1, maxChars),
-            styles: const PosStyles(align: PosAlign.left));
-      }
-      if (phone.isNotEmpty) {
-        bytes += generator.text(_formatCenter('HP : $phone', maxChars),
-            styles: const PosStyles(align: PosAlign.left));
-      }
-      final igAccount = userService.getPrefString('pos_ig_account');
-      if (igAccount.isNotEmpty && igAccount != 'Guest') {
-        bytes += generator.text(_formatCenter('IG : $igAccount', maxChars),
-            styles: const PosStyles(align: PosAlign.left));
-      }
+        // 8. Feedback QR
+        bytes += generator.text(_formatCenter('KRITIK & SARAN', maxChars),
+            styles: const PosStyles(align: PosAlign.left, bold: true));
+        final encodedTenant = Uri.encodeComponent(companyName);
+        final waUrl =
+            "https://api.whatsapp.com/send?phone=6281387401166&text=Halo%20kak%2C%20saya%20ingin%20menyampaikan%20kritik%20dan%20saran%20untuk%20$encodedTenant";
 
-      // 8. Feedback QR
-      bytes += generator.text(_formatCenter('KRITIK & SARAN', maxChars),
-          styles: const PosStyles(align: PosAlign.left, bold: true));
-      final encodedTenant = Uri.encodeComponent(companyName);
-      final waUrl =
-          "https://api.whatsapp.com/send?phone=6281387401166&text=Halo%20kak%2C%20saya%20ingin%20menyampaikan%20kritik%20dan%20saran%20untuk%20$encodedTenant";
+        if (isAutoCutPrinter) {
+          // Geser margin kiri (Left Margin) sebanyak 96 dots
+          // (384 dots 58mm - 192 dots QR code) / 2 = 96 dots.
+          bytes += [29, 76, 96, 0]; // GS L 96 0
+          bytes += generator.qrcode(waUrl, align: PosAlign.left);
+          bytes += [29, 76, 0, 0]; // Reset margin kiri
+        } else {
+          // Untuk printer kecil asli (58mm), tidak usah digeser, langsung align center
+          bytes += generator.qrcode(waUrl, align: PosAlign.center);
+        }
 
-      if (isAutoCutPrinter) {
-        // Geser margin kiri (Left Margin) sebanyak 96 dots
-        // (384 dots 58mm - 192 dots QR code) / 2 = 96 dots.
-        bytes += [29, 76, 96, 0]; // GS L 96 0
-        bytes += generator.qrcode(waUrl, align: PosAlign.left);
-        bytes += [29, 76, 0, 0]; // Reset margin kiri
-      } else {
-        // Untuk printer kecil asli (58mm), tidak usah digeser, langsung align center
-        bytes += generator.qrcode(waUrl, align: PosAlign.center);
-      }
+        bytes += generator.feed(1);
+        if (isAutoCutPrinter) bytes += generator.cut();
 
-      bytes += generator.feed(1);
-      if (isAutoCutPrinter) bytes += generator.cut();
-
-      // Delegate to SettingController for sequential BT connect→print→disconnect
-      await settingCtrl.printToTarget(cashierPrinter, prebuiltBytes: bytes);
+        // Delegate to SettingController for sequential BT connect→print→disconnect
+        await settingCtrl.printToTarget(cashierPrinter, prebuiltBytes: bytes);
       } // End of loop
     } catch (e) {
       ErrorLogService.log(
@@ -2582,7 +2590,8 @@ class HomeController extends GetxController {
         final result = await dbService.rawQuery(
             "SELECT p.id_produk, b.nama_brand FROM products p LEFT JOIN brands b ON p.id_brand = b.id_brand WHERE p.id_produk IN ($idProduksStr)");
         for (var row in result) {
-          itemBrands[row['id_produk'] as int] = row['nama_brand']?.toString() ?? '';
+          itemBrands[row['id_produk'] as int] =
+              row['nama_brand']?.toString() ?? '';
         }
       } catch (e) {
         debugPrint('printKitchenOrder error fetching brands: $e');
@@ -2649,7 +2658,8 @@ class HomeController extends GetxController {
         final printerItems = entry.value;
 
         final isAutoCutPrinter = printer.isAutoCut;
-        final paperSize = printer.paperSize == 80 ? PaperSize.mm80 : PaperSize.mm58;
+        final paperSize =
+            printer.paperSize == 80 ? PaperSize.mm80 : PaperSize.mm58;
         final int maxChars = printer.paperSize == 80 ? 48 : 32;
         final String lineSep = '-' * maxChars;
 
@@ -2657,6 +2667,8 @@ class HomeController extends GetxController {
         List<int> bytes = [];
 
         bytes += generator.reset();
+        // ESC M 0 = Select Font A (raw ESC/POS) - needed for MPT-II and similar printers on 58mm
+        if (printer.paperSize == 58) bytes += [0x1B, 0x4D, 0x00];
 
         bytes += generator.text(_formatCenter('KITCHEN ORDER', maxChars),
             styles: const PosStyles(
@@ -3182,6 +3194,7 @@ class HomeController extends GetxController {
   Future resetState(int penjualanId, {bool isSaveOnly = false}) async {
     if (!isSaveOnly && penjualanId > 1) {
       // Full checkout: delete controller & navigate to success
+      _resetPOSUIState(); // Force clear all states before deletion just in case of instance leak
       Get.delete<HomeController>();
       await Future.delayed(Duration.zero);
       Get.offAllNamed(Routes.successPage,

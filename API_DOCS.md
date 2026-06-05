@@ -1461,13 +1461,83 @@ path: api/
     "data": [
         {
             "id": "1",
-            "date": "2026-04-22",
-            "name": "Kasir",
-            "shift": "Pagi",
+            "date": "2026-06-03 09:55:53",
+            "name": "IT Semesta",
+            "shift": "Shift 1",
             "login_at": null,
             "logout_at": null,
             "transactions": [
-                []
+                {
+                    "payment_modes": [
+                        {
+                            "name": "Cash",
+                            "recorded": 1000000,
+                            "audited": 0,
+                            "diff": -1000000
+                        },
+                        {
+                            "name": "Transfer",
+                            "recorded": 36000,
+                            "audited": 36000,
+                            "diff": 0
+                        },
+                        {
+                            "name": "QRIS",
+                            "recorded": 0,
+                            "audited": 0,
+                            "diff": 0
+                        },
+                        {
+                            "name": "EDC",
+                            "recorded": 0,
+                            "audited": 0,
+                            "diff": 0
+                        }
+                    ],
+                    "order_types": [
+                        {
+                            "name": "Dine In",
+                            "total": 36000
+                        }
+                    ],
+                    "products_sold": [
+                        {
+                            "name": "Sausage",
+                            "qty": 1,
+                            "total": 22000,
+                            "price": 22000
+                        },
+                        {
+                            "name": "Ice Cream Vanilla Cone",
+                            "qty": 1,
+                            "total": 8000,
+                            "price": 8000
+                        },
+                        {
+                            "name": "Ice Cream Choco Cup",
+                            "qty": 1,
+                            "total": 6000,
+                            "price": 6000
+                        }
+                    ],
+                    "discounts": {
+                        "product": 0,
+                        "transaction": 0
+                    },
+                    "members": {
+                        "additions": 0
+                    },
+                    "credit_notes": {
+                        "list": [],
+                        "total": 0
+                    },
+                    "summary": {
+                        "expected_cash": 1036000,
+                        "actual_cash": 36000,
+                        "difference": -1000000,
+                        "status": 1
+                    }
+                }
             ]
         }
     ]
