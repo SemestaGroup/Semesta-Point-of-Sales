@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:blue_thermal_printer/blue_thermal_printer.dart' as blue;
@@ -40,6 +41,8 @@ class SettingController extends GetxController {
   TextEditingController companyTelpFieldController = TextEditingController();
   TextEditingController companyDiscFieldController = TextEditingController();
   TextEditingController companyVersionFieldController = TextEditingController();
+  TextEditingController transactionWebhookUrlFieldController =
+      TextEditingController();
 
   RxBool isLoadingStore = false.obs;
 
@@ -60,6 +63,7 @@ class SettingController extends GetxController {
   String cachedMasterVersion = "";
   String cachedMasterApkUrl = "";
   String cachedMasterChangelog = "";
+  RxString installedAppVersion = ''.obs;
 
   RxList<String> availableBrands = <String>[].obs;
 
@@ -77,6 +81,7 @@ class SettingController extends GetxController {
 
     // 1. Load local settings immediately
     _loadLocalSettings();
+    _loadInstalledAppVersion();
     fetchAvailableBrands();
 
     // 2. Reactively update text controllers if background sync finishes
@@ -96,6 +101,11 @@ class SettingController extends GetxController {
       if (companyDiscFieldController.text == '0' ||
           companyDiscFieldController.text.isEmpty) {
         companyDiscFieldController.text = model.diskon.toString();
+      }
+      final currentVersion = companyVersionFieldController.text.trim();
+      if (currentVersion.isEmpty || currentVersion == '1.0.0') {
+        companyVersionFieldController.text =
+            _resolveBestKnownVersion(preferred: model.version);
       }
     });
 
@@ -126,7 +136,18 @@ class SettingController extends GetxController {
       companyAddressFieldController.text = model.alamat;
       companyTelpFieldController.text = model.telepon;
       companyDiscFieldController.text = model.diskon.toString();
-      companyVersionFieldController.text = model.version;
+      companyVersionFieldController.text =
+          _resolveBestKnownVersion(preferred: model.version);
+
+      final webhookRows = await Get.find<DatabaseService>().query(
+        'pos_options',
+        where: 'option_name = ?',
+        whereArgs: [Constants.posTransactionWebhookUrl],
+        limit: 1,
+      );
+      transactionWebhookUrlFieldController.text = webhookRows.isNotEmpty
+          ? webhookRows.first['option_value']?.toString() ?? ''
+          : '';
 
       // Auto-connect defined network printers
       autoConnectAll();
@@ -135,6 +156,97 @@ class SettingController extends GetxController {
     } finally {
       isLoading.value = false;
     }
+  }
+
+  Future<void> _loadInstalledAppVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      installedAppVersion.value = packageInfo.version.trim();
+
+      final currentFieldVersion =
+          _sanitizeVersion(companyVersionFieldController.text);
+      await _repairCorruptedVersionIfNeeded(currentFieldVersion);
+    } catch (e) {
+      debugPrint('SettingController: Failed to load installed app version: $e');
+    }
+  }
+
+  Future<void> _repairCorruptedVersionIfNeeded(
+    String currentFieldVersion,
+  ) async {
+    final targetVersion =
+        _resolveBestKnownVersion(preferred: currentFieldVersion);
+    if (targetVersion.isEmpty || currentFieldVersion == targetVersion) {
+      return;
+    }
+
+    try {
+      companyVersionFieldController.text = targetVersion;
+      appModel.value = appModel.value.copyWith(version: targetVersion);
+
+      await userService.saveString('pos_version', targetVersion);
+
+      final db = Get.find<DatabaseService>();
+      await db.insert('pos_options', {
+        'option_name': 'version',
+        'option_value': targetVersion,
+      });
+      await db.insert('pos_options', {
+        'option_name': 'pos_version',
+        'option_value': targetVersion,
+      });
+
+      try {
+        await apiService.updatePosOptions({'version': targetVersion});
+      } catch (e) {
+        debugPrint(
+          'SettingController: Failed to auto-repair tenant version remotely: $e',
+        );
+      }
+    } catch (e) {
+      debugPrint('SettingController: Failed to auto-repair version: $e');
+    }
+  }
+
+  String get displayInstalledAppVersion {
+    final version = _resolveBestKnownVersion(
+      preferred: companyVersionFieldController.text,
+    );
+    return version.isNotEmpty ? version : '-';
+  }
+
+  String _sanitizeVersion(dynamic value) {
+    final version = value?.toString().trim() ?? '';
+    if (version.isEmpty || version == 'null' || version == 'Guest') {
+      return '';
+    }
+    return version;
+  }
+
+  String _resolveBestKnownVersion({String? preferred}) {
+    if (_isLikelyMengwiTenant()) return Constants.mengwiForcedVersion;
+
+    final preferredVersion = _sanitizeVersion(preferred);
+    if (preferredVersion.isNotEmpty) return preferredVersion;
+
+    final cachedPrefVersion =
+        _sanitizeVersion(userService.getPrefString('pos_version'));
+    if (cachedPrefVersion.isNotEmpty) return cachedPrefVersion;
+
+    final installedVersion = _sanitizeVersion(installedAppVersion.value);
+    if (installedVersion.isNotEmpty) return installedVersion;
+
+    final appModelVersion = _sanitizeVersion(appModel.value.version);
+    if (appModelVersion.isNotEmpty) return appModelVersion;
+
+    return _sanitizeVersion(companyVersionFieldController.text);
+  }
+
+  bool _isLikelyMengwiTenant() {
+    final baseUrl = userService.getBaseUrl().trim();
+    final email = userService.getUserEmail().trim().toLowerCase();
+    return baseUrl == Constants.mengwiBaseUrl ||
+        email == Constants.mengwiEmail.toLowerCase();
   }
 
   Future<void> fetchAvailableBrands() async {
@@ -226,12 +338,18 @@ class SettingController extends GetxController {
         if (discount == "0" || discount.isEmpty)
           discount = appService.appModel.value.diskon.toString();
 
-        String version = (options['pos_version'] ??
-                options['version'] ??
-                options['app_version'] ??
-                appService.appModel.value.version)
-            .toString();
-        if (version.isEmpty || version == "null") version = "1.0.0";
+        String version = _resolveBestKnownVersion(
+          preferred: options['pos_version'] ??
+              options['version'] ??
+              options['app_version'] ??
+              appService.appModel.value.version,
+        );
+
+        final webhookUrl = (options[Constants.posTransactionWebhookUrl] ??
+                    options['transaction_webhook_url'])
+                ?.toString()
+                .trim() ??
+            '';
 
         // Always update text controllers
         companyNameFieldController.text = name;
@@ -239,6 +357,8 @@ class SettingController extends GetxController {
         companyTelpFieldController.text = phone;
         companyDiscFieldController.text = discount;
         companyVersionFieldController.text = version;
+        transactionWebhookUrlFieldController.text =
+            webhookUrl == 'Guest' ? '' : webhookUrl;
 
         // Persist to SharedPreferences via UserService if they exist (only not null ones)
         if (name.isNotEmpty)
@@ -326,7 +446,8 @@ class SettingController extends GetxController {
         companyAddressFieldController.text = model.alamat;
         companyTelpFieldController.text = model.telepon;
         companyDiscFieldController.text = model.diskon.toString();
-        companyVersionFieldController.text = model.version;
+        companyVersionFieldController.text =
+            _resolveBestKnownVersion(preferred: model.version);
       }
     } finally {
       isLoading.value = false;
@@ -783,8 +904,8 @@ class SettingController extends GetxController {
       ShiftSessionModel shift, Map<String, int> recap) async {
     final printer = getPrinterForRole('report') ?? getPrinterForRole('cashier');
     if (printer == null) {
-      Get.snackbar(
-          'Printer Error', 'No active Report/Cashier printer found for Z-Report.',
+      Get.snackbar('Printer Error',
+          'No active Report/Cashier printer found for Z-Report.',
           backgroundColor: Colors.red.withValues(alpha: 0.1),
           icon: const Icon(Icons.print_disabled, color: Colors.orange));
       return;
@@ -850,8 +971,7 @@ class SettingController extends GetxController {
       return 'Rp. ${val < 0 ? "-" : ""}$res';
     }
 
-    void printRow(String label, String value,
-        {bool bold = false}) {
+    void printRow(String label, String value, {bool bold = false}) {
       String lab = label;
       if (lab.length > labelWidth) {
         lab = '${lab.substring(0, labelWidth - 2)}..';
@@ -884,17 +1004,20 @@ class SettingController extends GetxController {
       bytes += generator.text(_formatCenter('Tel: $phone', maxChars),
           styles: const PosStyles(align: PosAlign.left));
     }
-    bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+    bytes +=
+        generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
     bytes += generator.text(_formatCenter('END OF DAY (Z-REPORT)', maxChars),
         styles: const PosStyles(align: PosAlign.left, bold: true));
-    bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+    bytes +=
+        generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
 
     // 2. INFO
     final dateStr = (eodData['date'] as String).substring(0, 10);
     printRow('Date', dateStr);
     final staffList = (eodData['staff'] as List<dynamic>).join(', ');
     printRow('Staff Today', staffList);
-    bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+    bytes +=
+        generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
 
     // 3. SHIFTS SUMMARY (Opening Balances)
     final shiftsSummary = eodData['shifts_summary'] as List<dynamic>? ?? [];
@@ -904,7 +1027,8 @@ class SettingController extends GetxController {
         final int ob = (s['opening_balance'] as num?)?.toInt() ?? 0;
         printRow('$sName Op. Bal', f(ob));
       }
-      bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.left));
     }
 
     // 4. INCOME SUMMARY
@@ -919,8 +1043,9 @@ class SettingController extends GetxController {
     }
     final todayTotal = (eodData['today_income'] as num?)?.toInt() ?? 0;
     printRow('TOTAL INCOME', f(todayTotal), bold: true);
-    
-    bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+
+    bytes +=
+        generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
 
     // 5. ITEM SALES (PRODUCTS SOLD)
     final products = eodData['products'] as List<dynamic>;
@@ -932,10 +1057,10 @@ class SettingController extends GetxController {
         final name = p['name'] ?? 'Item';
         final total = p['total'] ?? 0;
         final price = p['price'] ?? 0;
-        
+
         String lab = '${qty}x $name';
         if (lab.length > labelWidth) {
-           lab = '${lab.substring(0, labelWidth - 2)}..';
+          lab = '${lab.substring(0, labelWidth - 2)}..';
         }
         printRow(lab, f(total).replaceAll('Rp. ', ''));
         if (qty > 1 && price > 0) {
@@ -943,7 +1068,8 @@ class SettingController extends GetxController {
               styles: const PosStyles(align: PosAlign.left));
         }
       }
-      bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.left));
     }
 
     // 6. DISCOUNTS, REFUNDS & CANCELLATIONS
@@ -956,18 +1082,18 @@ class SettingController extends GetxController {
     final voidCount = (voids?['count'] as num?)?.toInt() ?? 0;
 
     if (pDisc > 0 || tDisc > 0 || refTotal > 0 || voidCount > 0) {
-      bytes += generator.text(
-          _formatCenter('DISCOUNTS & VOIDS', maxChars),
+      bytes += generator.text(_formatCenter('DISCOUNTS & VOIDS', maxChars),
           styles: const PosStyles(align: PosAlign.left, bold: true));
-      
+
       if (pDisc > 0) printRow('Product Discounts', '-${f(pDisc)}');
       if (tDisc > 0) printRow('Trans. Discounts', '-${f(tDisc)}');
-      
+
       if (refTotal > 0) {
         printRow('Total Refunds', '-${f(refTotal)}');
         final refList = refunds?['list'] as List<dynamic>? ?? [];
         for (var r in refList) {
-          printRow(' - ${r['name']}', '-${f((r['amount'] as num?)?.toInt() ?? 0)}');
+          printRow(
+              ' - ${r['name']}', '-${f((r['amount'] as num?)?.toInt() ?? 0)}');
         }
       }
 
@@ -975,9 +1101,10 @@ class SettingController extends GetxController {
         printRow('Voided Orders', '$voidCount orders');
         printRow('Voided Amount', f((voids?['total'] as num?)?.toInt() ?? 0));
       }
-      bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.left));
     }
-    
+
     // 7. CASH FLOW (EXPENSES)
     final expenses = eodData['expenses'] as Map<String, dynamic>;
     final expensesList = expenses['list'] as List<dynamic>;
@@ -987,23 +1114,28 @@ class SettingController extends GetxController {
       for (var e in expensesList) {
         printRow(e['name'], f((e['amount'] as num?)?.toInt() ?? 0));
       }
-      printRow('TOTAL EXPENSES', f((expenses['total'] as num?)?.toInt() ?? 0), bold: true);
-      bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+      printRow('TOTAL EXPENSES', f((expenses['total'] as num?)?.toInt() ?? 0),
+          bold: true);
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.left));
     }
 
     // 8. MEMBERS
     final newMembersCount = (eodData['new_members'] as num?)?.toInt() ?? 0;
     if (newMembersCount > 0) {
-       bytes += generator.text(_formatCenter('MEMBERS', maxChars),
+      bytes += generator.text(_formatCenter('MEMBERS', maxChars),
           styles: const PosStyles(align: PosAlign.left, bold: true));
-       printRow('New Members', '$newMembersCount');
-       bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+      printRow('New Members', '$newMembersCount');
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.left));
     }
 
     // 9. RECONCILIATION
-    final totalActualCash = (eodData['total_actual_cash'] as num?)?.toInt() ?? 0;
-    final totalOpeningBalance = (eodData['total_opening_balance'] as num?)?.toInt() ?? 0;
-    
+    final totalActualCash =
+        (eodData['total_actual_cash'] as num?)?.toInt() ?? 0;
+    final totalOpeningBalance =
+        (eodData['total_opening_balance'] as num?)?.toInt() ?? 0;
+
     // Calculate total cash expected (only Cash income)
     int expectedCash = 0;
     for (var pm in paymentModes) {
@@ -1019,13 +1151,14 @@ class SettingController extends GetxController {
     printRow('EXPECTED CASH', f(expectedCash), bold: true);
     printRow('ACTUAL CASH', f(actualSalesCash), bold: true);
     printRow('DIFFERENCE', f(difference));
-    
+
     bytes += generator.text('Note: Expected Cash = Today Sales',
-          styles: const PosStyles(align: PosAlign.left));
+        styles: const PosStyles(align: PosAlign.left));
     bytes += generator.text('Actual = Drawer - Op. Balances',
-          styles: const PosStyles(align: PosAlign.left));
-    
-    bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+        styles: const PosStyles(align: PosAlign.left));
+
+    bytes +=
+        generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
 
     // FOOTER
     bytes += generator.text(
@@ -1086,12 +1219,12 @@ class SettingController extends GetxController {
       bytes += generator.text(_formatCenter('Tel: $phone', maxChars),
           styles: const PosStyles(align: PosAlign.left));
     }
-    bytes += generator.text(lineSep,
-        styles: const PosStyles(align: PosAlign.left));
+    bytes +=
+        generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
     bytes += generator.text(_formatCenter('Z-REPORT / SHIFT RECAP', maxChars),
         styles: const PosStyles(align: PosAlign.left, bold: true));
-    bytes += generator.text(lineSep,
-        styles: const PosStyles(align: PosAlign.left));
+    bytes +=
+        generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
 
     // 2. SHIFT INFO
     bytes += generator.text(_formatRow('Shift', shift.shiftName, maxChars),
@@ -1106,13 +1239,14 @@ class SettingController extends GetxController {
       bytes += generator.text(_formatRow('End', endStr, maxChars),
           styles: const PosStyles(align: PosAlign.left));
     }
-    bytes += generator.text(lineSep,
-        styles: const PosStyles(align: PosAlign.left));
+    bytes +=
+        generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
 
     // Parse reconciliation data
     List<dynamic>? txDataList;
     Map<String, dynamic>? txData;
-    if (shift.reconciliationData != null && shift.reconciliationData!.isNotEmpty) {
+    if (shift.reconciliationData != null &&
+        shift.reconciliationData!.isNotEmpty) {
       try {
         txDataList = jsonDecode(shift.reconciliationData!);
         if (txDataList != null && txDataList.isNotEmpty) {
@@ -1125,7 +1259,9 @@ class SettingController extends GetxController {
 
     if (txData != null) {
       // 3. SALES SUMMARY
-      bytes += generator.text(_formatRow('Opening Balance', 'Rp.${f(shift.startingBalance)}', maxChars),
+      bytes += generator.text(
+          _formatRow(
+              'Opening Balance', 'Rp.${f(shift.startingBalance)}', maxChars),
           styles: const PosStyles(align: PosAlign.left, bold: true));
 
       final modes = txData['payment_modes'] as List<dynamic>? ?? [];
@@ -1134,15 +1270,19 @@ class SettingController extends GetxController {
       for (var mode in modes) {
         final name = (mode['name'] ?? '').toString().toLowerCase();
         final amount = (mode['recorded'] ?? 0) as int;
-        if (name.contains('cash') || name.contains('tunai') || mode['id'] == '1') {
+        if (name.contains('cash') ||
+            name.contains('tunai') ||
+            mode['id'] == '1') {
           cashSales += (amount - shift.startingBalance);
         } else {
           nonCashSales += amount;
         }
       }
-      bytes += generator.text(_formatRow('Cash Sales', 'Rp.${f(cashSales)}', maxChars),
+      bytes += generator.text(
+          _formatRow('Cash Sales', 'Rp.${f(cashSales)}', maxChars),
           styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text(_formatRow('Non-Cash Sales', 'Rp.${f(nonCashSales)}', maxChars),
+      bytes += generator.text(
+          _formatRow('Non-Cash Sales', 'Rp.${f(nonCashSales)}', maxChars),
           styles: const PosStyles(align: PosAlign.left));
 
       // Payment modes detail
@@ -1150,18 +1290,21 @@ class SettingController extends GetxController {
         final name = (mode['name'] ?? '').toString();
         final amount = (mode['recorded'] ?? 0) as int;
         if (amount > 0) {
-          bytes += generator.text(_formatRow('  $name', 'Rp.${f(amount)}', maxChars),
+          bytes += generator.text(
+              _formatRow('  $name', 'Rp.${f(amount)}', maxChars),
               styles: const PosStyles(align: PosAlign.left));
         }
       }
-      bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.left));
 
       // 4. PRODUCTS SOLD
       final products = txData['products_sold'] as List<dynamic>? ?? [];
       if (products.isNotEmpty) {
         bytes += generator.text(_formatCenter('ITEM SALES', maxChars),
             styles: const PosStyles(align: PosAlign.left, bold: true));
-        bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text(lineSep,
+            styles: const PosStyles(align: PosAlign.left));
         for (var product in products) {
           final qty = product['qty'] ?? 0;
           final name = product['name'] ?? 'Item';
@@ -1178,7 +1321,8 @@ class SettingController extends GetxController {
                 styles: const PosStyles(align: PosAlign.left));
           }
         }
-        bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text(lineSep,
+            styles: const PosStyles(align: PosAlign.left));
       }
 
       // 5. DISCOUNTS
@@ -1189,14 +1333,17 @@ class SettingController extends GetxController {
         bytes += generator.text(_formatCenter('DISCOUNTS', maxChars),
             styles: const PosStyles(align: PosAlign.left, bold: true));
         if (prodDisc > 0) {
-          bytes += generator.text(_formatRow('Product Discounts', '-${f(prodDisc)}', maxChars),
+          bytes += generator.text(
+              _formatRow('Product Discounts', '-${f(prodDisc)}', maxChars),
               styles: const PosStyles(align: PosAlign.left));
         }
         if (transDisc > 0) {
-          bytes += generator.text(_formatRow('Trans. Discounts', '-${f(transDisc)}', maxChars),
+          bytes += generator.text(
+              _formatRow('Trans. Discounts', '-${f(transDisc)}', maxChars),
               styles: const PosStyles(align: PosAlign.left));
         }
-        bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text(lineSep,
+            styles: const PosStyles(align: PosAlign.left));
       }
 
       // 6. CREDIT NOTES (REFUNDS)
@@ -1208,24 +1355,31 @@ class SettingController extends GetxController {
             styles: const PosStyles(align: PosAlign.left, bold: true));
         for (var cn in cnList) {
           bytes += generator.text(
-              _formatRow(cn['number'] ?? 'CN', '-${f((cn['total'] as num?)?.toInt() ?? 0)}', maxChars),
+              _formatRow(cn['number'] ?? 'CN',
+                  '-${f((cn['total'] as num?)?.toInt() ?? 0)}', maxChars),
               styles: const PosStyles(align: PosAlign.left));
         }
-        bytes += generator.text(_formatRow('TOTAL REFUNDS', '-${f(cnTotal)}', maxChars),
+        bytes += generator.text(
+            _formatRow('TOTAL REFUNDS', '-${f(cnTotal)}', maxChars),
             styles: const PosStyles(align: PosAlign.left, bold: true));
-        bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text(lineSep,
+            styles: const PosStyles(align: PosAlign.left));
       }
 
       // 7. FINAL RECONCILIATION
       final summary = txData['summary'] ?? {};
       final expectedTotal = (summary['expected_cash'] as num?)?.toInt() ?? 0;
-      bytes += generator.text(_formatRow('EXPECTED CASH', 'Rp.${f(expectedTotal)}', maxChars),
+      bytes += generator.text(
+          _formatRow('EXPECTED CASH', 'Rp.${f(expectedTotal)}', maxChars),
           styles: const PosStyles(align: PosAlign.left, bold: true));
       if (shift.status == 1) {
-        bytes += generator.text(_formatRow('ACTUAL CASH', 'Rp.${f(shift.closingBalance)}', maxChars),
+        bytes += generator.text(
+            _formatRow(
+                'ACTUAL CASH', 'Rp.${f(shift.closingBalance)}', maxChars),
             styles: const PosStyles(align: PosAlign.left, bold: true));
         final diff = shift.closingBalance - expectedTotal;
-        bytes += generator.text(_formatRow('DIFFERENCE', 'Rp.${f(diff)}', maxChars),
+        bytes += generator.text(
+            _formatRow('DIFFERENCE', 'Rp.${f(diff)}', maxChars),
             styles: PosStyles(align: PosAlign.left, bold: diff != 0));
         if (shift.note.isNotEmpty) {
           bytes += generator.text('Note: ${shift.note}',
@@ -1234,27 +1388,38 @@ class SettingController extends GetxController {
       }
     } else {
       // Legacy fallback
-      bytes += generator.text(_formatRow('Opening Balance', 'Rp.${f(shift.startingBalance)}', maxChars),
+      bytes += generator.text(
+          _formatRow(
+              'Opening Balance', 'Rp.${f(shift.startingBalance)}', maxChars),
           styles: const PosStyles(align: PosAlign.left, bold: true));
-      bytes += generator.text(_formatRow('Cash Sales', 'Rp.${f(recap['cash'] ?? 0)}', maxChars),
+      bytes += generator.text(
+          _formatRow('Cash Sales', 'Rp.${f(recap['cash'] ?? 0)}', maxChars),
           styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text(_formatRow('Non-Cash Sales', 'Rp.${f(recap['nonCash'] ?? 0)}', maxChars),
+      bytes += generator.text(
+          _formatRow(
+              'Non-Cash Sales', 'Rp.${f(recap['nonCash'] ?? 0)}', maxChars),
           styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.left));
       final expectedTotal = shift.startingBalance + (recap['cash'] ?? 0);
-      bytes += generator.text(_formatRow('EXPECTED CASH', 'Rp.${f(expectedTotal)}', maxChars),
+      bytes += generator.text(
+          _formatRow('EXPECTED CASH', 'Rp.${f(expectedTotal)}', maxChars),
           styles: const PosStyles(align: PosAlign.left, bold: true));
       if (shift.status == 1) {
-        bytes += generator.text(_formatRow('ACTUAL CASH', 'Rp.${f(shift.closingBalance)}', maxChars),
+        bytes += generator.text(
+            _formatRow(
+                'ACTUAL CASH', 'Rp.${f(shift.closingBalance)}', maxChars),
             styles: const PosStyles(align: PosAlign.left, bold: true));
         final diff = shift.closingBalance - expectedTotal;
-        bytes += generator.text(_formatRow('DIFFERENCE', 'Rp.${f(diff)}', maxChars),
+        bytes += generator.text(
+            _formatRow('DIFFERENCE', 'Rp.${f(diff)}', maxChars),
             styles: PosStyles(align: PosAlign.left, bold: diff != 0));
       }
     }
 
     // FOOTER
-    bytes += generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+    bytes +=
+        generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
     final now = DateTime.now();
     final printedStr =
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} '
@@ -1447,6 +1612,7 @@ class SettingController extends GetxController {
     String telp = companyTelpFieldController.text;
     String address = companyAddressFieldController.text;
     String version = companyVersionFieldController.text;
+    String webhookUrl = transactionWebhookUrlFieldController.text.trim();
 
     if (companyName == '') {
       Get.snackbar('Error', 'Company name cannot be empty');
@@ -1471,6 +1637,7 @@ class SettingController extends GetxController {
       'alamat': address,
       'diskon': discount,
       'versi': version,
+      'transaction_webhook_url': webhookUrl,
     };
 
     await updateData(data);
@@ -1483,23 +1650,25 @@ class SettingController extends GetxController {
       final appService = Get.find<AppService>();
 
       // Ensure we never send an empty version which would wipe it out on the server
-      String finalVersion = (data['versi']?.toString() ?? '').trim();
-      if (finalVersion.isEmpty) finalVersion = appModel.value.version;
-      if (finalVersion.isEmpty) finalVersion = '1.0.0';
+      String finalVersion = _resolveBestKnownVersion(preferred: data['versi']);
 
       // Build payload. Also include current queue state so we absorb any
       // pending queue_counter sync — preventing a second PUT to the same endpoint.
       final dbService = Get.find<DatabaseService>();
       final optionsMap = <String, dynamic>{
-        'version': finalVersion,
         'pos_tenant_name': data['nama_perusahaan'],
         'pos_phone': data['telepon'],
         'pos_address': data['alamat'],
         'pos_default_discount': data['diskon'],
+        Constants.posTransactionWebhookUrl:
+            data['transaction_webhook_url']?.toString().trim() ?? '',
         // Piggy-back the current queue state to avoid a second separate PUT
         Constants.psNextQueue: appService.queueNumber.value,
         Constants.psLastQueueDate: appService.lastQueueDate.value,
       };
+      if (finalVersion.isNotEmpty) {
+        optionsMap['version'] = finalVersion;
+      }
 
       // Cancel any pending queue_counter sync so SyncService doesn't fire
       // a duplicate request to /api/pos_options right after this one.
@@ -1524,8 +1693,26 @@ class SettingController extends GetxController {
       await userService.saveString(Constants.posAddress, data['alamat']);
       await userService.saveString(
           Constants.posDefaultDiscount, data['diskon']);
+      if (finalVersion.isNotEmpty) {
+        await userService.saveString('pos_version', finalVersion);
+      }
       await userService.saveString(
           'pos_app_settings', jsonEncode(appService.posSettings));
+
+      final webhookUrl =
+          data['transaction_webhook_url']?.toString().trim() ?? '';
+      if (webhookUrl.isEmpty) {
+        await dbService.delete(
+          'pos_options',
+          'option_name = ?',
+          [Constants.posTransactionWebhookUrl],
+        );
+      } else {
+        await dbService.insert('pos_options', {
+          'option_name': Constants.posTransactionWebhookUrl,
+          'option_value': webhookUrl,
+        });
+      }
 
       final responseApi = await apiService.updatePosOptions(optionsMap);
 
@@ -1574,17 +1761,14 @@ class SettingController extends GetxController {
               masterData['data']['changelog']?.toString() ?? "";
 
           final optionsApi = await apiService.getPosOptions();
-          String tenantVersion = "";
+          String tenantVersion = _resolveBestKnownVersion();
           if (optionsApi.responsestate == Constants.successState &&
-              optionsApi.data != null) {
+              optionsApi.data != null &&
+              optionsApi.data is Map<String, dynamic>) {
             final options = optionsApi.data as Map<String, dynamic>;
-            tenantVersion = options['version']?.toString() ??
-                options['pos_version']?.toString() ??
-                "";
-          }
-
-          if (tenantVersion.isEmpty) {
-            tenantVersion = companyVersionFieldController.text.trim();
+            tenantVersion = _resolveBestKnownVersion(
+              preferred: options['version'] ?? options['pos_version'],
+            );
           }
 
           if (tenantVersion.isEmpty) {
@@ -1650,13 +1834,9 @@ class SettingController extends GetxController {
             }
             final options =
                 rawOptions.map((key, value) => MapEntry(key.trim(), value));
-            tenantVersion = options['version']?.toString() ??
-                options['pos_version']?.toString() ??
-                "";
-          }
-
-          if (tenantVersion.isEmpty) {
-            tenantVersion = companyVersionFieldController.text.trim();
+            tenantVersion = _resolveBestKnownVersion(
+              preferred: options['version'] ?? options['pos_version'],
+            );
           }
 
           if (tenantVersion.isNotEmpty &&

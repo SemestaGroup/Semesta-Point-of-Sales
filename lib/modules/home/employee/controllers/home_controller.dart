@@ -8,10 +8,7 @@ import 'package:get/get.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
-import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:semesta_pos/modules/home/employee/controllers/shift_controller.dart';
-import 'package:semesta_pos/styles/app_theme.dart';
-import 'package:semesta_pos/core/models/api/response_api_model.dart';
 import 'package:semesta_pos/modules/member/controllers/member_controller.dart';
 import 'package:semesta_pos/core/models/category/kategori_model.dart';
 import 'package:uuid/uuid.dart';
@@ -27,6 +24,7 @@ import 'package:semesta_pos/core/services/user_service.dart';
 import 'package:semesta_pos/core/models/payment/pos_payment_model.dart';
 import 'package:semesta_pos/core/models/printer/printer_device.dart';
 import 'package:semesta_pos/core/services/sync_service.dart';
+import 'package:semesta_pos/core/services/transaction_webhook_service.dart';
 import 'package:semesta_pos/core/services/promo_service.dart';
 import 'package:semesta_pos/modules/order/controllers/order_controller.dart';
 import 'package:semesta_pos/routes/app_pages.dart';
@@ -92,6 +90,110 @@ class HomeController extends GetxController {
       Get.put(PromoService(), permanent: true);
     }
     return Get.find<PromoService>();
+  }
+
+  TransactionWebhookService get _transactionWebhookService {
+    if (!Get.isRegistered<TransactionWebhookService>()) {
+      Get.put(TransactionWebhookService(), permanent: true);
+    }
+    return Get.find<TransactionWebhookService>();
+  }
+
+  int _calculateEarnedPoints(int amount) {
+    if (amount <= 0) return 0;
+    return amount ~/ 10000;
+  }
+
+  bool _hasRefundItems(Iterable<dynamic> items) {
+    for (final item in items) {
+      if (item is PenjualanDetailModel && item.isRefund) {
+        return true;
+      }
+
+      if (item is Map<String, dynamic>) {
+        if (item['is_refund']?.toString() == '1' || item['isRefund'] == true) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  String _resolveOrderWebhookAction({
+    required bool isNewRecord,
+    required Iterable<dynamic> items,
+  }) {
+    if (_hasRefundItems(items)) {
+      return 'refund_updated';
+    }
+
+    return isNewRecord ? 'created' : 'updated';
+  }
+
+  Future<void> _setMemberPoints(int memberId, int newPoints) async {
+    if (memberId <= 1) return;
+
+    await _dbService.update(
+      'members',
+      {'points': newPoints.toString()},
+      'id_member = ?',
+      [memberId],
+    );
+
+    if (selectedMember.value?.idMember == memberId) {
+      selectedMember.value =
+          selectedMember.value!.copyWith(points: newPoints.toString());
+      selectedMember.refresh();
+    }
+
+    final memberIndex = memberList.indexWhere((m) => m.idMember == memberId);
+    if (memberIndex != -1) {
+      memberList[memberIndex] =
+          memberList[memberIndex].copyWith(points: newPoints.toString());
+      memberList.refresh();
+    }
+  }
+
+  Future<void> _adjustMemberPoints(int memberId, int delta) async {
+    if (memberId <= 1 || delta == 0) return;
+
+    final rows = await _dbService.query(
+      'members',
+      where: 'id_member = ?',
+      whereArgs: [memberId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+
+    final currentPoints =
+        int.tryParse(rows.first['points']?.toString() ?? '0') ?? 0;
+    final candidate = currentPoints + delta;
+    final nextPoints = candidate < 0 ? 0 : candidate;
+    await _setMemberPoints(memberId, nextPoints);
+  }
+
+  void _dispatchOrderWebhook({
+    required int localTransactionId,
+    required String action,
+    Map<String, dynamic>? metadata,
+  }) {
+    unawaited(_transactionWebhookService.sendOrderEvent(
+      localTransactionId: localTransactionId,
+      action: action,
+      metadata: metadata,
+    ));
+  }
+
+  void _dispatchPaymentWebhook({
+    required int localPaymentId,
+    required String action,
+    Map<String, dynamic>? metadata,
+  }) {
+    unawaited(_transactionWebhookService.sendPaymentEvent(
+      localPaymentId: localPaymentId,
+      action: action,
+      metadata: metadata,
+    ));
   }
 
   PromoDiscount _calculateBestPriceForCartItem(
@@ -1059,6 +1161,27 @@ class HomeController extends GetxController {
     // );
   }
 
+  Future<int> _rollbackMemberPointsForVoid(Map<String, dynamic> order) async {
+    final previousStatus = int.tryParse(order['status']?.toString() ?? '') ?? 0;
+    if (previousStatus != 2 && previousStatus != 3) return 0;
+
+    final memberIdToUpdate =
+        int.tryParse(order['id_member']?.toString() ?? '') ?? 0;
+    if (memberIdToUpdate <= 1) return 0;
+
+    final storedAwardedPoints =
+        int.tryParse(order['awarded_points']?.toString() ?? '') ?? 0;
+    final pointsToRollback = storedAwardedPoints > 0
+        ? storedAwardedPoints
+        : _calculateEarnedPoints(
+            int.tryParse(order['bayar']?.toString() ?? '') ?? 0,
+          );
+    if (pointsToRollback <= 0) return 0;
+
+    await _adjustMemberPoints(memberIdToUpdate, -pointsToRollback);
+    return pointsToRollback;
+  }
+
   Future<void> cancelOrder() async {
     // 1. If it's a saved/remote order, prompt for remote cancel (status update)
     if (currentIdPos != null) {
@@ -1069,6 +1192,8 @@ class HomeController extends GetxController {
         final map = existing.first;
         final localId = map['id_penjualan'] as int;
         final remoteId = map['id_penjualan_remote'] as int?;
+        final previousStatus =
+            int.tryParse(map['status']?.toString() ?? '') ?? 0;
 
         // Show confirmation dialog
         bool confirmed = await Get.dialog<bool>(AlertDialog(
@@ -1104,8 +1229,20 @@ class HomeController extends GetxController {
           );
 
           // Update Local DB Status to 5 (Cancelled)
-          await _dbService.update('transactions', {'status': 5, 'is_synced': 0},
-              'id_penjualan = ?', [localId]);
+          await _dbService.update(
+            'transactions',
+            {
+              'status': 5,
+              'is_synced': 0,
+              'awarded_points': 0,
+            },
+            'id_penjualan = ?',
+            [localId],
+          );
+
+          final revertedPoints = await _rollbackMemberPointsForVoid(map);
+
+          Map<String, dynamic>? putBody;
 
           // If it has a remote ID, enqueue a full PUT to update status
           if (remoteId != null) {
@@ -1168,7 +1305,7 @@ class HomeController extends GetxController {
                 ? map['id_member'].toString()
                 : '1';
 
-            final putBody = <String, dynamic>{
+            putBody = <String, dynamic>{
               'clientid': clientId,
               'date': map['tgl_penjualan']?.toString().split('T')[0] ?? today,
               'currency': '3',
@@ -1203,6 +1340,17 @@ class HomeController extends GetxController {
               localId: localId,
             );
           }
+
+          _dispatchOrderWebhook(
+            localTransactionId: localId,
+            action: 'voided',
+            metadata: <String, dynamic>{
+              'request_method': remoteId != null ? 'PUT' : 'LOCAL',
+              'previous_status': previousStatus,
+              'reverted_points': revertedPoints,
+              if (putBody != null) 'request_body': putBody,
+            },
+          );
 
           Get.snackbar('Success', 'Order has been marked as cancelled');
         } else {
@@ -1457,6 +1605,17 @@ class HomeController extends GetxController {
         existingRemoteId: existingRemoteId,
         idPenjualanLocal: idPenjualanLocal,
         remoteNumber: remoteNumber,
+      );
+
+      _dispatchOrderWebhook(
+        localTransactionId: idPenjualanLocal,
+        action: _resolveOrderWebhookAction(
+          isNewRecord: isNewRecord,
+          items: items,
+        ),
+        metadata: {
+          'origin': isSaveOnly ? 'save_only' : 'checkout',
+        },
       );
 
       isLoadingTransaction.value = false;
@@ -1790,8 +1949,11 @@ class HomeController extends GetxController {
           .query('transactions', where: 'id_pos = ?', whereArgs: [idPos]);
       int? localTxId;
       String invoiceIdStr = '';
+      int existingAwardedPoints = 0;
       if (tx.isNotEmpty) {
         localTxId = tx.first['id_penjualan'] as int;
+        existingAwardedPoints =
+            (tx.first['awarded_points'] as num?)?.toInt() ?? 0;
         if (tx.first['id_penjualan_remote'] != null &&
             tx.first['id_penjualan_remote'].toString() != '0') {
           // Order already has a remote ID — use it directly.
@@ -1847,24 +2009,31 @@ class HomeController extends GetxController {
           await _dbService.insert('pos_payments', payment.toJson());
 
       // Update member points locally immediately
-      if (selectedMember.value != null && selectedMember.value!.idMember != 1) {
-        final earnedPoints = (amount / 10000).floor();
-        if (earnedPoints > 0) {
-          final int currentPoints =
-              int.tryParse(selectedMember.value!.points ?? '0') ?? 0;
-          final int newPoints = currentPoints + earnedPoints;
-          selectedMember.value =
-              selectedMember.value!.copyWith(points: newPoints.toString());
-
-          await _dbService.update(
-            'members',
-            {'points': newPoints.toString()},
-            'id_member = ?',
-            [selectedMember.value!.idMember],
-          );
-          selectedMember.refresh();
-        }
+      final memberIdForPoints = selectedMember.value?.idMember ?? 1;
+      final earnedPoints =
+          existingAwardedPoints > 0 ? 0 : _calculateEarnedPoints(amount);
+      if (memberIdForPoints > 1 && earnedPoints > 0) {
+        final memberRows = await _dbService.query(
+          'members',
+          where: 'id_member = ?',
+          whereArgs: [memberIdForPoints],
+          limit: 1,
+        );
+        final currentPoints = memberRows.isNotEmpty
+            ? int.tryParse(memberRows.first['points']?.toString() ?? '0') ?? 0
+            : 0;
+        await _setMemberPoints(memberIdForPoints, currentPoints + earnedPoints);
       }
+
+      await _dbService.update(
+        'transactions',
+        {
+          'awarded_points':
+              existingAwardedPoints > 0 ? existingAwardedPoints : earnedPoints
+        },
+        'id_pos = ?',
+        [idPos],
+      );
 
       final apiPaymentBody = {
         'id_pos': idPos,
@@ -1880,34 +2049,32 @@ class HomeController extends GetxController {
       };
 
       // Enqueue the pos_order FIRST so the server only creates the invoice and awards points at payment time.
-      if (localTxId != null) {
-        final subtotalVal = subtotalRaw.value;
-        final Map<String, dynamic> localData = {
-          'id_user': userService.getPrefInt(Constants.userId),
-          'id_member': selectedMember.value?.idMember ?? 1,
-          'total_item': penjualanDetailModelList.length,
-          'total_harga': subtotalVal,
-          'diskon': (manualDiscountIsPercent.value
-                  ? (subtotalVal * (manualDiscountValue.value / 100))
-                  : manualDiscountValue.value)
-              .toInt(),
-          'bayar': totalTransaction.value,
-          'id_pos': currentIdPos,
-          'penjualan_detail':
-              penjualanDetailModelList.map((e) => e.toJson()).toList(),
-        };
+      final subtotalVal = subtotalRaw.value;
+      final Map<String, dynamic> localData = {
+        'id_user': userService.getPrefInt(Constants.userId),
+        'id_member': selectedMember.value?.idMember ?? 1,
+        'total_item': penjualanDetailModelList.length,
+        'total_harga': subtotalVal,
+        'diskon': (manualDiscountIsPercent.value
+                ? (subtotalVal * (manualDiscountValue.value / 100))
+                : manualDiscountValue.value)
+            .toInt(),
+        'bayar': totalTransaction.value,
+        'id_pos': currentIdPos,
+        'penjualan_detail':
+            penjualanDetailModelList.map((e) => e.toJson()).toList(),
+      };
 
-        await _pushOrderToApi(
-          map: localData,
-          isNew: currentRemoteId.value == 0,
-          idPenjualanLocal: localTxId,
-          existingRemoteId:
-              currentRemoteId.value != 0 ? currentRemoteId.value : null,
-          remoteNumber: currentRemoteNumber.value.isNotEmpty
-              ? currentRemoteNumber.value
-              : null,
-        );
-      }
+      await _pushOrderToApi(
+        map: localData,
+        isNew: currentRemoteId.value == 0,
+        idPenjualanLocal: localTxId,
+        existingRemoteId:
+            currentRemoteId.value != 0 ? currentRemoteId.value : null,
+        remoteNumber: currentRemoteNumber.value.isNotEmpty
+            ? currentRemoteNumber.value
+            : null,
+      );
 
       // Enqueue payment using the specific payment's local ID
       await Get.find<SyncService>().enqueueCommand(
@@ -1915,6 +2082,26 @@ class HomeController extends GetxController {
         endpoint: '/api/pos_transaction',
         body: apiPaymentBody,
         localId: localPaymentId,
+      );
+
+      _dispatchOrderWebhook(
+        localTransactionId: localTxId,
+        action: 'paid',
+        metadata: {
+          'payment_mode': paymentMode,
+          'payment_method': paymentMethod ?? paymentMode,
+          'awarded_points': earnedPoints,
+        },
+      );
+
+      _dispatchPaymentWebhook(
+        localPaymentId: localPaymentId,
+        action: 'created',
+        metadata: <String, dynamic>{
+          'request_method': 'POST',
+          'request_body': apiPaymentBody,
+          'awarded_points': earnedPoints,
+        },
       );
 
       isProcessingPayment.value = false;
@@ -2301,11 +2488,18 @@ class HomeController extends GetxController {
               : (selectedMember.value!.nama ?? 'Customer');
         }
 
-        final queueNoStr = (penjualan?.queueNumber ?? appService.queueNumber.value).toString().padLeft(3, '0');
+        final queueNoStr =
+            (penjualan?.queueNumber ?? appService.queueNumber.value)
+                .toString()
+                .padLeft(3, '0');
 
-        bytes += generator.text(_formatRow('$dateStr $timeStr', 'Q: $queueNoStr', maxChars), styles: const PosStyles(align: PosAlign.left));
-        bytes += generator.text('Order Type: $orderTypeStr', styles: const PosStyles(align: PosAlign.left));
-        bytes += generator.text('Receipt No: $orderCode', styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text(
+            _formatRow('$dateStr $timeStr', 'Q: $queueNoStr', maxChars),
+            styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text('Order Type: $orderTypeStr',
+            styles: const PosStyles(align: PosAlign.left));
+        bytes += generator.text('Receipt No: $orderCode',
+            styles: const PosStyles(align: PosAlign.left));
         String cashierName = userService.getPrefString(Constants.userName);
         if (penjualan != null && penjualan.idUser > 0) {
           try {
@@ -3169,8 +3363,20 @@ class HomeController extends GetxController {
           'hargaAwal': element.hargaAwal,
           'product_name': element.productName ?? '',
           'description': element.description,
+          'is_refund': element.isRefund ? 1 : 0,
         });
       }
+
+      _dispatchOrderWebhook(
+        localTransactionId: idPenjualanLocal,
+        action: _resolveOrderWebhookAction(
+          isNewRecord: isNewRecord,
+          items: penjualanDetailModelList,
+        ),
+        metadata: {
+          'origin': 'kitchen_save',
+        },
+      );
 
       return true;
     } catch (e) {

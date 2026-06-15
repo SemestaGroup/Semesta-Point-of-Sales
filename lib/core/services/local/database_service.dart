@@ -62,16 +62,22 @@ class DatabaseService {
 
   Future<Database> _initDatabase() async {
     String path = join(await getDatabasesPath(), 'pos_database.db');
-    debugPrint('SQLite: Opening database at $path with version 45');
+    debugPrint('SQLite: Opening database at $path with version 46');
     return await openDatabase(
       path,
-      version: 45,
+      version: 46,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
   }
 
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 46) {
+      try {
+        await db.execute(
+            'ALTER TABLE transactions ADD COLUMN awarded_points INTEGER DEFAULT 0');
+      } catch (e) {}
+    }
     if (oldVersion < 45) {
       try {
         await db.execute("ALTER TABLE members ADD COLUMN datecreated TEXT");
@@ -79,10 +85,12 @@ class DatabaseService {
     }
     if (oldVersion < 44) {
       try {
-        await db.execute("ALTER TABLE cash_flow ADD COLUMN category TEXT DEFAULT '1'");
+        await db.execute(
+            "ALTER TABLE cash_flow ADD COLUMN category TEXT DEFAULT '1'");
       } catch (e) {}
       try {
-        await db.execute("ALTER TABLE cash_flow ADD COLUMN addedfrom TEXT DEFAULT '1'");
+        await db.execute(
+            "ALTER TABLE cash_flow ADD COLUMN addedfrom TEXT DEFAULT '1'");
       } catch (e) {}
     }
     if (oldVersion < 43) {
@@ -112,7 +120,8 @@ class DatabaseService {
         await db.execute('ALTER TABLE products ADD COLUMN description TEXT');
       } catch (e) {}
       try {
-        await db.execute('ALTER TABLE transaction_details ADD COLUMN description TEXT');
+        await db.execute(
+            'ALTER TABLE transaction_details ADD COLUMN description TEXT');
       } catch (e) {}
     }
     if (oldVersion < 32) {
@@ -623,7 +632,8 @@ class DatabaseService {
         queue_number INTEGER DEFAULT 0,
         is_synced INTEGER DEFAULT 0,
         payment_method TEXT DEFAULT "",
-        tgl_bayar TEXT DEFAULT ""
+        tgl_bayar TEXT DEFAULT "",
+        awarded_points INTEGER DEFAULT 0
       )
     ''');
 
@@ -1002,4 +1012,3 @@ class DatabaseService {
     );
   }
 }
-

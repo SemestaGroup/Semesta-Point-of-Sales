@@ -25,6 +25,13 @@ class Constants {
   static const posAddress = "pos_address";
   static const posPhoneNumber = "pos_phone_number";
   static const posDefaultDiscount = "pos_default_discount";
+  static const posTransactionWebhookUrl = "pos_transaction_webhook_url";
+  static const mengwiLocationId = "1070";
+  static const mengwiBaseUrl = "http://mengwieskrimku.flinkaja.com/";
+  static const mengwiEmail = "eskrimkumunggu@gmail.com";
+  static const mengwiForcedVersion = "1.4.0";
+  static const mengwiResyncMigrationKey = "mengwi_resync_migration_key";
+  static const mengwiResyncMigrationVersion = "1070-force-reupload-v3-2026-06-09";
 
   // Queue system keys
   static const psNextQueue = "ps_next_queue";

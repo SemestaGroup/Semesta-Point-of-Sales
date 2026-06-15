@@ -18,7 +18,9 @@ class SyncController extends GetxController {
 
   Future<void> startInitialSync() async {
     try {
+      await _syncService.ensureMengwiTenantBootstrap(triggerQueue: false);
       await _syncService.pullMasterData();
+      await _syncService.ensureMengwiTenantBootstrap(triggerQueue: true);
     } catch (e) {
       Get.snackbar("Sync Error",
           "Koneksi bermasalah. Gagal melakukan sinkronisasi awal.");

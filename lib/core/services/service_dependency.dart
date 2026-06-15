@@ -5,6 +5,7 @@ import 'package:semesta_pos/core/services/theme_service.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
 import 'package:semesta_pos/core/services/local/database_service.dart';
 import 'package:semesta_pos/core/services/sync_service.dart';
+import 'package:semesta_pos/core/services/transaction_webhook_service.dart';
 import 'package:semesta_pos/modules/home/employee/controllers/shift_controller.dart';
 import 'package:semesta_pos/modules/setting/controllers/setting_controller.dart';
 import 'package:semesta_pos/core/services/promo_service.dart';
@@ -15,39 +16,51 @@ class ServiceDependency {
     if (!Get.isRegistered<DatabaseService>()) {
       Get.put(DatabaseService(), permanent: true);
     }
-    
+
     if (!Get.isRegistered<UserService>()) {
       final userService = Get.put(UserService(), permanent: true);
       await userService.initSharedPref();
     }
-    
+
     if (!Get.isRegistered<ThemeService>()) {
       final theme = ThemeService();
       await theme.init();
       Get.put(theme, permanent: true);
     }
-    
+
     if (!Get.isRegistered<ApiService>()) {
       Get.put(ApiService(), permanent: true);
     }
-    
+
+    if (!Get.isRegistered<SyncService>()) {
+      Get.put(SyncService(), permanent: true);
+    }
+
     if (!Get.isRegistered<AppService>()) {
       Get.put(AppService(), permanent: true);
     }
-    
+
+    await Get.find<SyncService>().ensureMengwiTenantBootstrap(
+      triggerQueue: false,
+    );
+
     // Global State Controllers
     if (!Get.isRegistered<SettingController>()) {
       Get.put(SettingController(), permanent: true);
     }
-    
+
     if (!Get.isRegistered<ShiftController>()) {
       Get.put(ShiftController(), permanent: true);
     }
-    
-    if (!Get.isRegistered<SyncService>()) {
-      Get.put(SyncService(), permanent: true);
+
+    await Get.find<SyncService>().ensureMengwiTenantBootstrap(
+      triggerQueue: true,
+    );
+
+    if (!Get.isRegistered<TransactionWebhookService>()) {
+      Get.put(TransactionWebhookService(), permanent: true);
     }
-    
+
     if (!Get.isRegistered<PromoService>()) {
       Get.put(PromoService(), permanent: true);
     }

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:semesta_pos/core/services/local/database_service.dart';
 import 'package:semesta_pos/core/services/sync_service.dart';
+import 'package:semesta_pos/core/services/transaction_webhook_service.dart';
 import 'package:semesta_pos/modules/dashboard/admin/controllers/dashboard_admin_controller.dart';
 import 'package:semesta_pos/modules/dashboard/employee/controllers/dashboard_employee_controller.dart';
 import 'package:semesta_pos/modules/home/employee/controllers/home_controller.dart';
@@ -10,6 +13,41 @@ import 'package:semesta_pos/routes/app_pages.dart';
 class OrderController extends GetxController {
   DatabaseService get _dbService => Get.find<DatabaseService>();
 
+  int _estimateMemberPoints(int amount) => amount <= 0 ? 0 : amount ~/ 10000;
+
+  Future<void> _rollbackMemberPointsForVoid(Map<String, dynamic> order) async {
+    final int previousStatus =
+        int.tryParse(order['status']?.toString() ?? '') ?? 0;
+    if (previousStatus != 2 && previousStatus != 3) return;
+
+    final int memberId =
+        int.tryParse(order['id_member']?.toString() ?? '') ?? 0;
+    if (memberId <= 1) return;
+
+    final int pointsToRollback = _estimateMemberPoints(
+        int.tryParse(order['bayar']?.toString() ?? '') ?? 0);
+    if (pointsToRollback <= 0) return;
+
+    final memberRows = await _dbService.query(
+      'members',
+      where: 'id_member = ?',
+      whereArgs: <dynamic>[memberId],
+      limit: 1,
+    );
+    if (memberRows.isEmpty) return;
+
+    final int currentPoints =
+        int.tryParse(memberRows.first['points']?.toString() ?? '0') ?? 0;
+    final int newPoints =
+        currentPoints > pointsToRollback ? currentPoints - pointsToRollback : 0;
+
+    await _dbService.update(
+      'members',
+      {'points': newPoints.toString()},
+      'id_member = ?',
+      <dynamic>[memberId],
+    );
+  }
 
   RxBool isLoading = false.obs;
   final TextEditingController searchController = TextEditingController();
@@ -32,15 +70,14 @@ class OrderController extends GetxController {
         AND datetime(REPLACE(tgl_penjualan, 'T', ' ')) < datetime('now', '-14 days', 'localtime')
       """;
       final expiredOrders = await _dbService.rawQuery(sql);
-      
+
       if (expiredOrders.isEmpty) return;
 
       for (var order in expiredOrders) {
         final idPenjualan = order['id_penjualan'];
         if (idPenjualan == null) continue;
 
-        await _dbService.update('transactions', 
-            {'status': 5, 'is_synced': 0}, 
+        await _dbService.update('transactions', {'status': 5, 'is_synced': 0},
             'id_penjualan = ?', [idPenjualan]);
 
         final remoteId = order['id_penjualan_remote'];
@@ -55,7 +92,8 @@ class OrderController extends GetxController {
           );
         }
       }
-      debugPrint("OrderController: Auto-cancelled ${expiredOrders.length} expired orders (> 14 days).");
+      debugPrint(
+          "OrderController: Auto-cancelled ${expiredOrders.length} expired orders (> 14 days).");
     } catch (e) {
       debugPrint("OrderController: Failed to auto-cancel expired orders: $e");
     }
@@ -71,64 +109,68 @@ class OrderController extends GetxController {
 
       // Auto cancel old orders first
       await _autoCancelExpiredOrders();
- 
+
       // 1. Pull latest unpaid orders from server IN THE BACKGROUND if forced
       if (forceRemote) {
         // We don't await this anymore, so the UI can immediately proceed to Step 2 (local query)
         Get.find<SyncService>().pullRemoteOrders(unpaidOnly: false).then((_) {
-           // Re-query local DB once pull is finished
-           _getOrdersFromLocal(query: query).then((newResult) {
-             openOrders.value = newResult;
-             isSyncing.value = false;
-           });
+          // Re-query local DB once pull is finished
+          _getOrdersFromLocal(query: query).then((newResult) {
+            openOrders.value = newResult;
+            isSyncing.value = false;
+          });
         }).catchError((e) {
           debugPrint("OrderController: Failed to pull remote orders: $e");
           isSyncing.value = false;
-          Get.snackbar(
-              'Sync Failed', 'Koneksi bermasalah. Pastikan perangkat terhubung ke internet.',
+          Get.snackbar('Sync Failed',
+              'Koneksi bermasalah. Pastikan perangkat terhubung ke internet.',
               backgroundColor: Colors.red.withValues(alpha: 0.1),
               icon: const Icon(Icons.error_outline, color: Colors.red));
         });
       }
- 
+
       // 2. Query local DB for the unified view
       final result = await _getOrdersFromLocal(query: query);
       openOrders.value = result;
- 
+
       if (Get.isRegistered<DashboardEmployeeController>()) {
         Get.find<DashboardEmployeeController>().updateActiveOrderCount();
       }
       if (Get.isRegistered<DashboardAdminController>()) {
         Get.find<DashboardAdminController>().updateActiveOrderCount();
       }
- 
+
       isLoading.value = false;
       isSyncing.value = false;
     } catch (e) {
       isLoading.value = false;
       isSyncing.value = false;
-      Get.snackbar('Error', 'Koneksi bermasalah. Silakan periksa jaringan internet Anda.',
+      Get.snackbar('Error',
+          'Koneksi bermasalah. Silakan periksa jaringan internet Anda.',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.red.withValues(alpha: 0.1));
     }
   }
 
-  Future<List<Map<String, dynamic>>> _getOrdersFromLocal({String? query}) async {
+  Future<List<Map<String, dynamic>>> _getOrdersFromLocal(
+      {String? query}) async {
     // Active orders are those where status is NOT 5 (Cancelled) and NOT 2 (Paid)
     String where = "";
     if (filterActiveOnly.value) {
       where = "(t.status != 5 AND t.status != 2) "
-              "AND substr(REPLACE(t.tgl_penjualan, 'T', ' '), 1, 7) = strftime('%Y-%m', 'now', 'localtime') "
-              "AND datetime(REPLACE(t.tgl_penjualan, 'T', ' ')) >= datetime('now', '-7 days', 'localtime')";
+          "AND substr(REPLACE(t.tgl_penjualan, 'T', ' '), 1, 7) = strftime('%Y-%m', 'now', 'localtime') "
+          "AND datetime(REPLACE(t.tgl_penjualan, 'T', ' ')) >= datetime('now', '-7 days', 'localtime')";
     } else {
-      where = "substr(REPLACE(t.tgl_penjualan, 'T', ' '), 1, 7) = strftime('%Y-%m', 'now', 'localtime') "
-              "AND datetime(REPLACE(t.tgl_penjualan, 'T', ' ')) >= datetime('now', '-7 days', 'localtime')";
+      where =
+          "substr(REPLACE(t.tgl_penjualan, 'T', ' '), 1, 7) = strftime('%Y-%m', 'now', 'localtime') "
+          "AND datetime(REPLACE(t.tgl_penjualan, 'T', ' ')) >= datetime('now', '-7 days', 'localtime')";
     }
     List<dynamic> whereArgs = [];
 
     if (query != null && query.trim().isNotEmpty) {
       final q = "%${query.trim()}%";
-      where += " AND (t.label LIKE ? OR t.id_pos LIKE ? OR t.remote_number LIKE ? OR m.nama LIKE ?)";
+      where +=
+          " AND (t.label LIKE ? OR t.id_pos LIKE ? OR t.remote_number LIKE ? OR m.nama LIKE ?)";
       whereArgs.addAll([q, q, q, q]);
     }
 
@@ -147,14 +189,16 @@ class OrderController extends GetxController {
     return await _dbService.rawQuery(sql, whereArgs);
   }
 
-  Future<Map<String, dynamic>> _buildPutBody(Map<String, dynamic> order, int newStatus) async {
+  Future<Map<String, dynamic>> _buildPutBody(
+      Map<String, dynamic> order, int newStatus) async {
     final idPenjualan = order['id_penjualan'];
-    final itemsList = await _dbService.query('transaction_details', where: 'id_penjualan = ?', whereArgs: [idPenjualan]);
-    
+    final itemsList = await _dbService.query('transaction_details',
+        where: 'id_penjualan = ?', whereArgs: [idPenjualan]);
+
     final itemsArray = <Map<String, dynamic>>[];
     for (int i = 0; i < itemsList.length; i++) {
       final item = itemsList[i];
-      
+
       final mapItem = <String, dynamic>{
         'description': item['product_name'] ?? 'Product',
         'long_description': '',
@@ -164,34 +208,39 @@ class OrderController extends GetxController {
         'unit': '',
         'taxname': <String>[],
       };
-      
+
       if (item['is_refund']?.toString() == '1') {
         mapItem['is_refund'] = 1;
       }
 
       final remoteItemId = item['remote_item_id']?.toString() ?? '';
-      if (remoteItemId.isNotEmpty && remoteItemId != '0' && remoteItemId != 'null') {
+      if (remoteItemId.isNotEmpty &&
+          remoteItemId != '0' &&
+          remoteItemId != 'null') {
         mapItem['itemid'] = remoteItemId;
       }
       itemsArray.add(mapItem);
     }
-    
+
     String number = order['id_penjualan_remote']?.toString() ?? '1';
-    
+
     return <String, dynamic>{
       'clientid': (order['id_member'] ?? 1).toString(),
       'number': number,
-      'date': order['tgl_penjualan']?.toString().split(' ')[0] ?? DateTime.now().toIso8601String().split('T')[0],
+      'date': order['tgl_penjualan']?.toString().split(' ')[0] ??
+          DateTime.now().toIso8601String().split('T')[0],
       'currency': '3',
       'status': newStatus,
       'billing_street': '-',
       'allowed_payment_modes': ['7'],
       'items': itemsArray,
-      'subtotal': (order['total_harga'] as num? ?? 0).toDouble().toStringAsFixed(2),
+      'subtotal':
+          (order['total_harga'] as num? ?? 0).toDouble().toStringAsFixed(2),
       'total': (order['bayar'] as num? ?? 0).toDouble().toStringAsFixed(2),
-      'adminnote': (int.tryParse(order['queue_number']?.toString() ?? '0') ?? 0) > 0 
-          ? order['queue_number'].toString() 
-          : '',
+      'adminnote':
+          (int.tryParse(order['queue_number']?.toString() ?? '0') ?? 0) > 0
+              ? order['queue_number'].toString()
+              : '',
     };
   }
 
@@ -199,16 +248,21 @@ class OrderController extends GetxController {
     try {
       final idPenjualan = order['id_penjualan'];
       if (idPenjualan == null) return;
+      final previousStatus =
+          int.tryParse(order['status']?.toString() ?? '') ?? 0;
 
       // Soft cancel: Update local status to 5 instead of deleting
-      await _dbService.update('transactions', 
-          {'status': 5, 'is_synced': 0}, 
+      await _dbService.update('transactions', {'status': 5, 'is_synced': 0},
           'id_penjualan = ?', [idPenjualan]);
+
+      await _rollbackMemberPointsForVoid(order);
+
+      Map<String, dynamic>? putBody;
 
       // If already synced to API, queue a PUT command to update status to 5 (cancelled)
       final remoteId = order['id_penjualan_remote'];
       if (remoteId != null) {
-        final putBody = await _buildPutBody(order, 5);
+        putBody = await _buildPutBody(order, 5);
         final syncService = Get.find<SyncService>();
         await syncService.enqueueCommand(
           method: 'PUT',
@@ -218,6 +272,18 @@ class OrderController extends GetxController {
         );
       }
 
+      unawaited(
+        Get.find<TransactionWebhookService>().sendOrderEvent(
+          localTransactionId: idPenjualan as int,
+          action: 'void',
+          metadata: <String, dynamic>{
+            'request_method': remoteId != null ? 'PUT' : 'LOCAL',
+            'previous_status': previousStatus,
+            if (putBody != null) 'request_body': putBody,
+          },
+        ),
+      );
+
       Get.snackbar(
         'Order Dibatalkan',
         'Order #$idPenjualan telah dibatalkan',
@@ -225,7 +291,8 @@ class OrderController extends GetxController {
         backgroundColor: Colors.orange.shade800,
         colorText: Colors.white,
         duration: const Duration(seconds: 2),
-        icon: const Icon(Icons.cancel_presentation_rounded, color: Colors.white),
+        icon:
+            const Icon(Icons.cancel_presentation_rounded, color: Colors.white),
       );
       // Refresh the list
       getOrders();
@@ -242,13 +309,13 @@ class OrderController extends GetxController {
       final idPenjualan = order['id_penjualan'];
       if (idPenjualan == null) return;
 
-      await _dbService.update('transactions', 
-          {'status': 1, 'is_synced': 0}, 
+      await _dbService.update('transactions', {'status': 1, 'is_synced': 0},
           'id_penjualan = ?', [idPenjualan]);
 
       final remoteId = order['id_penjualan_remote'];
+      Map<String, dynamic>? putBody;
       if (remoteId != null) {
-        final putBody = await _buildPutBody(order, 1);
+        putBody = await _buildPutBody(order, 1);
         await Get.find<SyncService>().enqueueCommand(
           method: 'PUT',
           endpoint: '/api/pos_order/$remoteId',
@@ -257,6 +324,18 @@ class OrderController extends GetxController {
         );
       }
 
+      unawaited(
+        Get.find<TransactionWebhookService>().sendOrderEvent(
+          localTransactionId: idPenjualan as int,
+          action: 'restored',
+          metadata: <String, dynamic>{
+            'request_method': remoteId != null ? 'PUT' : 'LOCAL',
+            'previous_status': 5,
+            if (putBody != null) 'request_body': putBody,
+          },
+        ),
+      );
+
       Get.snackbar('Order Dipulihkan', 'Order #$idPenjualan kini aktif kembali',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.blue.shade800,
@@ -264,8 +343,7 @@ class OrderController extends GetxController {
       getOrders();
     } catch (e) {
       Get.snackbar('Error', 'Gagal memulihkan order: $e',
-          backgroundColor: Colors.red,
-          colorText: Colors.white);
+          backgroundColor: Colors.red, colorText: Colors.white);
     }
   }
 
@@ -290,7 +368,8 @@ class OrderController extends GetxController {
     Get.offAllNamed(Routes.home);
   }
 
-  void loadOrderIntoPos(Map<String, dynamic> order, {bool isRefundMode = false}) {
+  void loadOrderIntoPos(Map<String, dynamic> order,
+      {bool isRefundMode = false}) {
     try {
       // 1. Navigate to POS first
       navigateToPos();
@@ -299,7 +378,8 @@ class OrderController extends GetxController {
       // Give a tiny delay for navigation to complete and controller to be ready
       Future.delayed(const Duration(milliseconds: 300), () {
         if (Get.isRegistered<HomeController>()) {
-          Get.find<HomeController>().loadTransaction(order, isRefundMode: isRefundMode);
+          Get.find<HomeController>()
+              .loadTransaction(order, isRefundMode: isRefundMode);
         }
       });
     } catch (e) {

@@ -16,6 +16,7 @@ import 'package:semesta_pos/modules/dashboard/admin/controllers/dashboard_admin_
 import 'package:semesta_pos/modules/order/controllers/order_controller.dart';
 import 'package:semesta_pos/modules/home/employee/controllers/home_controller.dart';
 import 'package:semesta_pos/modules/member/controllers/member_controller.dart';
+import 'package:semesta_pos/modules/setting/controllers/setting_controller.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:semesta_pos/core/services/error_log_service.dart';
@@ -68,6 +69,145 @@ class SyncService extends GetxService {
     super.onClose();
   }
 
+  Future<void> ensureMengwiTenantBootstrap({bool triggerQueue = true}) async {
+    try {
+      final session = await _userService.getUserSession();
+      if (session == null) return;
+
+      final locationId = session['location']?.toString().trim() ?? '';
+      if (!_shouldApplyMengwiBootstrap(locationId)) return;
+
+      final targetBaseUrl = _normalizeBaseUrl(Constants.mengwiBaseUrl);
+      final targetEmail = Constants.mengwiEmail;
+      final targetVersion = Constants.mengwiForcedVersion;
+      final prefBaseUrl = _normalizeBaseUrl(_userService.getBaseUrl());
+      final sessionBaseUrl =
+          _normalizeBaseUrl(session['base_url']?.toString() ?? '');
+      final sessionEmail = session['email']?.toString().trim() ?? '';
+      final migrationMarker =
+          _userService.getPrefString(Constants.mengwiResyncMigrationKey);
+      final versionRows = await _dbService.query(
+        'pos_options',
+        columns: ['option_value'],
+        where: 'option_name = ?',
+        whereArgs: ['version'],
+        limit: 1,
+      );
+      final currentVersion = versionRows.isNotEmpty
+          ? versionRows.first['option_value']?.toString().trim() ?? ''
+          : '';
+
+      final shouldFixBaseUrl =
+          prefBaseUrl != targetBaseUrl || sessionBaseUrl != targetBaseUrl;
+      final shouldFixEmail = sessionEmail != targetEmail ||
+          _userService.getPrefString(Constants.userEmail) != targetEmail;
+      final shouldFixVersion = currentVersion != targetVersion;
+      final shouldFixLocation = locationId != Constants.mengwiLocationId;
+      final shouldReplayAll =
+          migrationMarker != Constants.mengwiResyncMigrationVersion;
+
+      debugPrint(
+        'SyncService: Applying Mengwi bootstrap. '
+        'fixBaseUrl=$shouldFixBaseUrl fixEmail=$shouldFixEmail '
+        'fixVersion=$shouldFixVersion fixLocation=$shouldFixLocation '
+        'replayAll=$shouldReplayAll',
+      );
+
+      await _userService.saveAuthData(targetBaseUrl, Constants.staticAuthToken);
+      await _userService.saveString(Constants.userEmail, targetEmail);
+      await _userService.saveString('pos_version', targetVersion);
+
+      final db = await _dbService.database;
+      await db.transaction((txn) async {
+        await txn.update(
+          'user_session',
+          {
+            'base_url': targetBaseUrl,
+            'email': targetEmail,
+            'location': Constants.mengwiLocationId,
+          },
+          where: 'id = ?',
+          whereArgs: [1],
+        );
+
+        await txn.insert(
+          'pos_options',
+          {
+            'option_name': 'version',
+            'option_value': targetVersion,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        await txn.insert(
+          'pos_options',
+          {
+            'option_name': 'pos_version',
+            'option_value': targetVersion,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+
+        await txn.update(
+          'sync_queue',
+          {'base_url': targetBaseUrl},
+          where: "status IN ('pending', 'failed')",
+        );
+
+        if (!shouldReplayAll) return;
+
+        await txn.delete(
+          'sync_queue',
+          where: 'endpoint LIKE ? OR endpoint LIKE ? OR endpoint LIKE ?',
+          whereArgs: ['%pos_customers%', '%pos_order%', '%pos_transaction%'],
+        );
+
+        await txn.update('members', {'is_synced': 0});
+        await txn.rawUpdate('''
+          UPDATE transactions
+             SET is_synced = 0,
+                 id_penjualan_remote = 0,
+                 remote_number = NULL
+        ''');
+        await txn.rawUpdate('''
+          UPDATE pos_payments
+             SET is_synced = 0,
+                 invoiceid = CASE
+                   WHEN id_pos IS NOT NULL AND id_pos != '' THEN id_pos
+                   ELSE ''
+                 END
+        ''');
+      });
+
+      if (Get.isRegistered<AppService>()) {
+        final appService = Get.find<AppService>();
+        appService.appModel.value =
+            appService.appModel.value.copyWith(version: targetVersion);
+      }
+
+      if (Get.isRegistered<SettingController>()) {
+        final settingController = Get.find<SettingController>();
+        settingController.companyVersionFieldController.text = targetVersion;
+      }
+
+      if (shouldReplayAll) {
+        syncStatus.value = 'Queueing Mengwi migration replay...';
+        await pushLocalMembers();
+        await pushLocalTransactions();
+        await pushLocalPayments();
+        await _userService.saveString(
+          Constants.mengwiResyncMigrationKey,
+          Constants.mengwiResyncMigrationVersion,
+        );
+      }
+
+      if (triggerQueue) {
+        unawaited(processQueue());
+      }
+    } catch (e) {
+      debugPrint('SyncService: ensureMengwiTenantBootstrap failed: $e');
+    }
+  }
+
   /// Orchestrates the mandatory post-login sequence in the exact order requested
   Future<void> runPostLoginSync() async {
     if (isSyncing.value) {
@@ -113,7 +253,7 @@ class SyncService extends GetxService {
       // 7. Transaction (Payment history)
       syncStatus.value = "Fetching Transaction History...";
       await pullRemotePayments();
-      
+
       // 7.5 Shift Logs
       await pullShiftLogs();
       syncProgress.value = 0.95;
@@ -251,7 +391,7 @@ class SyncService extends GetxService {
         response.data != null) {
       // Data is already decoded in ApiService, but if it was raw, we'd use compute here.
       final List remoteOrders = response.data;
-      
+
       // Sort orders descending (newest first) to prioritize fetching recent orders
       remoteOrders.sort((a, b) {
         final idA = int.tryParse(a['id']?.toString() ?? '0') ?? 0;
@@ -290,13 +430,21 @@ class SyncService extends GetxService {
             // The server has the order, but local doesn't know the remote ID yet!
             // This means our POST succeeded, but we didn't get the response.
             // 1. Update the remote ID so future edits use PUT
-            await _dbService.update('transactions', {'id_penjualan_remote': remoteId}, 'id_penjualan = ?', [localIdPenjualan]);
-            
+            await _dbService.update(
+                'transactions',
+                {'id_penjualan_remote': remoteId},
+                'id_penjualan = ?',
+                [localIdPenjualan]);
+
             // 2. Remove the POST from queue so we don't duplicate it
-            await _dbService.delete('sync_queue', "method = 'POST' AND endpoint LIKE '%pos_order%' AND local_id = ?", [localIdPenjualan.toString()]);
-            
+            await _dbService.delete(
+                'sync_queue',
+                "method = 'POST' AND endpoint LIKE '%pos_order%' AND local_id = ?",
+                [localIdPenjualan.toString()]);
+
             // 3. Remap any pending PUT/payments (created while offline) to use the correct remoteId instead of UUID placeholder
-            await _remapLocalIdInQueue(localIdPenjualan.toString(), remoteId.toString());
+            await _remapLocalIdInQueue(
+                localIdPenjualan.toString(), remoteId.toString());
             if (idPos != null && idPos.isNotEmpty) {
               await _remapLocalIdInQueue(idPos, remoteId.toString());
             }
@@ -314,7 +462,8 @@ class SyncService extends GetxService {
           }
 
           // PERFORMANCE OPTIMIZATION: Skip fetching details if order already synced and status hasn't changed
-          if (localOrder['is_synced'] == 1 && localOrder['id_penjualan_remote'] != null) {
+          if (localOrder['is_synced'] == 1 &&
+              localOrder['id_penjualan_remote'] != null) {
             final int localStatus = localOrder['status'] ?? 1;
             final int remoteStatus = _toInt(orderJson['status']);
             if (localStatus == remoteStatus) {
@@ -325,7 +474,8 @@ class SyncService extends GetxService {
           // It's a completely new order (not in local DB)
           // If it is a paid order (status 2) and we've already fetched MAX_HISTORY paid orders, skip it.
           final int remoteStatus = _toInt(orderJson['status']);
-          if (remoteStatus == 2 || remoteStatus == 5) { // 2: Paid, 5: Cancelled/Refunded
+          if (remoteStatus == 2 || remoteStatus == 5) {
+            // 2: Paid, 5: Cancelled/Refunded
             if (newlyFetchedPaidOrders >= MAX_HISTORY) {
               continue;
             }
@@ -333,10 +483,13 @@ class SyncService extends GetxService {
           }
         }
 
-        final tglPenjualanStr = orderJson['datecreated']?.toString() ?? orderJson['date']?.toString() ?? DateTime.now().toString();
+        final tglPenjualanStr = orderJson['datecreated']?.toString() ??
+            orderJson['date']?.toString() ??
+            DateTime.now().toString();
         final dt = DateTime.tryParse(tglPenjualanStr);
         final now = DateTime.now();
-        final isCurrentMonth = dt != null && dt.year == now.year && dt.month == now.month;
+        final isCurrentMonth =
+            dt != null && dt.year == now.year && dt.month == now.month;
 
         Map<String, dynamic> fullOrderData;
 
@@ -535,9 +688,10 @@ class SyncService extends GetxService {
     debugPrint("SyncService: Pulling Remote Shift Logs...");
     final response = await _apiService.getShiftLogs();
 
-    if (response.responsestate == Constants.successState && response.data != null) {
+    if (response.responsestate == Constants.successState &&
+        response.data != null) {
       final List remoteLogs = response.data['data'] ?? [];
-      
+
       for (var logJson in remoteLogs) {
         final remoteId = int.tryParse(logJson['id']?.toString() ?? '0') ?? 0;
         if (remoteId == 0) continue;
@@ -545,26 +699,37 @@ class SyncService extends GetxService {
         // Check if exists
         final localCheck = await _dbService.query('shift_sessions',
             where: 'id_remote = ?', whereArgs: [remoteId]);
-            
+
         if (localCheck.isEmpty) {
           // Parse summary
           double expected = 0;
           double actual = 0;
           try {
             final transactions = logJson['transactions'];
-            if (transactions != null && transactions is List && transactions.isNotEmpty) {
-               final summary = transactions[0]['summary'];
-               if (summary != null) {
-                  expected = double.tryParse(summary['expected_cash']?.toString() ?? summary['total_system_cash']?.toString() ?? '0') ?? 0;
-                  actual = double.tryParse(summary['actual_cash']?.toString() ?? summary['total_actual_cash']?.toString() ?? '0') ?? 0;
-               }
+            if (transactions != null &&
+                transactions is List &&
+                transactions.isNotEmpty) {
+              final summary = transactions[0]['summary'];
+              if (summary != null) {
+                expected = double.tryParse(
+                        summary['expected_cash']?.toString() ??
+                            summary['total_system_cash']?.toString() ??
+                            '0') ??
+                    0;
+                actual = double.tryParse(summary['actual_cash']?.toString() ??
+                        summary['total_actual_cash']?.toString() ??
+                        '0') ??
+                    0;
+              }
             }
           } catch (_) {}
 
           await _dbService.insert('shift_sessions', {
             'shift_name': logJson['shift']?.toString() ?? 'Shift',
             'user_id': logJson['name']?.toString() ?? '',
-            'start_time': logJson['login_at']?.toString() ?? logJson['date']?.toString() ?? DateTime.now().toString(),
+            'start_time': logJson['login_at']?.toString() ??
+                logJson['date']?.toString() ??
+                DateTime.now().toString(),
             'end_time': logJson['logout_at']?.toString(),
             'total_cash_expected': expected,
             'total_cash_actual': actual,
@@ -593,6 +758,14 @@ class SyncService extends GetxService {
         [method, endpoint, localId?.toString()]);
 
     if (existing.isNotEmpty) {
+      await _dbService.update(
+        'sync_queue',
+        {
+          'base_url': baseUrl,
+        },
+        'id = ?',
+        [existing.first['id']],
+      );
       debugPrint(
           "SyncService: Skipping redundant command for $endpoint ($localId)");
       return;
@@ -638,6 +811,7 @@ class SyncService extends GetxService {
       await _dbService.update(
         'sync_queue',
         {
+          'base_url': baseUrl,
           'body': bodyJson,
           'status': 'pending', // reset failed → pending with fresh data
           'retry_count': 0,
@@ -717,7 +891,7 @@ class SyncService extends GetxService {
           final bodyStr = item['body']?.toString();
           if (bodyStr != null) {
             bool hasPendingDependency = false;
-            
+
             // 1. Check for negative numeric placeholders
             if (bodyStr.contains('":-') || bodyStr.contains('":"-')) {
               final matches = RegExp(r'":"?(-?\d+)"?').allMatches(bodyStr);
@@ -734,17 +908,19 @@ class SyncService extends GetxService {
                 }
               }
             }
-            
+
             // 2. Check for UUID placeholders in invoiceid or clientid
-            if (!hasPendingDependency && (bodyStr.contains('invoiceid') || bodyStr.contains('clientid'))) {
+            if (!hasPendingDependency &&
+                (bodyStr.contains('invoiceid') ||
+                    bodyStr.contains('clientid'))) {
               try {
                 final jsonMap = jsonDecode(bodyStr);
                 final invoiceId = jsonMap['invoiceid']?.toString() ?? '';
                 final clientId = jsonMap['clientid']?.toString() ?? '';
-                
+
                 // If invoiceid or clientid is a UUID (contains '-' and length > 20), it's a placeholder.
                 // We defer this item because its parent hasn't been successfully synced yet.
-                if ((invoiceId.contains('-') && invoiceId.length > 20) || 
+                if ((invoiceId.contains('-') && invoiceId.length > 20) ||
                     (clientId.contains('-') && clientId.length > 20)) {
                   hasPendingDependency = true;
                 }
@@ -760,12 +936,10 @@ class SyncService extends GetxService {
 
           final mutableItem = Map<String, dynamic>.from(item);
 
-
-
           final success = await _executeCommand(mutableItem);
           if (success) {
-            await _dbService.update(
-                'sync_queue', {'status': 'success'}, 'id = ?', [mutableItem['id']]);
+            await _dbService.update('sync_queue', {'status': 'success'},
+                'id = ?', [mutableItem['id']]);
           } else {
             if (localId != null) {
               final lastError = (await _dbService.query('sync_queue',
@@ -942,15 +1116,16 @@ class SyncService extends GetxService {
                 "SyncService: Ignored HTTP ${response.statusCode} - Logical Failure: ${response.body}");
           }
         } catch (_) {
-          // Body is not JSON or unparseable. 
+          // Body is not JSON or unparseable.
           // If the API returns HTML (like a PHP/CodeIgniter Exception), treat it as a failure.
           final bodyLower = response.body.toLowerCase();
-          if (bodyLower.contains('<div') || 
-              bodyLower.contains('exception') || 
+          if (bodyLower.contains('<div') ||
+              bodyLower.contains('exception') ||
               bodyLower.contains('error') ||
               bodyLower.contains('mysqli_sql_exception')) {
             isTreatedAsSuccess = false;
-            debugPrint("SyncService: Ignored HTTP ${response.statusCode} - PHP/CodeIgniter Error detected: ${response.body}");
+            debugPrint(
+                "SyncService: Ignored HTTP ${response.statusCode} - PHP/CodeIgniter Error detected: ${response.body}");
           }
         }
       }
@@ -995,13 +1170,16 @@ class SyncService extends GetxService {
             String? remoteIdPos;
 
             if (remoteMember != null) {
-              remoteId = remoteMember['id']?.toString() ?? remoteMember['clientid']?.toString();
+              remoteId = remoteMember['id']?.toString() ??
+                  remoteMember['clientid']?.toString();
               remoteIdPos = remoteMember['id_pos']?.toString();
             } else {
               // Fallback if API only returns the ID in 'data' or root 'id'/'clientid'
               remoteId = respData['clientid']?.toString() ??
-                         respData['id']?.toString() ??
-                         ((dataRaw is int || dataRaw is String) ? dataRaw.toString() : null);
+                  respData['id']?.toString() ??
+                  ((dataRaw is int || dataRaw is String)
+                      ? dataRaw.toString()
+                      : null);
             }
 
             if (remoteId != null && remoteId.isNotEmpty) {
@@ -1020,7 +1198,8 @@ class SyncService extends GetxService {
               await _updateLocalIdAfterSync(
                   localId?.toString() ?? remoteIdPos ?? "", remoteId, endpoint);
             } else {
-              debugPrint("SyncService: Could not extract remote ID from pos_customers response. Body: ${response.body}");
+              debugPrint(
+                  "SyncService: Could not extract remote ID from pos_customers response. Body: ${response.body}");
             }
           } catch (e) {
             debugPrint(
@@ -1047,13 +1226,14 @@ class SyncService extends GetxService {
                       : null);
               debugPrint(
                   "SyncService: Found remote ID $remoteId ${remoteNumber != null ? '(Number $remoteNumber)' : ''} for local ID $localId. Updating...");
-              
+
               // 1. Remap using the local numeric ID
               await _remapLocalIdInQueue(
                   localId.toString(), remoteId.toString());
-                  
+
               // 2. Remap using the UUID (id_pos) placeholder to catch dependent pos_transactions
-              final requestUuid = (body is Map) ? body['id_pos']?.toString() : null;
+              final requestUuid =
+                  (body is Map) ? body['id_pos']?.toString() : null;
               if (requestUuid != null && requestUuid.isNotEmpty) {
                 await _remapLocalIdInQueue(requestUuid, remoteId.toString());
               }
@@ -1478,25 +1658,36 @@ class SyncService extends GetxService {
   }
 
   Future<void> pushLocalMembers() async {
-    final unsynced = await _dbService.query('members', where: 'is_synced = ?', whereArgs: [0]);
+    final unsynced = await _dbService
+        .query('members', where: 'is_synced = ?', whereArgs: [0]);
     for (var row in unsynced) {
       final localId = row['id_member'];
-      
+      final stableIdPos = row['id_pos']?.toString().trim() ?? '';
+      final bodyIdPos =
+          stableIdPos.isNotEmpty && stableIdPos.toLowerCase() != 'null'
+              ? stableIdPos
+              : localId.toString();
+      final memberName = row['nama']?.toString().trim() ?? '';
+
       // Check if it's already in the queue
       final existingQueue = await _dbService.query('sync_queue',
           where: 'local_id = ? AND endpoint LIKE ?',
           whereArgs: [localId.toString(), '%pos_customers%']);
       if (existingQueue.isNotEmpty) continue; // Already explicitly queued
-      
+
       // We always POST for forced resync since server data is gone for Mengwi
       final map = {
-        'company': row['nama_member']?.toString() ?? '',
+        'company': memberName.isNotEmpty
+            ? memberName
+            : (localId.toString() == '1'
+                ? 'Walk In'
+                : 'Customer ${localId.toString()}'),
         'phonenumber': row['telepon']?.toString() ?? '',
-        'id_pos': localId.toString(),
+        'id_pos': bodyIdPos,
       };
-      
+
       if (row['alamat'] != null && row['alamat'].toString().isNotEmpty) {
-         map['address'] = row['alamat'].toString();
+        map['address'] = row['alamat'].toString();
       }
 
       await enqueueCommand(
@@ -1516,7 +1707,7 @@ class SyncService extends GetxService {
         whereArgs: [0]);
     for (var row in unsynced) {
       final localId = row['id_penjualan'];
-      
+
       // Check if it's already in the queue
       final existingQueue = await _dbService.query('sync_queue',
           where: 'local_id = ? AND endpoint LIKE ?',
@@ -1543,22 +1734,22 @@ class SyncService extends GetxService {
       final discountType = row['discount_type']?.toString() ?? 'percent';
       double discountPercent = 0.0;
       double discountAmount = (row['diskon'] ?? 0).toDouble();
-      
+
       if (discountType == 'percent') {
         discountPercent = (row['manual_discount_value'] ?? 0).toDouble();
       } else {
         discountPercent = 0.0;
       }
-      
+
       final queueNum = row['queue_number'] ?? 0;
       final orderNote = row['order_note']?.toString() ?? '';
-      
+
       // SMART NOTE MERGING: Rebuild merged note to preserve item notes during background sync
       String cleanedNote = orderNote;
       if (cleanedNote.contains('---ITEM NOTES---')) {
         cleanedNote = cleanedNote.split('---ITEM NOTES---')[0].trim();
       }
-      
+
       final itemLines = details.where((i) {
         final itemOrderType = i['order_type']?.toString() ?? '';
         final itemNote = i['note']?.toString() ?? '';
@@ -1581,7 +1772,7 @@ class SyncService extends GetxService {
         buffer.writeAll(itemLines, '\n');
         mergedNote = buffer.toString().trim();
       }
-      
+
       final terms = row['order_type']?.toString() ?? 'dine_in';
 
       final map = {
@@ -1598,14 +1789,15 @@ class SyncService extends GetxService {
                   'description': entry.value['product_name'] ?? 'Product',
                   'long_description': '',
                   'qty': entry.value['jumlah'].toString(),
-                  'rate':
-                      (entry.value['harga_jual'] ?? 0).toDouble().toStringAsFixed(2),
+                  'rate': (entry.value['harga_jual'] ?? 0)
+                      .toDouble()
+                      .toStringAsFixed(2),
                   'order': (entry.key + 1).toString(),
                   'unit': '',
                   'taxname': [],
                 })
             .toList(),
-        'allowed_payment_modes': ["7"], 
+        'allowed_payment_modes': ["7"],
         'billing_street': finalBillingStreet,
         'subtotal': subtotal,
         'total': total,
@@ -1639,20 +1831,26 @@ class SyncService extends GetxService {
           whereArgs: [localPaymentId.toString(), '%pos_transaction%']);
       if (existingQueue.isNotEmpty) continue; // Already explicitly queued
 
-      // Retrieve InvoiceID if needed or if it's currently a UUID placeholder
       String invoiceIdStr = row['invoiceid']?.toString() ?? '';
-      if (invoiceIdStr.isEmpty || invoiceIdStr.contains('-') || invoiceIdStr.length > 20) {
-        final tx = await _dbService.query('transactions',
-            where: 'id_pos = ?', whereArgs: [row['id_pos']]);
-        if (tx.isNotEmpty) {
-          final localTxId = tx.first['id_penjualan'] as int;
-          if (tx.first['id_penjualan_remote'] != null && tx.first['id_penjualan_remote'].toString() != '0') {
-            invoiceIdStr = tx.first['id_penjualan_remote'].toString();
-            // Automatically clean up the SQLite table since we found the real remote ID
-            await _dbService.update('pos_payments', {'invoiceid': invoiceIdStr}, 'id = ?', [localPaymentId]);
-          } else {
-            invoiceIdStr = localTxId.toString(); // Placeholder!
-          }
+      final tx = await _dbService.query('transactions',
+          where: 'id_pos = ?', whereArgs: [row['id_pos']], limit: 1);
+      if (tx.isNotEmpty) {
+        final localTxId = tx.first['id_penjualan'] as int;
+        final remoteTxId = tx.first['id_penjualan_remote']?.toString() ?? '';
+        final txIsSynced = (tx.first['is_synced'] as int? ?? 0) == 1;
+
+        if (!txIsSynced || remoteTxId.isEmpty || remoteTxId == '0') {
+          invoiceIdStr = localTxId.toString();
+        } else if (invoiceIdStr.isEmpty ||
+            invoiceIdStr.contains('-') ||
+            invoiceIdStr.length > 20) {
+          invoiceIdStr = remoteTxId;
+          await _dbService.update(
+            'pos_payments',
+            {'invoiceid': invoiceIdStr},
+            'id = ?',
+            [localPaymentId],
+          );
         }
       }
 
@@ -1664,7 +1862,8 @@ class SyncService extends GetxService {
         'paymentmethod': row['paymentmethod'] ?? row['paymentmode'] ?? '7',
         'date': row['date']?.toString() ??
             DateTime.now().toIso8601String().split('T')[0],
-        'daterecorded': row['date']?.toString() ?? DateTime.now().toIso8601String(),
+        'daterecorded':
+            row['date']?.toString() ?? DateTime.now().toIso8601String(),
         'transactionid': row['transactionid'] ?? '',
         'note': row['note'] ?? '',
       };
@@ -1676,6 +1875,20 @@ class SyncService extends GetxService {
         localId: localPaymentId,
       );
     }
+  }
+
+  String _normalizeBaseUrl(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty || trimmed == 'Guest' || trimmed == 'null') return '';
+    return trimmed.endsWith('/') ? trimmed : '$trimmed/';
+  }
+
+  bool _shouldApplyMengwiBootstrap(String locationId) {
+    final normalized = locationId.trim().toLowerCase();
+    return normalized.isEmpty ||
+        normalized == 'null' ||
+        normalized == 'unknown' ||
+        normalized == Constants.mengwiLocationId;
   }
 
   Future<void> pushShiftLogs() async {
@@ -1829,26 +2042,30 @@ class SyncService extends GetxService {
           if (remoteIdInt != 0) {
             homeCtrl.memberId.value = remoteIdInt;
             if (homeCtrl.selectedMember.value != null) {
-              homeCtrl.selectedMember.value = homeCtrl.selectedMember.value!.copyWith(
-                idMember: remoteIdInt
-              );
+              homeCtrl.selectedMember.value = homeCtrl.selectedMember.value!
+                  .copyWith(idMember: remoteIdInt);
             }
-            debugPrint("SyncService: Updated HomeController in-memory customer ID from $localId to $remoteId");
+            debugPrint(
+                "SyncService: Updated HomeController in-memory customer ID from $localId to $remoteId");
           }
         }
       }
-      
+
       // CRITICAL FIX: Update MemberController's in-memory list
       if (Get.isRegistered<MemberController>()) {
         final memberCtrl = Get.find<MemberController>();
         if (localIdInt != null && remoteIdInt != 0) {
-          final index = memberCtrl.memberModelList.indexWhere((m) => m.idMember == localIdInt);
+          final index = memberCtrl.memberModelList
+              .indexWhere((m) => m.idMember == localIdInt);
           if (index != -1) {
-            memberCtrl.memberModelList[index] = memberCtrl.memberModelList[index].copyWith(idMember: remoteIdInt);
+            memberCtrl.memberModelList[index] = memberCtrl
+                .memberModelList[index]
+                .copyWith(idMember: remoteIdInt);
             memberCtrl.memberModelList.refresh();
           }
           if (memberCtrl.selectedMember.value?.idMember == localIdInt) {
-            memberCtrl.selectedMember.value = memberCtrl.selectedMember.value!.copyWith(idMember: remoteIdInt);
+            memberCtrl.selectedMember.value = memberCtrl.selectedMember.value!
+                .copyWith(idMember: remoteIdInt);
           }
         }
       }
@@ -1871,7 +2088,10 @@ class SyncService extends GetxService {
         if (localIdInt != null) {
           await _dbService.update(
               'transactions', updateData, 'id_penjualan = ?', [localIdInt]);
-          final txs = await _dbService.query('transactions', columns: ['id_pos'], where: 'id_penjualan = ?', whereArgs: [localIdInt]);
+          final txs = await _dbService.query('transactions',
+              columns: ['id_pos'],
+              where: 'id_penjualan = ?',
+              whereArgs: [localIdInt]);
           if (txs.isNotEmpty) idPosForPayment = txs.first['id_pos']?.toString();
         } else {
           await _dbService
@@ -1881,7 +2101,8 @@ class SyncService extends GetxService {
 
         // Clean up pos_payments in SQLite so it looks correct in Inspector
         if (idPosForPayment != null && idPosForPayment.isNotEmpty) {
-           await _dbService.update('pos_payments', {'invoiceid': remoteId}, 'id_pos = ?', [idPosForPayment]);
+          await _dbService.update('pos_payments', {'invoiceid': remoteId},
+              'id_pos = ?', [idPosForPayment]);
         }
         debugPrint(
             'SyncService: pos_order synced — local $localId → remote #$remoteId ${remoteNumber ?? ''}');
@@ -2054,7 +2275,7 @@ class SyncService extends GetxService {
       if (deletedCount > 0) {
         debugPrint("SyncService: Cleaned up $deletedCount old closed orders.");
       }
-      
+
       // 2. Remove DUPLICATE transactions (keep the original local insertion which has id_pos and payment_method)
       await db.execute("""
         DELETE FROM transactions
@@ -2231,19 +2452,21 @@ class SyncService extends GetxService {
       debugPrint("SyncService: Pulling Remote Expenses...");
       final response = await _apiService.getExpenses();
 
-      if (response.responsestate == Constants.successState && response.data != null) {
+      if (response.responsestate == Constants.successState &&
+          response.data != null) {
         final List remoteExpenses = response.data;
-        
+
         await _dbService.transaction((txn) async {
           // Instead of clearing all expenses, maybe we clear only remote ones?
           // For simplicity, if we pull all expenses, we can clear those that are already synced,
           // or we can just replace by remote_id if we have one. But our cash_flow table
-          // uses auto-increment id, and we might not have a remote_id column. 
+          // uses auto-increment id, and we might not have a remote_id column.
           // Wait, in my previous task, I added 'remote_id' column to cash_flow!
           // So we can check if it exists or we can just clear synced expenses and re-insert.
-          
-          await txn.delete('cash_flow', where: 'is_synced = ? OR remote_id IS NOT NULL', whereArgs: [1]);
-          
+
+          await txn.delete('cash_flow',
+              where: 'is_synced = ? OR remote_id IS NOT NULL', whereArgs: [1]);
+
           for (var item in remoteExpenses) {
             await txn.insert(
               'cash_flow',
@@ -2254,20 +2477,26 @@ class SyncService extends GetxService {
                 'note': item['note']?.toString() ?? '',
                 'category': item['category']?.toString() ?? '1',
                 'date': item['date']?.toString() ?? '',
-                'amount': double.tryParse(item['amount']?.toString() ?? '0')?.toInt() ?? 0,
+                'amount': double.tryParse(item['amount']?.toString() ?? '0')
+                        ?.toInt() ??
+                    0,
                 'addedfrom': item['addedfrom']?.toString() ?? '1',
                 'is_synced': 1,
                 // created_at needs to be preserved if available, otherwise use date or now
-                'created_at': item['dateadded']?.toString() ?? item['created_at']?.toString() ?? DateTime.now().toIso8601String(),
+                'created_at': item['dateadded']?.toString() ??
+                    item['created_at']?.toString() ??
+                    DateTime.now().toIso8601String(),
               },
               conflictAlgorithm: ConflictAlgorithm.replace,
             );
           }
         });
-        debugPrint("SyncService: Successfully synced ${remoteExpenses.length} expenses.");
+        debugPrint(
+            "SyncService: Successfully synced ${remoteExpenses.length} expenses.");
         syncStatus.value = "Expenses Updated";
       } else {
-        debugPrint("SyncService: Failed to fetch expenses. Reason: ${response.message}");
+        debugPrint(
+            "SyncService: Failed to fetch expenses. Reason: ${response.message}");
       }
     } catch (e) {
       debugPrint("SyncService Error in pullRemoteExpenses: $e");

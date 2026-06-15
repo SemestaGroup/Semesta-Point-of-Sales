@@ -14,7 +14,8 @@ class RecapView extends StatelessWidget {
   const RecapView({super.key});
 
   String _formatRupiah(int number) {
-    return NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0)
+    return NumberFormat.currency(
+            locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0)
         .format(number);
   }
 
@@ -91,7 +92,7 @@ class RecapView extends StatelessWidget {
                   ),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple, 
+                  backgroundColor: Colors.deepPurple,
                   padding:
                       EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
                   shape: RoundedRectangleBorder(
@@ -166,7 +167,10 @@ class RecapView extends StatelessWidget {
                   color: AppTheme.cardColor(context),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.2 : 0.03),
+                      color: Colors.black.withValues(
+                          alpha: Theme.of(context).brightness == Brightness.dark
+                              ? 0.2
+                              : 0.03),
                       blurRadius: 10,
                       offset: const Offset(0, 2),
                     ),
@@ -210,16 +214,27 @@ class RecapView extends StatelessWidget {
             // Header Stats
             Row(
               children: [
-                _buildStatCard("Total Recorded", _formatRupiah(controller.getTotalRecorded()), AppTheme.primaryColor, context),
-                SizedBox(width: 16.w),
-                _buildStatCard("Total Audited", _formatRupiah(controller.getTotalAudited()), Colors.green, context),
+                _buildStatCard(
+                    "Total Recorded",
+                    _formatRupiah(controller.getTotalRecorded()),
+                    AppTheme.primaryColor,
+                    context),
                 SizedBox(width: 16.w),
                 _buildStatCard(
-                  "Total Difference", 
-                  _formatRupiah(controller.getTotalDiff()), 
-                  controller.getTotalDiff() < 0 ? Colors.red : (controller.getTotalDiff() > 0 ? Colors.orange : Colors.grey),
-                  context
-                ),
+                    "Total Audited",
+                    _formatRupiah(controller.getTotalAudited()),
+                    Colors.green,
+                    context),
+                SizedBox(width: 16.w),
+                _buildStatCard(
+                    "Total Difference",
+                    _formatRupiah(controller.getTotalDiff()),
+                    controller.getTotalDiff() < 0
+                        ? Colors.red
+                        : (controller.getTotalDiff() > 0
+                            ? Colors.orange
+                            : Colors.grey),
+                    context),
               ],
             ),
             SizedBox(height: 24.h),
@@ -255,9 +270,15 @@ class RecapView extends StatelessWidget {
             Expanded(
               child: Row(
                 children: [
-                  Expanded(flex: 3, child: _buildPaymentModesSection(context, controller, isDark)),
+                  Expanded(
+                      flex: 3,
+                      child: _buildPaymentModesSection(
+                          context, controller, isDark)),
                   SizedBox(width: 16.w),
-                  Expanded(flex: 2, child: _buildCashFlowSection(context, controller, isDark)),
+                  Expanded(
+                      flex: 2,
+                      child:
+                          _buildCashFlowSection(context, controller, isDark)),
                 ],
               ),
             ),
@@ -267,7 +288,8 @@ class RecapView extends StatelessWidget {
     });
   }
 
-  Widget _buildPaymentModesSection(BuildContext context, RecapController controller, bool isDark) {
+  Widget _buildPaymentModesSection(
+      BuildContext context, RecapController controller, bool isDark) {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.cardColor(context),
@@ -281,21 +303,43 @@ class RecapView extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
             decoration: BoxDecoration(
               color: Colors.grey.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.only(topLeft: Radius.circular(12.r), topRight: Radius.circular(12.r)),
+              borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(12.r),
+                  topRight: Radius.circular(12.r)),
             ),
             child: Row(
               children: [
-                Expanded(flex: 3, child: Text("Payment Mode", style: AppTheme.labelMedium.copyWith(fontFamily: AppTheme.fontBold, fontSize: 12.sp))),
-                Expanded(flex: 2, child: Text("System", style: AppTheme.labelMedium.copyWith(fontFamily: AppTheme.fontBold, fontSize: 12.sp), textAlign: TextAlign.right)),
-                Expanded(flex: 2, child: Text("Actual", style: AppTheme.labelMedium.copyWith(fontFamily: AppTheme.fontBold, fontSize: 12.sp), textAlign: TextAlign.right)),
-                Expanded(flex: 2, child: Text("Diff", style: AppTheme.labelMedium.copyWith(fontFamily: AppTheme.fontBold, fontSize: 12.sp), textAlign: TextAlign.right)),
+                Expanded(
+                    flex: 3,
+                    child: Text("Payment Mode",
+                        style: AppTheme.labelMedium.copyWith(
+                            fontFamily: AppTheme.fontBold, fontSize: 12.sp))),
+                Expanded(
+                    flex: 2,
+                    child: Text("System",
+                        style: AppTheme.labelMedium.copyWith(
+                            fontFamily: AppTheme.fontBold, fontSize: 12.sp),
+                        textAlign: TextAlign.right)),
+                Expanded(
+                    flex: 2,
+                    child: Text("Actual",
+                        style: AppTheme.labelMedium.copyWith(
+                            fontFamily: AppTheme.fontBold, fontSize: 12.sp),
+                        textAlign: TextAlign.right)),
+                Expanded(
+                    flex: 2,
+                    child: Text("Diff",
+                        style: AppTheme.labelMedium.copyWith(
+                            fontFamily: AppTheme.fontBold, fontSize: 12.sp),
+                        textAlign: TextAlign.right)),
               ],
             ),
           ),
           Expanded(
             child: ListView.separated(
               itemCount: controller.paymentModes.length,
-              separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.borderColor(context)),
+              separatorBuilder: (context, index) =>
+                  Divider(height: 1, color: AppTheme.borderColor(context)),
               itemBuilder: (context, index) {
                 final mode = controller.paymentModes[index];
                 final recorded = controller.getRecordedAmount(mode.id);
@@ -316,39 +360,63 @@ class RecapView extends StatelessWidget {
                     }
                   },
                   child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+                    padding:
+                        EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
                     child: Row(
                       children: [
                         Expanded(
                           flex: 3,
                           child: Row(
                             children: [
-                              Icon(Icons.payment_rounded, size: 14.sp, color: AppTheme.primaryColor),
+                              Icon(Icons.payment_rounded,
+                                  size: 14.sp, color: AppTheme.primaryColor),
                               SizedBox(width: 8.w),
-                              Text(mode.name, style: AppTheme.bodyLarge.copyWith(fontFamily: AppTheme.fontMedium, fontSize: 13.sp)),
+                              Text(mode.name,
+                                  style: AppTheme.bodyLarge.copyWith(
+                                      fontFamily: AppTheme.fontMedium,
+                                      fontSize: 13.sp)),
                             ],
                           ),
                         ),
                         Expanded(
                           flex: 2,
-                          child: Text(_formatRupiah(recorded), style: AppTheme.bodyLarge.copyWith(fontSize: 12.sp), textAlign: TextAlign.right),
+                          child: Text(_formatRupiah(recorded),
+                              style:
+                                  AppTheme.bodyLarge.copyWith(fontSize: 12.sp),
+                              textAlign: TextAlign.right),
                         ),
                         Expanded(
                           flex: 2,
                           child: Container(
                             margin: EdgeInsets.only(left: 8.w),
-                            padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 4.h),
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 6.w, vertical: 4.h),
                             decoration: BoxDecoration(
-                              color: audited > 0 ? AppTheme.primaryColor.withValues(alpha: 0.1) : Colors.transparent,
+                              color: audited > 0
+                                  ? AppTheme.primaryColor.withValues(alpha: 0.1)
+                                  : Colors.transparent,
                               borderRadius: BorderRadius.circular(6.r),
-                              border: Border.all(color: audited > 0 ? AppTheme.primaryColor.withValues(alpha: 0.3) : AppTheme.borderColor(context)),
+                              border: Border.all(
+                                  color: audited > 0
+                                      ? AppTheme.primaryColor
+                                          .withValues(alpha: 0.3)
+                                      : AppTheme.borderColor(context)),
                             ),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
-                                Text(_formatRupiah(audited), style: AppTheme.bodyLarge.copyWith(color: audited > 0 ? AppTheme.primaryColor : Colors.grey, fontFamily: AppTheme.fontBold, fontSize: 12.sp)),
+                                Text(_formatRupiah(audited),
+                                    style: AppTheme.bodyLarge.copyWith(
+                                        color: audited > 0
+                                            ? AppTheme.primaryColor
+                                            : Colors.grey,
+                                        fontFamily: AppTheme.fontBold,
+                                        fontSize: 12.sp)),
                                 SizedBox(width: 4.w),
-                                Icon(Icons.edit_note_rounded, size: 14.sp, color: AppTheme.primaryColor.withValues(alpha: 0.5)),
+                                Icon(Icons.edit_note_rounded,
+                                    size: 14.sp,
+                                    color: AppTheme.primaryColor
+                                        .withValues(alpha: 0.5)),
                               ],
                             ),
                           ),
@@ -357,8 +425,13 @@ class RecapView extends StatelessWidget {
                           flex: 2,
                           child: Text(_formatRupiah(diff),
                               style: AppTheme.bodyLarge.copyWith(
-                                  color: diff < 0 ? Colors.red : (diff > 0 ? Colors.orange : Colors.grey),
-                                  fontFamily: AppTheme.fontBold, fontSize: 12.sp),
+                                  color: diff < 0
+                                      ? Colors.red
+                                      : (diff > 0
+                                          ? Colors.orange
+                                          : Colors.grey),
+                                  fontFamily: AppTheme.fontBold,
+                                  fontSize: 12.sp),
                               textAlign: TextAlign.right),
                         ),
                       ],
@@ -373,7 +446,8 @@ class RecapView extends StatelessWidget {
     );
   }
 
-  Widget _buildCashFlowSection(BuildContext context, RecapController controller, bool isDark) {
+  Widget _buildCashFlowSection(
+      BuildContext context, RecapController controller, bool isDark) {
     return Obx(() {
       final items = controller.cashFlowItems;
       final cashOutItems = items.where((e) => e.direction == 'out').toList();
@@ -402,7 +476,8 @@ class RecapView extends StatelessWidget {
               ),
               child: Text(
                 'Cash Flow',
-                style: AppTheme.labelMedium.copyWith(fontFamily: AppTheme.fontBold, fontSize: 12.sp),
+                style: AppTheme.labelMedium
+                    .copyWith(fontFamily: AppTheme.fontBold, fontSize: 12.sp),
               ),
             ),
 
@@ -414,7 +489,8 @@ class RecapView extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.green.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(10.r),
-                  border: Border.all(color: Colors.green.withValues(alpha: 0.15)),
+                  border:
+                      Border.all(color: Colors.green.withValues(alpha: 0.15)),
                 ),
                 child: Row(
                   children: [
@@ -424,21 +500,31 @@ class RecapView extends StatelessWidget {
                         color: Colors.green.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6.r),
                       ),
-                      child: Icon(Icons.arrow_downward_rounded, size: 14.sp, color: Colors.green),
+                      child: Icon(Icons.arrow_downward_rounded,
+                          size: 14.sp, color: Colors.green),
                     ),
                     SizedBox(width: 8.w),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Cash In', style: AppTheme.labelMedium.copyWith(color: Colors.green, fontFamily: AppTheme.fontBold, fontSize: 11.sp)),
-                          Text('${cashInItems.length} transactions', style: AppTheme.labelMedium.copyWith(fontSize: 10.sp)),
+                          Text('Cash In',
+                              style: AppTheme.labelMedium.copyWith(
+                                  color: Colors.green,
+                                  fontFamily: AppTheme.fontBold,
+                                  fontSize: 11.sp)),
+                          Text('${cashInItems.length} transactions',
+                              style: AppTheme.labelMedium
+                                  .copyWith(fontSize: 10.sp)),
                         ],
                       ),
                     ),
                     Text(
                       _formatRupiah(totalIn),
-                      style: AppTheme.bodyLarge.copyWith(fontFamily: AppTheme.fontBold, color: Colors.green, fontSize: 12.sp),
+                      style: AppTheme.bodyLarge.copyWith(
+                          fontFamily: AppTheme.fontBold,
+                          color: Colors.green,
+                          fontSize: 12.sp),
                     ),
                   ],
                 ),
@@ -463,21 +549,31 @@ class RecapView extends StatelessWidget {
                         color: Colors.red.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6.r),
                       ),
-                      child: Icon(Icons.arrow_upward_rounded, size: 14.sp, color: Colors.red),
+                      child: Icon(Icons.arrow_upward_rounded,
+                          size: 14.sp, color: Colors.red),
                     ),
                     SizedBox(width: 8.w),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Cash Out', style: AppTheme.labelMedium.copyWith(color: Colors.red, fontFamily: AppTheme.fontBold, fontSize: 11.sp)),
-                          Text('${cashOutItems.length} transactions', style: AppTheme.labelMedium.copyWith(fontSize: 10.sp)),
+                          Text('Cash Out',
+                              style: AppTheme.labelMedium.copyWith(
+                                  color: Colors.red,
+                                  fontFamily: AppTheme.fontBold,
+                                  fontSize: 11.sp)),
+                          Text('${cashOutItems.length} transactions',
+                              style: AppTheme.labelMedium
+                                  .copyWith(fontSize: 10.sp)),
                         ],
                       ),
                     ),
                     Text(
                       _formatRupiah(totalOut),
-                      style: AppTheme.bodyLarge.copyWith(fontFamily: AppTheme.fontBold, color: Colors.red, fontSize: 12.sp),
+                      style: AppTheme.bodyLarge.copyWith(
+                          fontFamily: AppTheme.fontBold,
+                          color: Colors.red,
+                          fontSize: 12.sp),
                     ),
                   ],
                 ),
@@ -493,30 +589,38 @@ class RecapView extends StatelessWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.account_balance_wallet_outlined, size: 28.sp, color: Colors.grey.shade400),
+                          Icon(Icons.account_balance_wallet_outlined,
+                              size: 28.sp, color: Colors.grey.shade400),
                           SizedBox(height: 8.h),
-                          Text('No cash flow recorded', style: AppTheme.bodyLarge.copyWith(color: Colors.grey, fontSize: 12.sp)),
+                          Text('No cash flow recorded',
+                              style: AppTheme.bodyLarge.copyWith(
+                                  color: Colors.grey, fontSize: 12.sp)),
                         ],
                       ),
                     )
                   : ListView.separated(
                       itemCount: items.length,
-                      separatorBuilder: (_, __) => Divider(height: 1, color: AppTheme.borderColor(context)),
+                      separatorBuilder: (_, __) => Divider(
+                          height: 1, color: AppTheme.borderColor(context)),
                       itemBuilder: (context, index) {
                         final item = items[index];
                         final isOut = item.direction == 'out';
                         return Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 14.w, vertical: 8.h),
                           child: Row(
                             children: [
                               Container(
                                 padding: EdgeInsets.all(5.w),
                                 decoration: BoxDecoration(
-                                  color: (isOut ? Colors.red : Colors.green).withValues(alpha: 0.08),
+                                  color: (isOut ? Colors.red : Colors.green)
+                                      .withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(5.r),
                                 ),
                                 child: Icon(
-                                  isOut ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                                  isOut
+                                      ? Icons.arrow_upward_rounded
+                                      : Icons.arrow_downward_rounded,
                                   size: 12.sp,
                                   color: isOut ? Colors.red : Colors.green,
                                 ),
@@ -524,8 +628,11 @@ class RecapView extends StatelessWidget {
                               SizedBox(width: 8.w),
                               Expanded(
                                 child: Text(
-                                  item.expenseName.isNotEmpty ? item.expenseName : 'Expense',
-                                  style: AppTheme.bodyLarge.copyWith(fontSize: 12.sp),
+                                  item.expenseName.isNotEmpty
+                                      ? item.expenseName
+                                      : 'Expense',
+                                  style: AppTheme.bodyLarge
+                                      .copyWith(fontSize: 12.sp),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -551,11 +658,14 @@ class RecapView extends StatelessWidget {
   }
 
   Widget _buildHistoryTab(BuildContext context, RecapController controller) {
-    return Obx(() {
+    return Obx(
+      () {
         final history = controller.shiftHistory;
 
         if (history.isEmpty) {
-          return Center(child: Text("No shift history found", style: AppTheme.bodyLarge.copyWith(color: Colors.grey)));
+          return Center(
+              child: Text("No shift history found",
+                  style: AppTheme.bodyLarge.copyWith(color: Colors.grey)));
         }
 
         return ListView.builder(
@@ -563,14 +673,18 @@ class RecapView extends StatelessWidget {
           itemCount: history.length,
           itemBuilder: (context, index) {
             final shift = history[index];
-            final startTime = DateTime.tryParse(shift['start_time'] ?? "") ?? DateTime.now();
+            final startTime =
+                DateTime.tryParse(shift['start_time'] ?? "") ?? DateTime.now();
             final endTimeStr = shift['end_time']?.toString() ?? "";
-            final endTime = endTimeStr.isNotEmpty ? DateTime.tryParse(endTimeStr) : null;
+            final endTime =
+                endTimeStr.isNotEmpty ? DateTime.tryParse(endTimeStr) : null;
             final dateStr = DateFormat('dd MMM yyyy').format(startTime);
-            final timeRange = "${DateFormat('HH:mm').format(startTime)} - ${endTime != null ? DateFormat('HH:mm').format(endTime) : 'Active'}";
+            final timeRange =
+                "${DateFormat('HH:mm').format(startTime)} - ${endTime != null ? DateFormat('HH:mm').format(endTime) : 'Active'}";
 
             // Compute System Cash from reconciliation_data if available (more accurate)
-            int systemCash = (shift['total_cash_expected'] as num?)?.toInt() ?? 0;
+            int systemCash =
+                (shift['total_cash_expected'] as num?)?.toInt() ?? 0;
             int actualCash = (shift['total_cash_actual'] as num?)?.toInt() ?? 0;
 
             try {
@@ -586,16 +700,22 @@ class RecapView extends StatelessWidget {
                     systemCash = (summary['total_system_cash'] as num).toInt();
                   }
                   if (summary['actual_cash'] != null) {
-                    actualCash = (summary['actual_cash'] as num).toInt();
+                    final summaryActualCash =
+                        (summary['actual_cash'] as num).toInt();
+                    final fallbackActualCash =
+                        (shift['total_cash_actual'] as num?)?.toInt() ?? 0;
+                    actualCash =
+                        summaryActualCash == 0 && fallbackActualCash > 0
+                            ? fallbackActualCash
+                            : summaryActualCash;
                   } else if (summary['total_actual_cash'] != null) {
                     actualCash = (summary['total_actual_cash'] as num).toInt();
                   }
                 }
               }
             } catch (_) {}
-            
-            final difference = actualCash - systemCash;
 
+            final difference = actualCash - systemCash;
 
             return InkWell(
               onTap: () => _showShiftDetailDialog(context, shift),
@@ -604,9 +724,14 @@ class RecapView extends StatelessWidget {
                 margin: EdgeInsets.only(bottom: 16.h),
                 padding: EdgeInsets.all(20.w),
                 decoration: BoxDecoration(
-                  color: shift['shift_name'] == 'End of Day' ? Colors.purple.withValues(alpha: 0.05) : AppTheme.cardColor(context),
+                  color: shift['shift_name'] == 'End of Day'
+                      ? Colors.purple.withValues(alpha: 0.05)
+                      : AppTheme.cardColor(context),
                   borderRadius: BorderRadius.circular(16.r),
-                  border: Border.all(color: shift['shift_name'] == 'End of Day' ? Colors.purple.withValues(alpha: 0.3) : AppTheme.borderColor(context)),
+                  border: Border.all(
+                      color: shift['shift_name'] == 'End of Day'
+                          ? Colors.purple.withValues(alpha: 0.3)
+                          : AppTheme.borderColor(context)),
                 ),
                 child: Column(
                   children: [
@@ -619,49 +744,69 @@ class RecapView extends StatelessWidget {
                             Row(
                               children: [
                                 if (shift['shift_name'] == 'End of Day') ...[
-                                  Icon(Icons.auto_awesome, color: Colors.purple, size: 20.sp),
+                                  Icon(Icons.auto_awesome,
+                                      color: Colors.purple, size: 20.sp),
                                   SizedBox(width: 8.w),
                                 ],
-                                Text("${shift['shift_name']} • ${shift['user_id'] ?? 'Kasir'}", style: AppTheme.titleLarge.copyWith(fontSize: 18.sp, color: shift['shift_name'] == 'End of Day' ? Colors.purple : null)),
+                                Text(
+                                    "${shift['shift_name']} • ${shift['user_id'] ?? 'Kasir'}",
+                                    style: AppTheme.titleLarge.copyWith(
+                                        fontSize: 18.sp,
+                                        color:
+                                            shift['shift_name'] == 'End of Day'
+                                                ? Colors.purple
+                                                : null)),
                               ],
                             ),
-                            Text("$dateStr | $timeRange", style: AppTheme.labelMedium),
+                            Text("$dateStr | $timeRange",
+                                style: AppTheme.labelMedium),
                           ],
                         ),
                         Row(
                           children: [
                             IconButton(
-                              icon: Icon(Icons.print, color: AppTheme.primaryColor, size: 22.sp),
+                              icon: Icon(Icons.print,
+                                  color: AppTheme.primaryColor, size: 22.sp),
                               onPressed: () {
-                                final shiftModel = ShiftSessionModel.fromJson(shift);
+                                final shiftModel =
+                                    ShiftSessionModel.fromJson(shift);
                                 final Map<String, int> recapData = {
-                                  'cash': (shift['total_cash_expected'] as num?)?.toInt() ?? 0,
-                                  'nonCash': (shift['total_non_cash'] as num?)?.toInt() ?? 0,
+                                  'cash': (shift['total_cash_expected'] as num?)
+                                          ?.toInt() ??
+                                      0,
+                                  'nonCash': (shift['total_non_cash'] as num?)
+                                          ?.toInt() ??
+                                      0,
                                 };
-                                Get.find<SettingController>().printZReport(shiftModel, recapData);
+                                Get.find<SettingController>()
+                                    .printZReport(shiftModel, recapData);
                               },
                               tooltip: "Re-print Z-Report",
                             ),
-                            Builder(
-                              builder: (context) {
-                                final isSynced = (shift['is_synced'] as int?) == 1;
-                                return Tooltip(
-                                  message: isSynced ? "Synced" : "Pending Sync",
-                                  child: Container(
-                                    padding: EdgeInsets.all(8.w),
-                                    decoration: BoxDecoration(
-                                      color: isSynced ? Colors.green.withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      isSynced ? Icons.cloud_done_rounded : Icons.cloud_upload_rounded, 
-                                      color: isSynced ? Colors.green : Colors.orange, 
-                                      size: 24.sp
-                                    ),
+                            Builder(builder: (context) {
+                              final isSynced =
+                                  (shift['is_synced'] as int?) == 1;
+                              return Tooltip(
+                                message: isSynced ? "Synced" : "Pending Sync",
+                                child: Container(
+                                  padding: EdgeInsets.all(8.w),
+                                  decoration: BoxDecoration(
+                                    color: isSynced
+                                        ? Colors.green.withValues(alpha: 0.1)
+                                        : Colors.orange.withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
                                   ),
-                                );
-                              }
-                            ),
+                                  child: Icon(
+                                      isSynced
+                                          ? Icons.cloud_done_rounded
+                                          : Icons.cloud_upload_rounded,
+                                      color: isSynced
+                                          ? Colors.green
+                                          : Colors.orange,
+                                      size: 24.sp),
+                                ),
+                              );
+                            }),
                           ],
                         ),
                       ],
@@ -672,10 +817,14 @@ class RecapView extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                         _buildHistoryStat("Opening", _formatRupiah(shift['starting_balance'] ?? 0)),
-                         _buildHistoryStat("System Cash", _formatRupiah(systemCash)),
-                         _buildHistoryStat("Actual Cash", _formatRupiah(actualCash)),
-                         _buildHistoryStat("Difference", _formatRupiah(difference)),
+                        _buildHistoryStat("Opening",
+                            _formatRupiah(shift['starting_balance'] ?? 0)),
+                        _buildHistoryStat(
+                            "System Cash", _formatRupiah(systemCash)),
+                        _buildHistoryStat(
+                            "Actual Cash", _formatRupiah(actualCash)),
+                        _buildHistoryStat(
+                            "Difference", _formatRupiah(difference)),
                       ],
                     ),
                   ],
@@ -694,12 +843,14 @@ class RecapView extends StatelessWidget {
       children: [
         Text(label, style: AppTheme.labelMedium.copyWith(fontSize: 10.sp)),
         SizedBox(height: 4.h),
-        Text(value, style: AppTheme.bodyLarge.copyWith(fontFamily: AppTheme.fontBold)),
+        Text(value,
+            style: AppTheme.bodyLarge.copyWith(fontFamily: AppTheme.fontBold)),
       ],
     );
   }
 
-  Widget _buildStatCard(String label, String value, Color color, BuildContext context) {
+  Widget _buildStatCard(
+      String label, String value, Color color, BuildContext context) {
     return Expanded(
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
@@ -711,29 +862,41 @@ class RecapView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: AppTheme.labelMedium.copyWith(color: color, fontFamily: AppTheme.fontBold, fontSize: 10.sp)),
+            Text(label,
+                style: AppTheme.labelMedium.copyWith(
+                    color: color,
+                    fontFamily: AppTheme.fontBold,
+                    fontSize: 10.sp)),
             SizedBox(height: 4.h),
-            Text(value, style: AppTheme.titleLarge.copyWith(color: color, fontSize: 18.sp, fontFamily: AppTheme.fontBold)),
+            Text(value,
+                style: AppTheme.titleLarge.copyWith(
+                    color: color,
+                    fontSize: 18.sp,
+                    fontFamily: AppTheme.fontBold)),
           ],
         ),
       ),
     );
   }
 
-  void _showShiftDetailDialog(BuildContext context, Map<String, dynamic> shift) {
-    final String reconDataRaw = shift['reconciliation_data']?.toString() ?? "[]";
+  void _showShiftDetailDialog(
+      BuildContext context, Map<String, dynamic> shift) {
+    final String reconDataRaw =
+        shift['reconciliation_data']?.toString() ?? "[]";
     List<dynamic> reconList = [];
     try {
       reconList = jsonDecode(reconDataRaw);
     } catch (_) {}
 
-    final Map<String, dynamic> data = reconList.isNotEmpty ? reconList.first : {};
+    final Map<String, dynamic> data =
+        reconList.isNotEmpty ? reconList.first : {};
     final List<dynamic> paymentModes = data['payment_modes'] ?? [];
     final List<dynamic> productsSold = data['products_sold'] ?? [];
 
     Get.dialog(
       Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
         child: Container(
           width: 0.8.sw,
           height: 0.8.sh,
@@ -747,11 +910,15 @@ class RecapView extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Shift Detail: ${shift['shift_name']}", style: AppTheme.titleLarge),
-                      Text("PIC: ${shift['user_id'] ?? 'Unknown'}", style: AppTheme.labelMedium),
+                      Text("Shift Detail: ${shift['shift_name']}",
+                          style: AppTheme.titleLarge),
+                      Text("PIC: ${shift['user_id'] ?? 'Unknown'}",
+                          style: AppTheme.labelMedium),
                     ],
                   ),
-                  IconButton(onPressed: () => Get.back(), icon: const Icon(Icons.close)),
+                  IconButton(
+                      onPressed: () => Get.back(),
+                      icon: const Icon(Icons.close)),
                 ],
               ),
               const Divider(),
@@ -761,13 +928,18 @@ class RecapView extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Payment Breakdown", style: AppTheme.bodyLarge.copyWith(fontFamily: AppTheme.fontBold)),
+                      Text("Payment Breakdown",
+                          style: AppTheme.bodyLarge
+                              .copyWith(fontFamily: AppTheme.fontBold)),
                       SizedBox(height: 12.h),
                       Table(
-                        border: TableBorder.all(color: AppTheme.borderColor(context), borderRadius: BorderRadius.circular(8.r)),
+                        border: TableBorder.all(
+                            color: AppTheme.borderColor(context),
+                            borderRadius: BorderRadius.circular(8.r)),
                         children: [
                           TableRow(
-                            decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.05)),
+                            decoration: BoxDecoration(
+                                color: Colors.grey.withValues(alpha: 0.05)),
                             children: [
                               _tableHeader("Mode"),
                               _tableHeader("System"),
@@ -776,23 +948,41 @@ class RecapView extends StatelessWidget {
                             ],
                           ),
                           ...paymentModes.map((p) => TableRow(
-                            children: [
-                              _tableCell(p['name'] ?? ''),
-                              _tableCell(_formatRupiah((p['recorded'] as num?)?.toInt() ?? 0), align: TextAlign.right),
-                              _tableCell(_formatRupiah((p['audited'] as num?)?.toInt() ?? 0), align: TextAlign.right),
-                              _tableCell(_formatRupiah((p['diff'] as num?)?.toInt() ?? 0), align: TextAlign.right, color: (p['diff'] as num? ?? 0) < 0 ? Colors.red : Colors.green),
-                            ],
-                          )),
+                                children: [
+                                  _tableCell(p['name'] ?? ''),
+                                  _tableCell(
+                                      _formatRupiah(
+                                          (p['recorded'] as num?)?.toInt() ??
+                                              0),
+                                      align: TextAlign.right),
+                                  _tableCell(
+                                      _formatRupiah(
+                                          (p['audited'] as num?)?.toInt() ?? 0),
+                                      align: TextAlign.right),
+                                  _tableCell(
+                                      _formatRupiah(
+                                          (p['diff'] as num?)?.toInt() ?? 0),
+                                      align: TextAlign.right,
+                                      color: (p['diff'] as num? ?? 0) < 0
+                                          ? Colors.red
+                                          : Colors.green),
+                                ],
+                              )),
                         ],
                       ),
                       SizedBox(height: 32.h),
-                      Text("Products Sold", style: AppTheme.bodyLarge.copyWith(fontFamily: AppTheme.fontBold)),
+                      Text("Products Sold",
+                          style: AppTheme.bodyLarge
+                              .copyWith(fontFamily: AppTheme.fontBold)),
                       SizedBox(height: 12.h),
                       Table(
-                        border: TableBorder.all(color: AppTheme.borderColor(context), borderRadius: BorderRadius.circular(8.r)),
+                        border: TableBorder.all(
+                            color: AppTheme.borderColor(context),
+                            borderRadius: BorderRadius.circular(8.r)),
                         children: [
                           TableRow(
-                            decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.05)),
+                            decoration: BoxDecoration(
+                                color: Colors.grey.withValues(alpha: 0.05)),
                             children: [
                               _tableHeader("Product Name"),
                               _tableHeader("Qty"),
@@ -800,12 +990,16 @@ class RecapView extends StatelessWidget {
                             ],
                           ),
                           ...productsSold.map((p) => TableRow(
-                            children: [
-                              _tableCell(p['name'] ?? ''),
-                              _tableCell("${p['qty']}", align: TextAlign.right),
-                              _tableCell(_formatRupiah((p['total'] as num?)?.toInt() ?? 0), align: TextAlign.right),
-                            ],
-                          )),
+                                children: [
+                                  _tableCell(p['name'] ?? ''),
+                                  _tableCell("${p['qty']}",
+                                      align: TextAlign.right),
+                                  _tableCell(
+                                      _formatRupiah(
+                                          (p['total'] as num?)?.toInt() ?? 0),
+                                      align: TextAlign.right),
+                                ],
+                              )),
                         ],
                       ),
                     ],
@@ -820,12 +1014,18 @@ class RecapView extends StatelessWidget {
   }
 
   Widget _tableHeader(String text) => Padding(
-    padding: EdgeInsets.all(10.w),
-    child: Text(text, style: AppTheme.labelMedium.copyWith(fontFamily: AppTheme.fontBold)),
-  );
+        padding: EdgeInsets.all(10.w),
+        child: Text(text,
+            style:
+                AppTheme.labelMedium.copyWith(fontFamily: AppTheme.fontBold)),
+      );
 
-  Widget _tableCell(String text, {TextAlign align = TextAlign.left, Color? color}) => Padding(
-    padding: EdgeInsets.all(10.w),
-    child: Text(text, style: AppTheme.bodyLarge.copyWith(fontSize: 13.sp, color: color), textAlign: align),
-  );
+  Widget _tableCell(String text,
+          {TextAlign align = TextAlign.left, Color? color}) =>
+      Padding(
+        padding: EdgeInsets.all(10.w),
+        child: Text(text,
+            style: AppTheme.bodyLarge.copyWith(fontSize: 13.sp, color: color),
+            textAlign: align),
+      );
 }

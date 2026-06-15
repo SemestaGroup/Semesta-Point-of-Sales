@@ -45,7 +45,8 @@ class RecapController extends GetxController {
         if (status == 'Sync Complete' ||
             status == 'Payments Updated' ||
             status == 'Orders Updated') {
-          debugPrint('[RecapController] Sync event "$status" — refreshing shift totals.');
+          debugPrint(
+              '[RecapController] Sync event "$status" — refreshing shift totals.');
           calculateShiftTotals();
         }
       });
@@ -88,7 +89,8 @@ class RecapController extends GetxController {
           }
         }
       } else {
-        debugPrint("RecapController: API returned non-success state, falling back to local DB");
+        debugPrint(
+            "RecapController: API returned non-success state, falling back to local DB");
         await _loadPaymentModesFromLocal();
       }
     } catch (e) {
@@ -97,7 +99,8 @@ class RecapController extends GetxController {
     }
 
     if (paymentModes.isEmpty) {
-      debugPrint("RecapController: Payment modes still empty after API and Local load");
+      debugPrint(
+          "RecapController: Payment modes still empty after API and Local load");
     }
   }
 
@@ -120,7 +123,8 @@ class RecapController extends GetxController {
     await _loadCashFlowForShift();
 
     final shift = _shiftController.activeShift.value!;
-    final startTime = shift.startTime.toIso8601String().replaceAll('T', ' ').split('.')[0];
+    final startTime =
+        shift.startTime.toIso8601String().replaceAll('T', ' ').split('.')[0];
 
     try {
       // ONE ROW PER TRANSACTION — guaranteed by selecting only from transactions
@@ -147,23 +151,26 @@ class RecapController extends GetxController {
           )
       ''', [startTime, startTime]);
 
-      debugPrint('[RecapController] calculateShiftTotals: ${rows.length} paid tx since $startTime');
+      debugPrint(
+          '[RecapController] calculateShiftTotals: ${rows.length} paid tx since $startTime');
 
       recordedTotals.clear();
       for (var r in rows) {
-        final int amount = double.tryParse(r['amount']?.toString() ?? '0')?.toInt() ?? 0;
+        final int amount =
+            double.tryParse(r['amount']?.toString() ?? '0')?.toInt() ?? 0;
         if (amount == 0) continue;
 
-        final String ppMethod = (r['pp_method']?.toString() ?? 'Cash').toLowerCase();
-        
+        final String ppMethod =
+            (r['pp_method']?.toString() ?? 'Cash').toLowerCase();
+
         PaymentModeModel? matched = paymentModes.firstWhereOrNull(
           (m) => m.id == ppMethod,
         );
-        
+
         matched ??= paymentModes.firstWhereOrNull(
           (m) => m.name.toLowerCase() == ppMethod,
         );
-        
+
         // Fallback to cash if not matched
         final String groupKey = matched?.id ?? '1';
         recordedTotals[groupKey] = (recordedTotals[groupKey] ?? 0) + amount;
@@ -172,12 +179,14 @@ class RecapController extends GetxController {
       // Add Opening Balance (Modal Awal) to the Cash recorded total.
       if (shift.startingBalance > 0) {
         final cashMode = paymentModes.firstWhereOrNull(
-          (m) => m.name.toLowerCase().contains('cash') ||
-                 m.name.toLowerCase().contains('tunai') ||
-                 m.id == '1',
+          (m) =>
+              m.name.toLowerCase().contains('cash') ||
+              m.name.toLowerCase().contains('tunai') ||
+              m.id == '1',
         );
         final cashKey = cashMode?.id ?? '1';
-        recordedTotals[cashKey] = (recordedTotals[cashKey] ?? 0) + shift.startingBalance;
+        recordedTotals[cashKey] =
+            (recordedTotals[cashKey] ?? 0) + shift.startingBalance;
       }
     } catch (e) {
       debugPrint("RecapController: Error calculating shift totals: $e");
@@ -190,7 +199,7 @@ class RecapController extends GetxController {
     final startTime = shift.startTime.toIso8601String();
     // Format time for SQLite comparison (replace 'T' with ' ')
     final startTimeSql = startTime.replaceAll('T', ' ').split('.')[0];
-    
+
     final List<Map<String, dynamic>> list = [];
     try {
       final productsQuery = await _dbService.rawQuery('''
@@ -213,8 +222,8 @@ class RecapController extends GetxController {
         }
       }
       productsSoldList.value = list;
-    } catch(e) { 
-      debugPrint("Error querying products sold: $e"); 
+    } catch (e) {
+      debugPrint("Error querying products sold: $e");
     }
   }
 
@@ -229,12 +238,14 @@ class RecapController extends GetxController {
       if (shiftId > 0) {
         // Load by shift ID
         final rows = await _dbService.getCashFlowByShift(shiftId);
-        cashFlowItems.value = rows.map((r) => CashFlowModel.fromMap(r)).toList();
+        cashFlowItems.value =
+            rows.map((r) => CashFlowModel.fromMap(r)).toList();
       } else {
         // Fallback: load by shift start time if no shift ID (e.g. active shift)
         final startTime = shift.startTime.toIso8601String();
         final rows = await _dbService.getCashFlowSince(startTime);
-        cashFlowItems.value = rows.map((r) => CashFlowModel.fromMap(r)).toList();
+        cashFlowItems.value =
+            rows.map((r) => CashFlowModel.fromMap(r)).toList();
       }
     } catch (e) {
       debugPrint('RecapController: Error loading cash flow: $e');
@@ -247,7 +258,30 @@ class RecapController extends GetxController {
 
   int getRecordedAmount(String modeId) => recordedTotals[modeId] ?? 0;
   int getAuditedAmount(String modeId) => auditedTotals[modeId] ?? 0;
-  int getDiffAmount(String modeId) => getAuditedAmount(modeId) - getRecordedAmount(modeId);
+  int getDiffAmount(String modeId) =>
+      getAuditedAmount(modeId) - getRecordedAmount(modeId);
+
+  String? _getCashModeId() {
+    final cashMode = paymentModes.firstWhereOrNull(
+      (m) =>
+          m.name.toLowerCase().contains('cash') ||
+          m.name.toLowerCase().contains('tunai') ||
+          m.id == '1' ||
+          m.id == '7',
+    );
+    return cashMode?.id;
+  }
+
+  int _getCashRecordedTotal() {
+    final cashModeId = _getCashModeId();
+    return cashModeId == null ? 0 : getRecordedAmount(cashModeId);
+  }
+
+  int _getCashAuditedTotal() {
+    final cashModeId = _getCashModeId();
+    if (cashModeId == null) return getTotalAudited();
+    return auditedTotals[cashModeId] ?? 0;
+  }
 
   int getTotalRecorded() => recordedTotals.values.fold(0, (a, b) => a + b);
   int getTotalAudited() => auditedTotals.values.fold(0, (a, b) => a + b);
@@ -268,19 +302,24 @@ class RecapController extends GetxController {
     // 1. Confirm Dialog
     bool? confirm = await Get.dialog<bool>(
       AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
         title: const Text('Close Shift?'),
         content: const Text(
             'Are you sure you want to close this shift? The reconciliation recap will be permanently saved along with the PIC identity.'),
         actions: [
-          TextButton(onPressed: () => Get.back(result: false), child: const Text('CANCEL')),
+          TextButton(
+              onPressed: () => Get.back(result: false),
+              child: const Text('CANCEL')),
           ElevatedButton(
             onPressed: () => Get.back(result: true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primaryColor,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.r)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10.r)),
             ),
-            child: const Text('YES, CLOSE SHIFT', style: TextStyle(color: Colors.white)),
+            child: const Text('YES, CLOSE SHIFT',
+                style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -289,7 +328,10 @@ class RecapController extends GetxController {
     if (confirm != true) return;
 
     // 2. Prepare Detailed Reconciliation Data
-    final startTime = _shiftController.activeShift.value!.startTime.toIso8601String().replaceAll('T', ' ').split('.')[0];
+    final startTime = _shiftController.activeShift.value!.startTime
+        .toIso8601String()
+        .replaceAll('T', ' ')
+        .split('.')[0];
 
     // 2a. Payment Modes
     final List<Map<String, dynamic>> paymentModesList = [];
@@ -316,11 +358,15 @@ class RecapController extends GetxController {
       ''', [startTime, startTime]);
       for (var row in orderTypesQuery) {
         orderTypesList.add({
-          'name': row['order_type']?.toString().isEmpty == true ? 'Unknown' : row['order_type'],
+          'name': row['order_type']?.toString().isEmpty == true
+              ? 'Unknown'
+              : row['order_type'],
           'total': (row['total'] as num?)?.toInt() ?? 0,
         });
       }
-    } catch(e) { debugPrint("Error querying order types: $e"); }
+    } catch (e) {
+      debugPrint("Error querying order types: $e");
+    }
 
     // 2c. Products Sold (Updated to include unit price)
     // Already fetched in _loadProductsSold() but we'll enrich it or ensure it has what we need
@@ -346,7 +392,8 @@ class RecapController extends GetxController {
         WHERE (REPLACE(substr(t.tgl_penjualan,1,19), 'T', ' ') >= ? OR REPLACE(substr(t.tgl_bayar,1,19), 'T', ' ') >= ?)
           AND t.status IN (2, 3)
       ''', [startTime, startTime]);
-      totalProductDiscount = (productDiscQuery.first['total'] as num?)?.toInt() ?? 0;
+      totalProductDiscount =
+          (productDiscQuery.first['total'] as num?)?.toInt() ?? 0;
 
       final transDiscQuery = await _dbService.rawQuery('''
         SELECT SUM(manual_discount_value) as total
@@ -354,8 +401,11 @@ class RecapController extends GetxController {
         WHERE (REPLACE(substr(tgl_penjualan,1,19), 'T', ' ') >= ? OR REPLACE(substr(tgl_bayar,1,19), 'T', ' ') >= ?)
           AND status IN (2, 3)
       ''', [startTime, startTime]);
-      totalTransactionDiscount = (transDiscQuery.first['total'] as num?)?.toInt() ?? 0;
-    } catch(e) { debugPrint("Error querying discounts: $e"); }
+      totalTransactionDiscount =
+          (transDiscQuery.first['total'] as num?)?.toInt() ?? 0;
+    } catch (e) {
+      debugPrint("Error querying discounts: $e");
+    }
 
     // 2e. Calculate Member Additions
     int memberAdditions = 0;
@@ -365,7 +415,9 @@ class RecapController extends GetxController {
         SELECT COUNT(*) as count FROM members WHERE is_synced = 0
       ''');
       memberAdditions = Sqflite.firstIntValue(memberQuery) ?? 0;
-    } catch(e) { debugPrint("Error querying member additions: $e"); }
+    } catch (e) {
+      debugPrint("Error querying member additions: $e");
+    }
 
     // 2f. Credit Notes (Refunds)
     final List<Map<String, dynamic>> creditNotesList = [];
@@ -385,35 +437,41 @@ class RecapController extends GetxController {
           'ref': row['reference_no'],
         });
       }
-    } catch(e) { debugPrint("Error querying credit notes: $e"); }
+    } catch (e) {
+      debugPrint("Error querying credit notes: $e");
+    }
 
     // 3. Build the full transactions array
-    final transactionsData = [{
-      'payment_modes': paymentModesList,
-      'order_types': orderTypesList,
-      'products_sold': enrichedProducts,
-      'discounts': {
-        'product': totalProductDiscount,
-        'transaction': totalTransactionDiscount,
-      },
-      'members': {
-        'additions': memberAdditions,
-      },
-      'credit_notes': {
-        'list': creditNotesList,
-        'total': totalCreditNotes,
-      },
-      'summary': {
-         'expected_cash': getTotalRecorded(),
-         'actual_cash': getTotalAudited(),
-         'difference': getTotalDiff(),
-         'status': 1
+    final expectedCash = _getCashRecordedTotal();
+    final actualCash = _getCashAuditedTotal();
+    final transactionsData = [
+      {
+        'payment_modes': paymentModesList,
+        'order_types': orderTypesList,
+        'products_sold': enrichedProducts,
+        'discounts': {
+          'product': totalProductDiscount,
+          'transaction': totalTransactionDiscount,
+        },
+        'members': {
+          'additions': memberAdditions,
+        },
+        'credit_notes': {
+          'list': creditNotesList,
+          'total': totalCreditNotes,
+        },
+        'summary': {
+          'expected_cash': expectedCash,
+          'actual_cash': actualCash,
+          'difference': actualCash - expectedCash,
+          'status': 1
+        }
       }
-    }];
+    ];
 
     // 4. Close Shift through ShiftController
     final result = await _shiftController.closeShift(
-      getTotalAudited(),
+      actualCash,
       'Closed from Reconciliation View',
       reconciliationData: jsonEncode(transactionsData),
     );
@@ -435,7 +493,8 @@ class RecapController extends GetxController {
       // 6. Show Beautiful Print Notification
       Get.dialog(
         Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
           child: Container(
             padding: EdgeInsets.all(24.w),
             decoration: BoxDecoration(
@@ -484,7 +543,8 @@ class RecapController extends GetxController {
                           padding: EdgeInsets.symmetric(vertical: 14.h),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12.r)),
-                          side: BorderSide(color: AppTheme.borderColor(Get.context!)),
+                          side: BorderSide(
+                              color: AppTheme.borderColor(Get.context!)),
                         ),
                         child: Text(
                           'LATER',
@@ -506,7 +566,8 @@ class RecapController extends GetxController {
                                 .printZReport(result['shift'], result['rekap']);
                           }
                         },
-                        icon: Icon(CupertinoIcons.printer_fill, size: 18.sp, color: Colors.white),
+                        icon: Icon(CupertinoIcons.printer_fill,
+                            size: 18.sp, color: Colors.white),
                         label: Text(
                           'PRINT NOW',
                           style: TextStyle(
@@ -538,19 +599,24 @@ class RecapController extends GetxController {
     // 1. Confirm Dialog
     bool? confirm = await Get.dialog<bool>(
       AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
         title: const Text('End of Day (Z-Report)?'),
         content: const Text(
             'Are you sure you want to close the store for today? This will calculate all shifts from 00:00 to 23:59, print the full Z-Report, and close the current shift without carrying over the balance to tomorrow.'),
         actions: [
-          TextButton(onPressed: () => Get.back(result: false), child: const Text('CANCEL')),
+          TextButton(
+              onPressed: () => Get.back(result: false),
+              child: const Text('CANCEL')),
           ElevatedButton(
             onPressed: () => Get.back(result: true),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.deepPurple,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.r)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10.r)),
             ),
-            child: const Text('YES, END OF DAY', style: TextStyle(color: Colors.white)),
+            child: const Text('YES, END OF DAY',
+                style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -560,9 +626,7 @@ class RecapController extends GetxController {
 
     // Call ShiftController's end of day method
     final result = await _shiftController.executeEndOfDay(
-      getTotalAudited(), 
-      'End of Day closed from Reconciliation View'
-    );
+        _getCashAuditedTotal(), 'End of Day closed from Reconciliation View');
 
     if (result != null) {
       // Reset local audit state and refresh history
@@ -578,7 +642,8 @@ class RecapController extends GetxController {
       // Show Beautiful Print Notification
       Get.dialog(
         Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
           child: Container(
             padding: EdgeInsets.all(24.w),
             decoration: BoxDecoration(
@@ -627,7 +692,8 @@ class RecapController extends GetxController {
                           padding: EdgeInsets.symmetric(vertical: 14.h),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12.r)),
-                          side: BorderSide(color: AppTheme.borderColor(Get.context!)),
+                          side: BorderSide(
+                              color: AppTheme.borderColor(Get.context!)),
                         ),
                         child: Text(
                           'LATER',
@@ -649,7 +715,8 @@ class RecapController extends GetxController {
                                 .printEndOfDayReport(result['eodData']);
                           }
                         },
-                        icon: Icon(CupertinoIcons.printer_fill, size: 18.sp, color: Colors.white),
+                        icon: Icon(CupertinoIcons.printer_fill,
+                            size: 18.sp, color: Colors.white),
                         label: Text(
                           'PRINT NOW',
                           style: TextStyle(

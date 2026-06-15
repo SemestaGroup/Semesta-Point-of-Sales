@@ -6,6 +6,7 @@ import 'package:semesta_pos/core/models/user/client_model.dart';
 import 'package:semesta_pos/core/services/app_service.dart';
 import 'package:semesta_pos/core/services/local/database_service.dart';
 import 'package:semesta_pos/core/services/remote/api_service.dart';
+import 'package:semesta_pos/core/services/sync_service.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
 import 'package:semesta_pos/core/util/constans.dart';
 import 'package:semesta_pos/routes/app_pages.dart';
@@ -50,7 +51,8 @@ class AuthController extends GetxController {
   @override
   void onReady() {
     super.onReady();
-    debugPrint("AuthController: Controller is READY, triggering staff fetch...");
+    debugPrint(
+        "AuthController: Controller is READY, triggering staff fetch...");
     fetchLocalStaff();
   }
 
@@ -75,12 +77,13 @@ class AuthController extends GetxController {
   Future<void> fetchLocalStaff() async {
     try {
       debugPrint("AuthController: Fetching staff list from local DB...");
-      final results =
-          await _dbService.query('staff', where: 'active = ?', whereArgs: ["1"])
-          .timeout(const Duration(seconds: 5), onTimeout: () {
-            debugPrint("AuthController TIMEOUT: Database query for staff took too long (> 5s)");
-            return [];
-          });
+      final results = await _dbService.query('staff',
+          where: 'active = ?',
+          whereArgs: ["1"]).timeout(const Duration(seconds: 5), onTimeout: () {
+        debugPrint(
+            "AuthController TIMEOUT: Database query for staff took too long (> 5s)");
+        return [];
+      });
       debugPrint("AuthController: Found ${results.length} staff members");
       staffList.assignAll(results.map((e) => StaffModel.fromJson(e)).toList());
       filteredStaff.assignAll(staffList);
@@ -100,14 +103,15 @@ class AuthController extends GetxController {
 
   Future<void> login() async {
     isLoading.value = true;
-    
+
     final rawEmail = emailController.text;
     final trimmedEmail = rawEmail.trim();
     final trimmedPassword = pwController.text.trim();
-    
-    debugPrint('AuthController: Raw email: "$rawEmail" (length: ${rawEmail.length})');
+
+    debugPrint(
+        'AuthController: Raw email: "$rawEmail" (length: ${rawEmail.length})');
     debugPrint('AuthController: Trimmed email: "$trimmedEmail"');
-    
+
     final Map<String, String> data = {
       'email': trimmedEmail,
       'password': trimmedPassword,
@@ -117,11 +121,13 @@ class AuthController extends GetxController {
     try {
       debugPrint('AuthController: Sending login request...');
       responseApiModel = await apiService.login(data);
-      debugPrint('AuthController: Login response received: ${responseApiModel.responsestate}');
+      debugPrint(
+          'AuthController: Login response received: ${responseApiModel.responsestate}');
     } catch (e) {
       debugPrint('AuthController Login Request Crash: $e');
       isLoading.value = false;
-      Get.snackbar("Error", "Gagal menghubungi server. Periksa koneksi internet Anda.");
+      Get.snackbar(
+          "Error", "Gagal menghubungi server. Periksa koneksi internet Anda.");
       return;
     }
 
@@ -134,38 +140,54 @@ class AuthController extends GetxController {
         await userService.initSharedPref();
 
         String baseUrl = authData['base_url'];
-        if (authData['location']?.toString() == '1070') {
-          baseUrl = 'http://mengwieskrimku.flinkaja.com/';
+        final locationRaw = authData['location']?.toString().trim() ?? '';
+        final isMengwiLocation = locationRaw.isEmpty ||
+            locationRaw.toLowerCase() == 'null' ||
+            locationRaw.toLowerCase() == 'unknown' ||
+            locationRaw == Constants.mengwiLocationId;
+        if (isMengwiLocation) {
+          baseUrl = Constants.mengwiBaseUrl;
           authData['base_url'] = baseUrl;
-          debugPrint('AuthController: Applied Mengwi base_url override: $baseUrl');
+          authData['email'] = Constants.mengwiEmail;
+          authData['location'] = Constants.mengwiLocationId;
+          debugPrint(
+              'AuthController: Applied Mengwi base_url override: $baseUrl');
         }
 
         // Save the critical auth data to SharedPreferences for core service lookups
-        await userService.saveAuthData(
-            baseUrl, Constants.staticAuthToken);
-        
+        await userService.saveAuthData(baseUrl, Constants.staticAuthToken);
+
         // PERSIST FULL SESSION TO SQLITE for offline profile and cashier name
         await userService.saveUserSession(authData);
 
+        if (Get.isRegistered<SyncService>()) {
+          await Get.find<SyncService>().ensureMengwiTenantBootstrap(
+            triggerQueue: false,
+          );
+        }
+
         // Save password for access code checks
         await userService.saveString('cached_password', trimmedPassword);
-        
+
         // Refresh App Settings will be handled by the /sync page sequence
         debugPrint('AuthController: Session saved. Transitioning to sync...');
 
         // Fetch Staff and update local DB
         debugPrint('AuthController: Fetching remote staff list...');
         final staffResponse = await apiService.getStaff();
-        if (staffResponse.responsestate == Constants.successState && staffResponse.data != null) {
+        if (staffResponse.responsestate == Constants.successState &&
+            staffResponse.data != null) {
           final List<StaffModel> remoteStaffList = staffResponse.data;
-          debugPrint('AuthController: Syncing ${remoteStaffList.length} staff to local DB using transaction');
-          
+          debugPrint(
+              'AuthController: Syncing ${remoteStaffList.length} staff to local DB using transaction');
+
           await _dbService.transaction((txn) async {
             // Clear within transaction
-            await txn.delete('staff'); 
-            
+            await txn.delete('staff');
+
             for (var staff in remoteStaffList) {
-              final staffId = staff.id != null ? int.tryParse(staff.id.toString()) : null;
+              final staffId =
+                  staff.id != null ? int.tryParse(staff.id.toString()) : null;
               final row = <String, dynamic>{
                 'firstname': staff.firstname ?? '',
                 'lastname': staff.lastname ?? '',
@@ -177,20 +199,22 @@ class AuthController extends GetxController {
                 'pin': staff.pin ?? '',
               };
               if (staffId != null && staffId > 0) row['id'] = staffId;
-              await txn.insert('staff', row, conflictAlgorithm: ConflictAlgorithm.replace);
+              await txn.insert('staff', row,
+                  conflictAlgorithm: ConflictAlgorithm.replace);
             }
           });
-          
+
           await fetchLocalStaff();
           debugPrint('AuthController: Staff sync completed');
         }
-        
-        debugPrint('AuthController: Login process completed. Navigating to selection...');
+
+        debugPrint(
+            'AuthController: Login process completed. Navigating to selection...');
         isLoading.value = false;
 
         // Redirect to Sync page FIRST
         Get.offAllNamed(Routes.sync);
-        
+
         // Show success msg AFTER navigation starts to avoid race condition with UI build
         Future.delayed(const Duration(milliseconds: 500), () {
           Get.snackbar("Success", "Synchronizing data...");
@@ -202,10 +226,12 @@ class AuthController extends GetxController {
       }
       return;
     } else {
-      debugPrint('AuthController: Login failed with message: ${responseApiModel.message}');
+      debugPrint(
+          'AuthController: Login failed with message: ${responseApiModel.message}');
       isLoading.value = false;
 
-      Get.snackbar("Error", responseApiModel.message?.toString() ?? "Login gagal");
+      Get.snackbar(
+          "Error", responseApiModel.message?.toString() ?? "Login gagal");
       return;
     }
   }
@@ -216,14 +242,17 @@ class AuthController extends GetxController {
       // Get current session data
       final session = await userService.getUserSession();
       if (session == null) {
-        Get.snackbar('Error', 'Sesi lokasi tidak ditemukan. Mohon login ulang.');
+        Get.snackbar(
+            'Error', 'Sesi lokasi tidak ditemukan. Mohon login ulang.');
         Get.offAllNamed(Routes.login);
         return;
       }
 
       // Update UserService with staff info (Legacy Compat)
       await userService.saveUserInfo(ClientModel(
-        userId: staff.id ?? int.tryParse(session['location']?.toString() ?? '0') ?? 0,
+        userId: staff.id ??
+            int.tryParse(session['location']?.toString() ?? '0') ??
+            0,
         name: staff.fullName,
         email: staff.email ?? '',
         role: staff.role?.toLowerCase() ?? 'cashier',
@@ -242,13 +271,15 @@ class AuthController extends GetxController {
       // Update pos_options with pos_active_staff (not pos_active_session which is for Shifts)
       if (Get.isRegistered<AppService>()) {
         final appService = Get.find<AppService>();
-        await appService.saveSettingsLocally({'pos_active_staff': staff.fullName});
-        
+        await appService
+            .saveSettingsLocally({'pos_active_staff': staff.fullName});
+
         // Try syncing this option to backend
         try {
-          await apiService.updatePosOptions({'pos_active_staff': staff.fullName});
+          await apiService
+              .updatePosOptions({'pos_active_staff': staff.fullName});
         } catch (_) {}
-        
+
         await appService.fetchAppData();
       }
 
@@ -259,7 +290,8 @@ class AuthController extends GetxController {
       Get.snackbar("Success", "Enjoy your work, ${staff.fullName}!");
 
       // Since sync is already done during initial login/boot, go straight to dashboard
-      if (staff.role?.toLowerCase() == 'owner' || staff.role?.toLowerCase() == 'supervisor') {
+      if (staff.role?.toLowerCase() == 'owner' ||
+          staff.role?.toLowerCase() == 'supervisor') {
         Get.offAllNamed(Routes.dashboardAdmin);
       } else {
         Get.offAllNamed(Routes.dashboardEmployee);
@@ -272,8 +304,8 @@ class AuthController extends GetxController {
   }
 
   Future<void> changeUser() async {
-    // We do NOT clear the session here. 
-    // This allows the user to press the 'Back' button on the Staff Selection screen 
+    // We do NOT clear the session here.
+    // This allows the user to press the 'Back' button on the Staff Selection screen
     // to cancel switching staff and return to their active dashboard.
     Get.toNamed(Routes.staffSelection);
   }
@@ -281,7 +313,7 @@ class AuthController extends GetxController {
   Future<void> lockAccount() async {
     // Lock the account so the user cannot go back to the dashboard without entering a PIN
     await userService.saveBool('has_active_staff', false);
-    
+
     if (Get.isRegistered<AppService>()) {
       final appService = Get.find<AppService>();
       await appService.saveSettingsLocally({'pos_active_staff': ''});
@@ -289,11 +321,11 @@ class AuthController extends GetxController {
 
     // Replace the route to clear the back stack
     Get.offAllNamed(Routes.staffSelection);
-    
+
     Get.snackbar(
-      'Aplikasi Terkunci', 
+      'Aplikasi Terkunci',
       'Silakan pilih akun dan masukkan PIN untuk melanjutkan.',
-      backgroundColor: Colors.orange.shade700, 
+      backgroundColor: Colors.orange.shade700,
       colorText: Colors.white,
       duration: const Duration(seconds: 3),
     );
@@ -303,12 +335,14 @@ class AuthController extends GetxController {
     isLoading.value = true;
     try {
       final staffResponse = await apiService.getStaff();
-      if (staffResponse.responsestate == Constants.successState && staffResponse.data != null) {
+      if (staffResponse.responsestate == Constants.successState &&
+          staffResponse.data != null) {
         final List<StaffModel> remoteStaffList = staffResponse.data;
         await _dbService.transaction((txn) async {
           await txn.delete('staff');
           for (var staff in remoteStaffList) {
-            final staffId = staff.id != null ? int.tryParse(staff.id.toString()) : null;
+            final staffId =
+                staff.id != null ? int.tryParse(staff.id.toString()) : null;
             final row = <String, dynamic>{
               'firstname': staff.firstname ?? '',
               'lastname': staff.lastname ?? '',
@@ -320,13 +354,15 @@ class AuthController extends GetxController {
               'pin': staff.pin ?? '',
             };
             if (staffId != null && staffId > 0) row['id'] = staffId;
-            await txn.insert('staff', row, conflictAlgorithm: ConflictAlgorithm.replace);
+            await txn.insert('staff', row,
+                conflictAlgorithm: ConflictAlgorithm.replace);
           }
         });
         await fetchLocalStaff();
         // Get.snackbar('Staff Diperbarui', '${remoteStaffList.length} staff berhasil disinkronkan.', backgroundColor: Colors.green.shade600, colorText: Colors.white, duration: const Duration(seconds: 2));
       } else {
-        Get.snackbar('Gagal Sync Staff', staffResponse.message ?? 'Unknown error',
+        Get.snackbar(
+            'Gagal Sync Staff', staffResponse.message ?? 'Unknown error',
             backgroundColor: Colors.red.shade600, colorText: Colors.white);
       }
     } catch (e) {
@@ -345,8 +381,10 @@ class AuthController extends GetxController {
     isAddingStaff.value = true;
     try {
       final sanitizedFirst = firstname.trim();
-      final sanitizedLast = (lastname?.trim().isEmpty ?? true) ? '-' : lastname!.trim();
-      final email = '${sanitizedFirst.toLowerCase().replaceAll(' ', '_')}.notreal@email.com';
+      final sanitizedLast =
+          (lastname?.trim().isEmpty ?? true) ? '-' : lastname!.trim();
+      final email =
+          '${sanitizedFirst.toLowerCase().replaceAll(' ', '_')}.notreal@email.com';
 
       final body = {
         'firstname': sanitizedFirst,
@@ -361,8 +399,10 @@ class AuthController extends GetxController {
       final response = await apiService.createStaff(body);
       if (response.responsestate == Constants.successState) {
         Get.back();
-        Get.snackbar('Staff Ditambahkan', 'Staff "$sanitizedFirst" berhasil dibuat.',
-            backgroundColor: Colors.green.shade600, colorText: Colors.white,
+        Get.snackbar(
+            'Staff Ditambahkan', 'Staff "$sanitizedFirst" berhasil dibuat.',
+            backgroundColor: Colors.green.shade600,
+            colorText: Colors.white,
             duration: const Duration(seconds: 3));
         // Sync local DB with updated list from server
         await refreshStaff();
@@ -394,13 +434,14 @@ class AuthController extends GetxController {
     Get.dialog(
       AlertDialog(
         title: const Text('Keluar dari Lokasi'),
-        content: const Text('Apakah Anda yakin ingin keluar dan kembali ke layar login? Seluruh sesi dan data offline akan dihapus bersih.'),
+        content: const Text(
+            'Apakah Anda yakin ingin keluar dan kembali ke layar login? Seluruh sesi dan data offline akan dihapus bersih.'),
         actions: [
           TextButton(onPressed: () => Get.back(), child: const Text('Batal')),
           ElevatedButton(
             onPressed: () async {
               Get.back(); // Tutup dialog konfirmasi
-              
+
               // Tampilkan dialog loading yang tidak bisa ditutup
               Get.dialog(
                 const PopScope(
@@ -421,7 +462,7 @@ class AuthController extends GetxController {
                 await Future.delayed(const Duration(milliseconds: 500));
 
                 // Kembali ke layar login
-                // Jika MainApp sudah re-build karena isLoggedIn berubah, 
+                // Jika MainApp sudah re-build karena isLoggedIn berubah,
                 // pemanggilan ini akan memastikan kita berada di halaman login.
                 Get.offAllNamed(Routes.login);
               } catch (e) {
@@ -430,7 +471,8 @@ class AuthController extends GetxController {
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Keluar & Hapus Data', style: TextStyle(color: Colors.white)),
+            child: const Text('Keluar & Hapus Data',
+                style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

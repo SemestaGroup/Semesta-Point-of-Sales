@@ -84,6 +84,16 @@ class SettingScreen extends GetView<SettingController> {
                                   keyboardType: TextInputType.number,
                                 ),
                                 SizedBox(height: 20.h),
+                                _buildInputField(
+                                  context,
+                                  controller: controller
+                                      .transactionWebhookUrlFieldController,
+                                  label: 'Transaction Webhook URL',
+                                  hint: 'https://example.com/webhook',
+                                  icon: CupertinoIcons.link,
+                                  keyboardType: TextInputType.url,
+                                ),
+                                SizedBox(height: 20.h),
                                 Divider(
                                     height: 1.h,
                                     color: AppTheme.borderColor(context)),
@@ -348,7 +358,8 @@ class SettingScreen extends GetView<SettingController> {
                             child: Column(
                               children: [
                                 InkWell(
-                                  onTap: () => Get.to(() => const PrinterManagementView()),
+                                  onTap: () => Get.to(
+                                      () => const PrinterManagementView()),
                                   child: Obx(() {
                                     final count =
                                         controller.assignedPrinters.length;
@@ -392,7 +403,6 @@ class SettingScreen extends GetView<SettingController> {
                                     ),
                                   );
                                 }),
-
                               ],
                             ),
                           ),
@@ -703,7 +713,7 @@ class SettingScreen extends GetView<SettingController> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "General Settings",
+                    "Settings",
                     style: TextStyle(
                       fontSize: AppTheme.fontSizeTitleMedium,
                       fontFamily: AppTheme.fontBold,
@@ -1088,11 +1098,10 @@ class SettingScreen extends GetView<SettingController> {
             children: [
               _infoRow(context, 'Association', 'Flink POS'),
               _infoRow(
-                  context,
-                  'App Version',
-                  Get.find<AppService>().appModel.value.version.isNotEmpty
-                      ? Get.find<AppService>().appModel.value.version
-                      : '1.0.0'),
+                context,
+                'App Version',
+                controller.displayInstalledAppVersion,
+              ),
               _infoRow(context, 'POS Programmer', '@Rizumiya & Flinkaja Team'),
               _infoRow(context, 'Web Back Office Programmer',
                   '@cikgupapazola & Flinkaja Team'),

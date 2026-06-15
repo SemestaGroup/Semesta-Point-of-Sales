@@ -30,7 +30,10 @@ void callbackDispatcher() {
     final syncService = Get.put(SyncService());
 
     try {
+      await syncService.ensureMengwiTenantBootstrap(triggerQueue: false);
       await syncService.pushLocalTransactions();
+      await syncService.pushLocalPayments();
+      await syncService.processQueue();
       return Future.value(true);
     } catch (e) {
       debugPrint("Workmanager: Sync task failed: $e");
@@ -60,7 +63,6 @@ void main() async {
 
   await ServiceDependency.init();
   final userService = Get.find<UserService>();
-  final syncService = Get.find<SyncService>();
 
   final sharedUserData = await userService.getSharedUserModel();
 
