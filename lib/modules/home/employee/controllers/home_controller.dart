@@ -246,6 +246,7 @@ class HomeController extends GetxController {
 
   // Manual Promo State
   Rx<Map<String, dynamic>?> appliedPromo = Rx<Map<String, dynamic>?>(null);
+  final RxInt bundlingDiscountAmount = 0.obs;
 
   final RxBool isRefundMode = false.obs;
   RxBool isSavingSettings = false.obs;
@@ -840,17 +841,26 @@ class HomeController extends GetxController {
     }
     subtotalRaw.value = subtotal;
 
-    int effectiveDiscountAmount = 0;
+    int tempBundlingDiscountAmount = 0;
+    if (appliedPromo.value != null && appliedPromo.value!['promo_type'] == 'bundling') {
+      tempBundlingDiscountAmount = promoService.calculateBundlingDiscount(
+        penjualanDetailModelList, 
+        appliedPromo.value!
+      );
+    }
+    bundlingDiscountAmount.value = tempBundlingDiscountAmount;
 
-    // Prioritize manual discount if set
+    int effectiveDiscountAmount = tempBundlingDiscountAmount;
+
+    // Prioritize manual discount if set (stacks with bundling)
     if (manualDiscountValue.value > 0) {
       if (manualDiscountIsPercent.value) {
-        effectiveDiscountAmount =
+        effectiveDiscountAmount +=
             (subtotal * (manualDiscountValue.value / 100)).round();
         disscount.value = manualDiscountValue
             .value; // Store percent for UI if in percent mode
       } else {
-        effectiveDiscountAmount = manualDiscountValue.value;
+        effectiveDiscountAmount += manualDiscountValue.value;
         // In fixed mode, we show 0 in the 'percent' field or handle it accordingly
         disscount.value = 0;
       }
@@ -858,7 +868,7 @@ class HomeController extends GetxController {
       // Fallback to default app-wide discount
       int discountPercent = appService.appModel.value.diskon;
       disscount.value = discountPercent;
-      effectiveDiscountAmount = (subtotal * (discountPercent / 100)).round();
+      effectiveDiscountAmount += (subtotal * (discountPercent / 100)).round();
     } else {
       disscount.value = 0;
     }
@@ -1110,6 +1120,7 @@ class HomeController extends GetxController {
     manualDiscountValue.value = 0;
     manualDiscountIsPercent.value = false;
     appliedPromo.value = null; // Clear manually applied promo
+    bundlingDiscountAmount.value = 0;
     manualCashAmount.value = 0;
     currentIdPos = null;
     currentRemoteId.value = 0;
@@ -1130,6 +1141,21 @@ class HomeController extends GetxController {
   }
 
   void applyPromo(Map<String, dynamic>? promo) {
+    if (promo != null && promo['promo_type'] == 'bundling') {
+      int discount = promoService.calculateBundlingDiscount(penjualanDetailModelList, promo);
+      if (discount == 0) {
+        Get.snackbar(
+          'Promo Bundling Tidak Aktif', 
+          'Isi keranjang belum memenuhi syarat kelengkapan kombinasi paket/qty untuk promo ini.',
+          backgroundColor: Colors.orange.shade800,
+          colorText: Colors.white,
+          snackPosition: SnackPosition.TOP,
+          duration: const Duration(seconds: 3),
+        );
+        return; // Tolak pemasangan promo
+      }
+    }
+
     appliedPromo.value = promo;
     // Recalculate prices for all items currently in cart
     for (int i = 0; i < penjualanDetailModelList.length; i++) {
@@ -1724,6 +1750,10 @@ class HomeController extends GetxController {
           discountAmount = subtotalVal * (discountPercent / 100);
           discountType = 'percent';
         }
+        
+        if (bundlingDiscountAmount.value > 0) {
+          discountAmount += bundlingDiscountAmount.value.toDouble();
+        }
 
         final postBody = <String, dynamic>{
           'id_pos': map['id_pos'],
@@ -1865,6 +1895,11 @@ class HomeController extends GetxController {
           discountAmount = subtotalVal * (discountPercent / 100);
           discountType = 'percent';
         }
+        
+        if (bundlingDiscountAmount.value > 0) {
+          discountAmount += bundlingDiscountAmount.value.toDouble();
+        }
+        
         final putBody = <String, dynamic>{
           'clientid': clientId.toString(),
           'date': today,
@@ -2174,7 +2209,7 @@ class HomeController extends GetxController {
       try {
         final dbService = Get.find<DatabaseService>();
         final result = await dbService.rawQuery(
-            "SELECT p.id_produk, b.nama_brand FROM products p LEFT JOIN brands b ON p.id_brand = b.id_brand WHERE p.id_produk IN ($idProduksStr)");
+            "SELECT p.id_produk, COALESCE(NULLIF(b.nama_brand, ''), NULLIF(p.merk, '')) AS nama_brand FROM products p LEFT JOIN brands b ON p.id_brand = b.id_brand WHERE p.id_produk IN ($idProduksStr)");
         for (var row in result) {
           itemBrands[row['id_produk'] as int] =
               row['nama_brand']?.toString() ?? '';
@@ -2183,25 +2218,39 @@ class HomeController extends GetxController {
         debugPrint('printLabels error fetching brands: $e');
       }
 
-      // 2. Group Items by PrinterDevice
+      // 2. Group Items by PrinterDevice, track skipped brands
       Map<PrinterDevice, List<PenjualanDetailModel>> printJobs = {};
+      final Map<String, List<String>> skippedByBrand = {};
 
       for (var item in items) {
         String brand = itemBrands[item.idProduk] ?? '';
         PrinterDevice? printer =
-            settingCtrl.getPrinterForRoleAndBrand('label', brand);
+            settingCtrl.resolveProductPrinter('label', item.idProduk, brand);
 
         if (printer != null) {
           printJobs.putIfAbsent(printer, () => []).add(item);
         } else {
+          final brandLabel = brand.isEmpty ? '(No Brand)' : brand;
+          skippedByBrand.putIfAbsent(brandLabel, () => [])
+              .add(item.productName ?? 'Item');
           debugPrint(
               'No label printer found for item ${item.productName} (brand: $brand).');
         }
       }
 
       if (printJobs.isEmpty) {
-        Get.snackbar('No Label Printer',
-            'Please configure a printer with the Label role in Settings.');
+        if (skippedByBrand.isNotEmpty) {
+          final brandList = skippedByBrand.keys.join(', ');
+          Get.snackbar(
+            'Tidak Ada Printer Label',
+            'Tidak ada printer label yang dikonfigurasi untuk brand: $brandList.',
+            duration: const Duration(seconds: 6),
+            snackPosition: SnackPosition.BOTTOM,
+          );
+        } else {
+          Get.snackbar('No Label Printer',
+              'Please configure a printer with the Label role in Settings.');
+        }
         return;
       }
 
@@ -2268,6 +2317,22 @@ class HomeController extends GetxController {
 
         // Delegate to SettingController for sequential BT connect→print→disconnect (once per order)
         await settingCtrl.printToTarget(labelPrinter, prebuiltBytes: allBytes);
+      }
+
+      // Notify if some items were silently skipped (partial print)
+      if (skippedByBrand.isNotEmpty) {
+        final skippedLines = skippedByBrand.entries
+            .map((e) => '• ${e.key}: ${e.value.join(", ")}')
+            .join('\n');
+        Get.snackbar(
+          'Sebagian Label Tidak Tercetak',
+          'Item berikut tidak tercetak karena tidak ada printer label untuk brandnya:\n$skippedLines',
+          duration: const Duration(seconds: 8),
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFFFF9800).withValues(alpha: 0.95),
+          colorText: Colors.white,
+          icon: const Icon(Icons.warning_amber_rounded, color: Colors.white),
+        );
       }
     } catch (e) {
       Get.snackbar('Print Label Error', 'Failed to print labels: $e');
@@ -2637,6 +2702,9 @@ class HomeController extends GetxController {
           } else if (disscount.value > 0) {
             discountToPrint = (subtotalToPrint * disscount.value / 100).round();
           }
+          if (bundlingDiscountAmount.value > 0) {
+            discountToPrint += bundlingDiscountAmount.value;
+          }
         }
 
         final String fSub =
@@ -2782,7 +2850,7 @@ class HomeController extends GetxController {
       try {
         final dbService = Get.find<DatabaseService>();
         final result = await dbService.rawQuery(
-            "SELECT p.id_produk, b.nama_brand FROM products p LEFT JOIN brands b ON p.id_brand = b.id_brand WHERE p.id_produk IN ($idProduksStr)");
+            "SELECT p.id_produk, COALESCE(NULLIF(b.nama_brand, ''), NULLIF(p.merk, '')) AS nama_brand FROM products p LEFT JOIN brands b ON p.id_brand = b.id_brand WHERE p.id_produk IN ($idProduksStr)");
         for (var row in result) {
           itemBrands[row['id_produk'] as int] =
               row['nama_brand']?.toString() ?? '';
@@ -2797,7 +2865,7 @@ class HomeController extends GetxController {
       for (var item in itemsToPrint) {
         String brand = itemBrands[item.idProduk] ?? '';
         PrinterDevice? printer =
-            settingCtrl.getPrinterForRoleAndBrand('kitchen', brand);
+            settingCtrl.resolveProductPrinter('kitchen', item.idProduk, brand);
 
         if (printer != null) {
           printJobs.putIfAbsent(printer, () => []).add(item);

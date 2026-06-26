@@ -30,7 +30,6 @@ void callbackDispatcher() {
     final syncService = Get.put(SyncService());
 
     try {
-      await syncService.ensureMengwiTenantBootstrap(triggerQueue: false);
       await syncService.pushLocalTransactions();
       await syncService.pushLocalPayments();
       await syncService.processQueue();

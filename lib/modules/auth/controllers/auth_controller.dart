@@ -140,31 +140,12 @@ class AuthController extends GetxController {
         await userService.initSharedPref();
 
         String baseUrl = authData['base_url'];
-        final locationRaw = authData['location']?.toString().trim() ?? '';
-        final isMengwiLocation = locationRaw.isEmpty ||
-            locationRaw.toLowerCase() == 'null' ||
-            locationRaw.toLowerCase() == 'unknown' ||
-            locationRaw == Constants.mengwiLocationId;
-        if (isMengwiLocation) {
-          baseUrl = Constants.mengwiBaseUrl;
-          authData['base_url'] = baseUrl;
-          authData['email'] = Constants.mengwiEmail;
-          authData['location'] = Constants.mengwiLocationId;
-          debugPrint(
-              'AuthController: Applied Mengwi base_url override: $baseUrl');
-        }
 
         // Save the critical auth data to SharedPreferences for core service lookups
         await userService.saveAuthData(baseUrl, Constants.staticAuthToken);
 
         // PERSIST FULL SESSION TO SQLITE for offline profile and cashier name
         await userService.saveUserSession(authData);
-
-        if (Get.isRegistered<SyncService>()) {
-          await Get.find<SyncService>().ensureMengwiTenantBootstrap(
-            triggerQueue: false,
-          );
-        }
 
         // Save password for access code checks
         await userService.saveString('cached_password', trimmedPassword);

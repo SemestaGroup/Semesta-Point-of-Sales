@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:semesta_pos/core/services/local/database_service.dart';
+import 'package:semesta_pos/core/models/penjualan_detail/penjualan_detail_model.dart';
 
 class PromoDiscount {
   final int finalPrice;
@@ -38,10 +39,21 @@ class PromoService extends GetxService {
         
         if (startDateStr != null && endDateStr != null) {
           try {
-            final startDate = DateTime.parse(startDateStr);
-            final endDate = DateTime.parse(endDateStr).add(const Duration(days: 1)).subtract(const Duration(milliseconds: 1)); // End of day
+            final startRaw = DateTime.parse(startDateStr);
+            final startDate = DateTime(startRaw.year, startRaw.month, startRaw.day);
             
-            if (now.compareTo(startDate) >= 0 && now.compareTo(endDate) <= 0) {
+            final endRaw = DateTime.parse(endDateStr);
+            final endDate = DateTime(endRaw.year, endRaw.month, endRaw.day);
+            
+            final today = DateTime(now.year, now.month, now.day);
+            
+            bool isStartUnlimited = startDateStr.startsWith('0000-00-00');
+            bool isEndUnlimited = endDateStr.startsWith('0000-00-00');
+            
+            bool validStart = isStartUnlimited || today.compareTo(startDate) >= 0;
+            bool validEnd = isEndUnlimited || today.compareTo(endDate) <= 0;
+            
+            if (validStart && validEnd) {
               validPromos.add(Map<String, dynamic>.from(row));
             }
           } catch (e) {
@@ -62,15 +74,18 @@ class PromoService extends GetxService {
             if (decoded is String) {
               decoded = jsonDecode(decoded);
             }
-            if (decoded is Map) {
-              final List itemsList = decoded['items'] ?? [];
-              for (var item in itemsList) {
+            List itemsList = [];
+            if (decoded is List) {
+              itemsList = decoded;
+            } else if (decoded is Map) {
+              itemsList = decoded['detail'] ?? decoded['items'] ?? [];
+            }
+            for (var item in itemsList) {
                 final idStr = item['item_id']?.toString();
                 if (idStr != null) {
                   final id = int.tryParse(idStr);
                   if (id != null) ids.add(id);
                 }
-              }
             }
           } catch (e) {
             debugPrint("PromoService: Error parsing promo items for ${promo['id']} - $e");
@@ -147,9 +162,13 @@ class PromoService extends GetxService {
         if (decoded is String) {
           decoded = jsonDecode(decoded);
         }
-        if (decoded is Map) {
-          final List itemsList = decoded['items'] ?? [];
-          for (var item in itemsList) {
+        List itemsList = [];
+        if (decoded is List) {
+          itemsList = decoded;
+        } else if (decoded is Map) {
+          itemsList = decoded['detail'] ?? decoded['items'] ?? [];
+        }
+        for (var item in itemsList) {
             if (item['item_id']?.toString() == productId.toString()) {
               final promoDiscountType = item['discount_type']?.toString() ?? 'fixed';
               final promoDiscountTotal = int.tryParse(item['discount']?.toString() ?? '0') ?? 0;
@@ -168,7 +187,6 @@ class PromoService extends GetxService {
                 bestDiscountType = promoDiscountType;
               }
             }
-          }
         }
       } catch (e) {
         debugPrint("PromoService: Error parsing promo items in calculateBestPrice - $e");
@@ -192,5 +210,110 @@ class PromoService extends GetxService {
     }
     
     return price < 0 ? 0 : price;
+  }
+
+  int calculateBundlingDiscount(List<PenjualanDetailModel> cart, Map<String, dynamic> promo) {
+    try {
+      if (promo['promo_type'] != 'bundling') return 0;
+      
+      final rawItems = promo['items'];
+      if (rawItems == null) return 0;
+      
+      dynamic itemsObj = rawItems;
+      if (itemsObj is String) {
+        itemsObj = jsonDecode(itemsObj);
+      }
+      
+      final bundlePriceStr = itemsObj['total_price']?.toString() ?? '0';
+      final bundlePrice = int.tryParse(bundlePriceStr) ?? 0;
+      final rulesDynamic = itemsObj['detail'];
+      if (rulesDynamic == null || rulesDynamic is! List) return 0;
+      final rules = rulesDynamic;
+      
+      final isMultiplied = promo['is_multiplied']?.toString() == '1';
+      int totalDiscount = 0;
+      
+      // Build pool of available items
+      List<Map<String, dynamic>> pool = [];
+      for (var item in cart) {
+        if (!item.isRefund && item.jumlah > 0) {
+          pool.add({
+            'id': item.idProduk,
+            'qty': item.jumlah,
+            // Normal base price of the item
+            'price': item.hargaAwal > 0 ? item.hargaAwal : item.hargaJual,
+          });
+        }
+      }
+      
+      while (true) {
+        // Deep copy pool for this bundle instance iteration
+        List<Map<String, dynamic>> tempPool = pool.map((p) => Map<String, dynamic>.from(p)).toList();
+        bool allRulesMet = true;
+        int normalPriceOfBundle = 0;
+        
+        for (var rule in rules) {
+           final targetIdsDynamic = rule['target_id'];
+           if (targetIdsDynamic == null || targetIdsDynamic is! List) {
+             allRulesMet = false;
+             break;
+           }
+           final targetIds = targetIdsDynamic.map((e) => int.tryParse(e.toString()) ?? -1).toList();
+           final requiredQty = int.tryParse(rule['qty']?.toString() ?? '0') ?? 0;
+           if (requiredQty <= 0) continue;
+           
+           final mustBeDifferent = rule['must_be_different']?.toString() == '1';
+           
+           if (mustBeDifferent) {
+              var candidates = tempPool.where((p) => targetIds.contains(p['id']) && (p['qty'] as int) > 0).toList();
+              if (candidates.length < requiredQty) {
+                 allRulesMet = false;
+                 break;
+              }
+              // Sort by highest price to give customer the best discount
+              candidates.sort((a, b) => (b['price'] as int).compareTo(a['price'] as int));
+              
+              for (int i = 0; i < requiredQty; i++) {
+                 candidates[i]['qty'] = (candidates[i]['qty'] as int) - 1;
+                 normalPriceOfBundle += (candidates[i]['price'] as int);
+              }
+           } else {
+              var candidates = tempPool.where((p) => targetIds.contains(p['id']) && (p['qty'] as int) > 0).toList();
+              candidates.sort((a, b) => (b['price'] as int).compareTo(a['price'] as int));
+              
+              int remainingQty = requiredQty;
+              for (var c in candidates) {
+                 if (remainingQty == 0) break;
+                 int available = c['qty'] as int;
+                 int take = available >= remainingQty ? remainingQty : available;
+                 c['qty'] = available - take;
+                 normalPriceOfBundle += (c['price'] as int) * take;
+                 remainingQty -= take;
+              }
+              if (remainingQty > 0) {
+                 allRulesMet = false;
+                 break;
+              }
+           }
+        }
+        
+        if (allRulesMet) {
+           // Commit deductions to the main pool
+           pool = tempPool;
+           
+           int discountForThisBundle = normalPriceOfBundle - bundlePrice;
+           if (discountForThisBundle < 0) discountForThisBundle = 0;
+           totalDiscount += discountForThisBundle;
+           
+           if (!isMultiplied) break;
+        } else {
+           break; // Cannot fulfill another bundle
+        }
+      }
+      return totalDiscount;
+    } catch (e) {
+      debugPrint("PromoService: Error calculating bundling discount - $e");
+      return 0;
+    }
   }
 }

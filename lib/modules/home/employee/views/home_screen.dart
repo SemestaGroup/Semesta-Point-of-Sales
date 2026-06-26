@@ -2887,6 +2887,21 @@ class HomeScreen extends StatelessWidget {
           Obx(() => _buildSummaryRow(
               context, "Subtotal", formatRupiah(controller.subtotalRaw.value))),
           SizedBox(height: 2.h),
+
+          Obx(() {
+            if (controller.bundlingDiscountAmount.value > 0) {
+              return Padding(
+                padding: EdgeInsets.only(bottom: 2.h),
+                child: _buildSummaryRow(
+                    context, 
+                    "Diskon Bundling", 
+                    "-${formatRupiah(controller.bundlingDiscountAmount.value)}",
+                    valueColor: const Color(0xFFFF6B35)),
+              );
+            }
+            return const SizedBox.shrink();
+          }),
+
           Obx(() => _buildSummaryRow(
               context, "Tax / Pajak", formatRupiah(controller.taxAmount.value))),
 

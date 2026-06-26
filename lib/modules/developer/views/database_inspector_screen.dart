@@ -19,7 +19,7 @@ class DatabaseInspectorScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.sync_problem),
-            tooltip: 'Force Resync All (Mengwi)',
+            tooltip: 'Force Resync All',
             onPressed: () {
               Get.defaultDialog(
                 title: 'Force Resync',

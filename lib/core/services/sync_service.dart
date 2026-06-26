@@ -69,144 +69,7 @@ class SyncService extends GetxService {
     super.onClose();
   }
 
-  Future<void> ensureMengwiTenantBootstrap({bool triggerQueue = true}) async {
-    try {
-      final session = await _userService.getUserSession();
-      if (session == null) return;
 
-      final locationId = session['location']?.toString().trim() ?? '';
-      if (!_shouldApplyMengwiBootstrap(locationId)) return;
-
-      final targetBaseUrl = _normalizeBaseUrl(Constants.mengwiBaseUrl);
-      final targetEmail = Constants.mengwiEmail;
-      final targetVersion = Constants.mengwiForcedVersion;
-      final prefBaseUrl = _normalizeBaseUrl(_userService.getBaseUrl());
-      final sessionBaseUrl =
-          _normalizeBaseUrl(session['base_url']?.toString() ?? '');
-      final sessionEmail = session['email']?.toString().trim() ?? '';
-      final migrationMarker =
-          _userService.getPrefString(Constants.mengwiResyncMigrationKey);
-      final versionRows = await _dbService.query(
-        'pos_options',
-        columns: ['option_value'],
-        where: 'option_name = ?',
-        whereArgs: ['version'],
-        limit: 1,
-      );
-      final currentVersion = versionRows.isNotEmpty
-          ? versionRows.first['option_value']?.toString().trim() ?? ''
-          : '';
-
-      final shouldFixBaseUrl =
-          prefBaseUrl != targetBaseUrl || sessionBaseUrl != targetBaseUrl;
-      final shouldFixEmail = sessionEmail != targetEmail ||
-          _userService.getPrefString(Constants.userEmail) != targetEmail;
-      final shouldFixVersion = currentVersion != targetVersion;
-      final shouldFixLocation = locationId != Constants.mengwiLocationId;
-      final shouldReplayAll =
-          migrationMarker != Constants.mengwiResyncMigrationVersion;
-
-      debugPrint(
-        'SyncService: Applying Mengwi bootstrap. '
-        'fixBaseUrl=$shouldFixBaseUrl fixEmail=$shouldFixEmail '
-        'fixVersion=$shouldFixVersion fixLocation=$shouldFixLocation '
-        'replayAll=$shouldReplayAll',
-      );
-
-      await _userService.saveAuthData(targetBaseUrl, Constants.staticAuthToken);
-      await _userService.saveString(Constants.userEmail, targetEmail);
-      await _userService.saveString('pos_version', targetVersion);
-
-      final db = await _dbService.database;
-      await db.transaction((txn) async {
-        await txn.update(
-          'user_session',
-          {
-            'base_url': targetBaseUrl,
-            'email': targetEmail,
-            'location': Constants.mengwiLocationId,
-          },
-          where: 'id = ?',
-          whereArgs: [1],
-        );
-
-        await txn.insert(
-          'pos_options',
-          {
-            'option_name': 'version',
-            'option_value': targetVersion,
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-        await txn.insert(
-          'pos_options',
-          {
-            'option_name': 'pos_version',
-            'option_value': targetVersion,
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-
-        await txn.update(
-          'sync_queue',
-          {'base_url': targetBaseUrl},
-          where: "status IN ('pending', 'failed')",
-        );
-
-        if (!shouldReplayAll) return;
-
-        await txn.delete(
-          'sync_queue',
-          where: 'endpoint LIKE ? OR endpoint LIKE ? OR endpoint LIKE ?',
-          whereArgs: ['%pos_customers%', '%pos_order%', '%pos_transaction%'],
-        );
-
-        await txn.update('members', {'is_synced': 0});
-        await txn.rawUpdate('''
-          UPDATE transactions
-             SET is_synced = 0,
-                 id_penjualan_remote = 0,
-                 remote_number = NULL
-        ''');
-        await txn.rawUpdate('''
-          UPDATE pos_payments
-             SET is_synced = 0,
-                 invoiceid = CASE
-                   WHEN id_pos IS NOT NULL AND id_pos != '' THEN id_pos
-                   ELSE ''
-                 END
-        ''');
-      });
-
-      if (Get.isRegistered<AppService>()) {
-        final appService = Get.find<AppService>();
-        appService.appModel.value =
-            appService.appModel.value.copyWith(version: targetVersion);
-      }
-
-      if (Get.isRegistered<SettingController>()) {
-        final settingController = Get.find<SettingController>();
-        settingController.companyVersionFieldController.text = targetVersion;
-      }
-
-      if (shouldReplayAll) {
-        syncStatus.value = 'Queueing Mengwi migration replay...';
-        await pushLocalMembers();
-        await pushLocalTransactions();
-        await pushLocalPayments();
-        await _userService.saveString(
-          Constants.mengwiResyncMigrationKey,
-          Constants.mengwiResyncMigrationVersion,
-        );
-      }
-
-      if (triggerQueue) {
-        unawaited(processQueue());
-      }
-    } catch (e) {
-      debugPrint('SyncService: ensureMengwiTenantBootstrap failed: $e');
-    }
-  }
 
   /// Orchestrates the mandatory post-login sequence in the exact order requested
   Future<void> runPostLoginSync() async {
@@ -1675,7 +1538,7 @@ class SyncService extends GetxService {
           whereArgs: [localId.toString(), '%pos_customers%']);
       if (existingQueue.isNotEmpty) continue; // Already explicitly queued
 
-      // We always POST for forced resync since server data is gone for Mengwi
+      // We always POST for forced resync since server data is gone
       final map = {
         'company': memberName.isNotEmpty
             ? memberName
@@ -1883,13 +1746,7 @@ class SyncService extends GetxService {
     return trimmed.endsWith('/') ? trimmed : '$trimmed/';
   }
 
-  bool _shouldApplyMengwiBootstrap(String locationId) {
-    final normalized = locationId.trim().toLowerCase();
-    return normalized.isEmpty ||
-        normalized == 'null' ||
-        normalized == 'unknown' ||
-        normalized == Constants.mengwiLocationId;
-  }
+
 
   Future<void> pushShiftLogs() async {
     final unsynced = await _dbService

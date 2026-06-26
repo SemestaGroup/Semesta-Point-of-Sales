@@ -40,9 +40,6 @@ class ServiceDependency {
       Get.put(AppService(), permanent: true);
     }
 
-    await Get.find<SyncService>().ensureMengwiTenantBootstrap(
-      triggerQueue: false,
-    );
 
     // Global State Controllers
     if (!Get.isRegistered<SettingController>()) {
@@ -53,9 +50,7 @@ class ServiceDependency {
       Get.put(ShiftController(), permanent: true);
     }
 
-    await Get.find<SyncService>().ensureMengwiTenantBootstrap(
-      triggerQueue: true,
-    );
+
 
     if (!Get.isRegistered<TransactionWebhookService>()) {
       Get.put(TransactionWebhookService(), permanent: true);

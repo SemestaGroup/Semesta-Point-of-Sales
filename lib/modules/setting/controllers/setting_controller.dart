@@ -23,6 +23,7 @@ import 'package:semesta_pos/core/services/local/database_service.dart';
 import 'package:semesta_pos/core/models/shift/shift_model.dart';
 import 'package:semesta_pos/modules/home/employee/controllers/shift_controller.dart';
 import 'package:semesta_pos/core/services/error_log_service.dart';
+import 'package:collection/collection.dart';
 import 'package:semesta_pos/modules/dashboard/employee/controllers/dashboard_employee_controller.dart';
 import 'package:semesta_pos/modules/dashboard/admin/controllers/dashboard_admin_controller.dart';
 
@@ -66,6 +67,8 @@ class SettingController extends GetxController {
   RxString installedAppVersion = ''.obs;
 
   RxList<String> availableBrands = <String>[].obs;
+  /// Products for exception picker: {id_produk, nama_produk, brand_name}
+  RxList<Map<String, dynamic>> availableProducts = <Map<String, dynamic>>[].obs;
 
   UserService get userService {
     if (!Get.isRegistered<UserService>()) {
@@ -83,6 +86,7 @@ class SettingController extends GetxController {
     _loadLocalSettings();
     _loadInstalledAppVersion();
     fetchAvailableBrands();
+    fetchAvailableProducts();
 
     // 2. Reactively update text controllers if background sync finishes
     ever(appService.appModel, (AppModel model) {
@@ -224,7 +228,7 @@ class SettingController extends GetxController {
   }
 
   String _resolveBestKnownVersion({String? preferred}) {
-    if (_isLikelyMengwiTenant()) return Constants.mengwiForcedVersion;
+
 
     final preferredVersion = _sanitizeVersion(preferred);
     if (preferredVersion.isNotEmpty) return preferredVersion;
@@ -242,12 +246,7 @@ class SettingController extends GetxController {
     return _sanitizeVersion(companyVersionFieldController.text);
   }
 
-  bool _isLikelyMengwiTenant() {
-    final baseUrl = userService.getBaseUrl().trim();
-    final email = userService.getUserEmail().trim().toLowerCase();
-    return baseUrl == Constants.mengwiBaseUrl ||
-        email == Constants.mengwiEmail.toLowerCase();
-  }
+
 
   Future<void> fetchAvailableBrands() async {
     try {
@@ -258,6 +257,28 @@ class SettingController extends GetxController {
           result.map((e) => e['nama_brand'].toString()).toList();
     } catch (e) {
       debugPrint("SettingController: Failed to fetch brands: $e");
+    }
+  }
+
+  Future<void> fetchAvailableProducts() async {
+    try {
+      final db = Get.find<DatabaseService>();
+      final result = await db.rawQuery('''
+        SELECT p.id_produk, p.nama_produk, COALESCE(NULLIF(b.nama_brand, ''), NULLIF(p.merk, ''), '') as brand_name
+        FROM products p
+        LEFT JOIN brands b ON p.id_brand = b.id_brand
+        WHERE p.status = 'active' OR p.status IS NULL
+        ORDER BY brand_name ASC, p.nama_produk ASC
+      ''');
+      availableProducts.value = result
+          .map((e) => {
+                'id': e['id_produk'] as int,
+                'name': e['nama_produk']?.toString() ?? '',
+                'brand': e['brand_name']?.toString() ?? '',
+              })
+          .toList();
+    } catch (e) {
+      debugPrint("SettingController: Failed to fetch products: $e");
     }
   }
 
@@ -1604,6 +1625,66 @@ class SettingController extends GetxController {
       return p.brands.isEmpty;
     });
     return genericMatch;
+  }
+
+  /// Resolves which printer should handle a specific product for a given role.
+  /// Priority:
+  ///   1. Exception match — a printer explicitly lists this productId in its
+  ///      roleProductExceptions[role]. That printer wins exclusively.
+  ///   2. Brand match — normal roleBrands routing.
+  ///   3. Generic fallback — printer with no brands/exceptions configured.
+  /// Returns null if no printer can handle this product.
+  PrinterDevice? resolveProductPrinter(String role, int productId, String brand) {
+    // 1. Exception match (exclusive override)
+    final exceptionMatch = assignedPrinters.firstWhereOrNull((p) {
+      if (!p.roles.contains(role) || !p.isActive) return false;
+      final exceptions = p.roleProductExceptions[role];
+      return exceptions != null && exceptions.contains(productId);
+    });
+    if (exceptionMatch != null) return exceptionMatch;
+
+    // 2. Brand match — but skip printers that have an exception list containing
+    //    this productId (they claimed it for a different product context).
+    //    Also skip printers whose exception list for this role is non-empty and
+    //    does NOT include this product — they are "exception-only" routers.
+    //
+    //    Actually, simpler: just use normal brand routing, then check if
+    //    the winning printer has another printer that "stole" this product.
+    //    Since exception match already returned null, no printer claimed this
+    //    product via exception, so we can do normal brand routing safely.
+    final exactBrandMatch = assignedPrinters.firstWhereOrNull((p) {
+      if (!p.roles.contains(role) || !p.isActive) return false;
+      if (p.roleBrands.containsKey(role)) {
+        return p.roleBrands[role]!.contains(brand);
+      }
+      return p.brands.contains(brand);
+    });
+    if (exactBrandMatch != null) {
+      // Check: does another printer have this product as an exception that we missed?
+      // (Already handled above — if exception found, it returns early.)
+      return exactBrandMatch;
+    }
+
+    // 3. Generic fallback
+    return assignedPrinters.firstWhereOrNull((p) {
+      if (!p.roles.contains(role) || !p.isActive) return false;
+      if (p.roleBrands.containsKey(role)) {
+        return p.roleBrands[role]!.isEmpty;
+      }
+      return p.brands.isEmpty;
+    });
+  }
+
+  /// Returns the set of product IDs that are "claimed" by exception printers
+  /// for a given role. These should be SKIPPED by brand-routed printers.
+  Set<int> getExceptionClaimedProductIds(String role) {
+    final result = <int>{};
+    for (final p in assignedPrinters) {
+      if (!p.isActive) continue;
+      final exceptions = p.roleProductExceptions[role];
+      if (exceptions != null) result.addAll(exceptions);
+    }
+    return result;
   }
 
   void formValidate() async {

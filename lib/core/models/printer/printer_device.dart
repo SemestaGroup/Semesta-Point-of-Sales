@@ -7,6 +7,11 @@ class PrinterDevice {
   final List<String> roles; // 'cashier', 'kitchen', 'label'
   final List<String> brands; // Legacy fallback
   final Map<String, List<String>> roleBrands; // Brands per role ('kitchen' -> ['A', 'B'])
+  /// Product-level exceptions per role. Key = role ('kitchen'/'label'),
+  /// Value = list of product IDs (int) that this printer handles exclusively.
+  /// A product listed here will be routed to this printer and skipped by all
+  /// other printers that would have matched via brand routing.
+  final Map<String, List<int>> roleProductExceptions;
   final bool isAutoCut; // true for large 80mm printers, false for standard 58mm
   final int paperSize; // 58 or 80
   final int fontSize; // 1 (normal), 2 (large), etc.
@@ -22,6 +27,7 @@ class PrinterDevice {
     this.roles = const [],
     this.brands = const [],
     this.roleBrands = const {},
+    this.roleProductExceptions = const {},
     this.isAutoCut = false,
     this.paperSize = 58,
     this.fontSize = 1,
@@ -39,6 +45,7 @@ class PrinterDevice {
       'roles': roles,
       'brands': brands,
       'roleBrands': roleBrands,
+      'roleProductExceptions': roleProductExceptions,
       'isAutoCut': isAutoCut,
       'paperSize': paperSize,
       'fontSize': fontSize,
@@ -84,6 +91,19 @@ class PrinterDevice {
       }
     }
 
+    // Parse roleProductExceptions — new field, default empty
+    Map<String, List<int>> parsedRoleProductExceptions = {};
+    if (json['roleProductExceptions'] != null && json['roleProductExceptions'] is Map) {
+      (json['roleProductExceptions'] as Map).forEach((key, value) {
+        if (value is List) {
+          parsedRoleProductExceptions[key.toString()] = value
+              .map((e) => int.tryParse(e.toString()) ?? 0)
+              .where((id) => id > 0)
+              .toList();
+        }
+      });
+    }
+
     return PrinterDevice(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -93,6 +113,7 @@ class PrinterDevice {
       roles: parsedRoles,
       brands: parsedBrands,
       roleBrands: parsedRoleBrands,
+      roleProductExceptions: parsedRoleProductExceptions,
       isAutoCut: json['isAutoCut'] as bool? ?? false,
       paperSize: json['paperSize'] as int? ?? 58,
       fontSize: json['fontSize'] as int? ?? 1,
@@ -110,6 +131,7 @@ class PrinterDevice {
     List<String>? roles,
     List<String>? brands,
     Map<String, List<String>>? roleBrands,
+    Map<String, List<int>>? roleProductExceptions,
     bool? isAutoCut,
     int? paperSize,
     int? fontSize,
@@ -125,6 +147,7 @@ class PrinterDevice {
       roles: roles ?? this.roles,
       brands: brands ?? this.brands,
       roleBrands: roleBrands ?? this.roleBrands,
+      roleProductExceptions: roleProductExceptions ?? this.roleProductExceptions,
       isAutoCut: isAutoCut ?? this.isAutoCut,
       paperSize: paperSize ?? this.paperSize,
       fontSize: fontSize ?? this.fontSize,

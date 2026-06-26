@@ -563,7 +563,7 @@ class PrinterManagementView extends GetView<SettingController> {
   }
 
   void _updatePrinter(PrinterDevice oldPrinter, PrinterDevice newPrinter) {
-    final index = controller.assignedPrinters.indexOf(oldPrinter);
+    final index = controller.assignedPrinters.indexWhere((p) => p.id == oldPrinter.id);
     if (index != -1) {
       controller.assignedPrinters[index] = newPrinter;
       controller.savePrinterConfigs();

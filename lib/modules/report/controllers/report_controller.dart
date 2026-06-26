@@ -975,20 +975,75 @@ class ReportController extends GetxController {
     } finally {
       isPrinting.value = false;
     }
-  }
-
-  Future<void> printLabelsOnly(Map<String, dynamic> order, List<dynamic> items,
+  }  Future<void> printLabelsOnly(Map<String, dynamic> order, List<dynamic> items,
       {Map<String, dynamic>? member}) async {
     isPrinting.value = true;
     try {
       final settingCtrl = Get.find<SettingController>();
-      final labelPrinter = settingCtrl.getPrinterForRole('label');
-      if (labelPrinter == null) {
-        Get.snackbar('No Label Printer',
-            'Please configure a printer with the Label role in Settings.');
+      final dbService = Get.find<DatabaseService>();
+
+      // 1. Fetch brand for each item (by id_produk)
+      final idProduks = items
+          .map((e) => e['id_produk']?.toString() ?? '0')
+          .where((id) => id != '0')
+          .toSet()
+          .toList();
+
+      Map<int, String> itemBrands = {};
+      if (idProduks.isNotEmpty) {
+        try {
+          final idProduksStr = idProduks.join(',');
+          final result = await dbService.rawQuery(
+              'SELECT p.id_produk, COALESCE(NULLIF(b.nama_brand, \'\'), NULLIF(p.merk, \'\')) AS nama_brand FROM products p LEFT JOIN brands b ON p.id_brand = b.id_brand WHERE p.id_produk IN ($idProduksStr)');
+          for (var row in result) {
+            itemBrands[row['id_produk'] as int] =
+                row['nama_brand']?.toString() ?? '';
+          }
+        } catch (e) {
+          debugPrint('printLabelsOnly: error fetching brands: $e');
+        }
+      }
+
+      // 2. Group items by PrinterDevice (based on brand), track skipped items
+      final Map<dynamic, List<dynamic>> printJobs = {};
+      // Map brand -> list of item names, for items with no printer configured
+      final Map<String, List<String>> skippedByBrand = {};
+
+      for (var item in items) {
+        final idProduk = int.tryParse(item['id_produk']?.toString() ?? '0') ?? 0;
+        final brand = itemBrands[idProduk] ?? '';
+        final printer = settingCtrl.resolveProductPrinter('label', idProduk, brand);
+
+        if (printer != null) {
+          printJobs.putIfAbsent(printer, () => []).add(item);
+        } else {
+          final brandLabel = brand.isEmpty ? '(No Brand)' : brand;
+          skippedByBrand.putIfAbsent(brandLabel, () => [])
+              .add(item['nama_produk']?.toString() ?? 'Item');
+          debugPrint(
+              'printLabelsOnly: No label printer for item ${item['nama_produk']} (brand: "$brand")');
+        }
+      }
+
+      if (printJobs.isEmpty) {
+        // ALL items were skipped — no printer at all for any brand
+        if (skippedByBrand.isNotEmpty) {
+          final brandList = skippedByBrand.keys.join(', ');
+          Get.snackbar(
+            'Tidak Ada Printer Label',
+            'Tidak ada printer label yang dikonfigurasi untuk brand: $brandList.\n'
+            'Silakan tambahkan printer di Pengaturan → Printer Management.',
+            duration: const Duration(seconds: 6),
+            snackPosition: SnackPosition.BOTTOM,
+          );
+        } else {
+          Get.snackbar('No Label Printer',
+              'Please configure a printer with the Label role in Settings.');
+        }
         return;
       }
 
+      // 3. Build shared header info
       final dateStr = order['tgl_penjualan'] != null
           ? DateFormat('yyyy-MM-dd HH:mm:ss').format(
               DateTime.parse(order['tgl_penjualan'].toString()).toLocal())
@@ -1001,48 +1056,70 @@ class ReportController extends GetxController {
           '#${idPos.length >= 8 ? idPos.substring(idPos.length - 8).toUpperCase() : idPos.toUpperCase()}';
 
       final int idMember =
-          int.tryParse(order['id_member']?.toString() ?? "0") ?? 0;
+          int.tryParse(order['id_member']?.toString() ?? '0') ?? 0;
       final isWalkIn = idMember == 0 || idMember == 1;
       final customerName = isWalkIn
-          ? "Walk In"
+          ? 'Walk In'
           : (member?['nama']?.toString() ?? 'Customer #$idMember');
-      final orderTypeStr = order['order_type']?.toString() ?? "Dine In";
+      final orderTypeStr = order['order_type']?.toString() ?? 'Dine In';
       final customerWithOrderType = '$customerName ($orderTypeStr)';
 
-      List<int> allBytes = [];
+      // 4. Print each group to its assigned printer
+      for (final entry in printJobs.entries) {
+        final labelPrinter = entry.key;
+        final printerItems = entry.value;
 
-      int totalLabels = 0;
-      for (var item in items) {
-        final double qtyDouble =
-            double.tryParse(item['jumlah']?.toString() ?? "1") ?? 1;
-        totalLabels += qtyDouble.toInt();
+        int totalLabels = 0;
+        for (var item in printerItems) {
+          final double qtyDouble =
+              double.tryParse(item['jumlah']?.toString() ?? '1') ?? 1;
+          totalLabels += qtyDouble.toInt();
+        }
+
+        List<int> allBytes = [];
+        int currentIndex = 1;
+
+        for (var item in printerItems) {
+          final double qtyDouble =
+              double.tryParse(item['jumlah']?.toString() ?? '1') ?? 1;
+          final int qty = qtyDouble.toInt();
+          final String name =
+              _cleanReprintProductName(item['nama_produk']?.toString() ?? 'Item');
+          final String note = item['note']?.toString() ?? '';
+
+          final bytes = await settingCtrl.buildLabelEscPos(
+            line1: dateStr,
+            line2: customerWithOrderType,
+            line3: orderCode,
+            line4: name,
+            productNote: note,
+            isAutoCut: labelPrinter.isAutoCut,
+            copies: qty,
+            startIndex: currentIndex,
+            totalLabels: totalLabels,
+          );
+          allBytes.addAll(bytes);
+          currentIndex += qty;
+        }
+
+        await settingCtrl.printToTarget(labelPrinter, prebuiltBytes: allBytes);
       }
 
-      int currentIndex = 1;
-      for (var item in items) {
-        final double qtyDouble =
-            double.tryParse(item['jumlah']?.toString() ?? "1") ?? 1;
-        final int qty = qtyDouble.toInt();
-        final String name =
-            _cleanReprintProductName(item['nama_produk']?.toString() ?? "Item");
-        final String note = item['note']?.toString() ?? '';
-
-        final bytes = await settingCtrl.buildLabelEscPos(
-          line1: dateStr,
-          line2: customerWithOrderType,
-          line3: orderCode,
-          line4: name,
-          productNote: note,
-          isAutoCut: labelPrinter.isAutoCut,
-          copies: qty,
-          startIndex: currentIndex,
-          totalLabels: totalLabels,
+      // 5. Notify if some items were silently skipped (partial print)
+      if (skippedByBrand.isNotEmpty) {
+        final skippedLines = skippedByBrand.entries
+            .map((e) => '• ${e.key}: ${e.value.join(", ")}')
+            .join('\n');
+        Get.snackbar(
+          'Sebagian Label Tidak Tercetak',
+          'Item berikut tidak tercetak karena tidak ada printer label untuk brandnya:\n$skippedLines',
+          duration: const Duration(seconds: 8),
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFFFF9800).withValues(alpha: 0.95),
+          colorText: Colors.white,
+          icon: const Icon(Icons.warning_amber_rounded, color: Colors.white),
         );
-        allBytes.addAll(bytes);
-        currentIndex += qty;
       }
-
-      await settingCtrl.printToTarget(labelPrinter, prebuiltBytes: allBytes);
     } catch (e) {
       ErrorLogService.log(
         category: 'printer',
