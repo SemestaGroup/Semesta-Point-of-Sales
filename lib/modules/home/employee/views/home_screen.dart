@@ -1101,11 +1101,10 @@ class HomeScreen extends StatelessWidget {
                     return Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (controller.appliedPromo.value != null)
+                        if (controller.appliedPromos.isNotEmpty)
                           GestureDetector(
                             onTap: () {
-                              controller.applyPromo(null);
-                              Get.back();
+                              controller.clearPromos();
                             },
                             child: Container(
                               margin: EdgeInsets.only(bottom: 12.h),
@@ -1119,7 +1118,7 @@ class HomeScreen extends StatelessWidget {
                                 children: [
                                   Icon(CupertinoIcons.clear_circled, color: Colors.red, size: 22.sp),
                                   SizedBox(width: 16.w),
-                                  Text("Remove Promo",
+                                  Text("Clear All Promos",
                                       style: AppTheme.bodyLarge.copyWith(
                                         fontFamily: AppTheme.fontBold,
                                         color: Colors.red,
@@ -1129,13 +1128,11 @@ class HomeScreen extends StatelessWidget {
                             ),
                           ),
                         ...promos.map((promo) {
-                          bool isSelected = controller.appliedPromo.value != null && 
-                                            controller.appliedPromo.value!['id'] == promo['id'];
+                          bool isSelected = controller.appliedPromos.any((p) => p['id'] == promo['id']);
 
                           return GestureDetector(
                             onTap: () {
                               controller.applyPromo(promo);
-                              Get.back();
                             },
                             child: Container(
                               margin: EdgeInsets.only(bottom: 12.h),
@@ -2861,27 +2858,30 @@ class HomeScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Obx(() {
-            final promo = controller.appliedPromo.value;
-            if (promo == null) return const SizedBox.shrink();
-            return Padding(
-              padding: EdgeInsets.only(bottom: 4.h),
-              child: Row(
-                children: [
-                  Icon(CupertinoIcons.gift_fill, size: 14.sp, color: AppTheme.primaryColor),
-                  SizedBox(width: 6.w),
-                  Expanded(
-                    child: Text("Promo: ${promo['name']}",
-                      style: AppTheme.labelMedium.copyWith(
-                        color: AppTheme.primaryColor,
-                        fontFamily: AppTheme.fontBold,
-                        fontSize: 11.sp,
+            final promos = controller.appliedPromos;
+            if (promos.isEmpty) return const SizedBox.shrink();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: promos.map((promo) => Padding(
+                padding: EdgeInsets.only(bottom: 4.h),
+                child: Row(
+                  children: [
+                    Icon(CupertinoIcons.gift_fill, size: 14.sp, color: AppTheme.primaryColor),
+                    SizedBox(width: 6.w),
+                    Expanded(
+                      child: Text("Promo: ${promo['name']}",
+                        style: AppTheme.labelMedium.copyWith(
+                          color: AppTheme.primaryColor,
+                          fontFamily: AppTheme.fontBold,
+                          fontSize: 11.sp,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              )).toList(),
             );
           }),
           Obx(() => _buildSummaryRow(

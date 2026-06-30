@@ -1038,13 +1038,35 @@ class ShiftController extends GetxController {
     if (activeShift.value != null) return activeShift.value!.shiftName;
 
     // To implement "looping sequential" logic: 1 -> 2 -> 3
-    // 1. Get the last closed shift from history (order by start_time to ensure proper sequencing)
+    // 1. Get the last closed shift from history (order by id_shift to get the absolute last session, including End of Day)
     final lastSessions = await _dbService.query('shift_sessions',
-        orderBy: 'start_time DESC', limit: 1);
+        orderBy: 'id_shift DESC', limit: 1);
 
     String lastShiftName = '';
     if (lastSessions.isNotEmpty) {
-      lastShiftName = lastSessions.first['shift_name']?.toString() ?? '';
+      final lastSession = lastSessions.first;
+      lastShiftName = lastSession['shift_name']?.toString() ?? '';
+
+      // Check if the last session was on a previous calendar day. If so, auto-reset to Shift 1.
+      final endTimeStr = lastSession['end_time']?.toString() ?? '';
+      final startTimeStr = lastSession['start_time']?.toString() ?? '';
+      final timeToCompare = endTimeStr.isNotEmpty ? endTimeStr : startTimeStr;
+
+      if (timeToCompare.isNotEmpty) {
+        try {
+          final lastTime = DateTime.parse(timeToCompare);
+          final now = DateTime.now();
+          if (lastTime.year != now.year ||
+              lastTime.month != now.month ||
+              lastTime.day != now.day) {
+            // Previous day, return the first active shift (usually Shift 1)
+            final activeOnly = shiftConfigs.where((s) => s.isActive).toList();
+            return activeOnly.isNotEmpty ? activeOnly.first.name : 'Shift 1';
+          }
+        } catch (e) {
+          debugPrint('Error parsing last session time: $e');
+        }
+      }
     }
 
     // 2. Find its position in our master config

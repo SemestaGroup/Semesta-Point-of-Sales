@@ -210,7 +210,7 @@ class HomeController extends GetxController {
       orderType: orderType,
       productDiscountTotal: productDiscountTotal,
       productDiscountType: productDiscountType,
-      selectedPromo: appliedPromo.value,
+      selectedPromos: appliedPromos,
     );
   }
 
@@ -245,7 +245,7 @@ class HomeController extends GetxController {
   final RxBool manualDiscountIsPercent = false.obs;
 
   // Manual Promo State
-  Rx<Map<String, dynamic>?> appliedPromo = Rx<Map<String, dynamic>?>(null);
+  RxList<Map<String, dynamic>> appliedPromos = <Map<String, dynamic>>[].obs;
   final RxInt bundlingDiscountAmount = 0.obs;
 
   final RxBool isRefundMode = false.obs;
@@ -842,11 +842,13 @@ class HomeController extends GetxController {
     subtotalRaw.value = subtotal;
 
     int tempBundlingDiscountAmount = 0;
-    if (appliedPromo.value != null && appliedPromo.value!['promo_type'] == 'bundling') {
-      tempBundlingDiscountAmount = promoService.calculateBundlingDiscount(
-        penjualanDetailModelList, 
-        appliedPromo.value!
-      );
+    for (var promo in appliedPromos) {
+      if (promo['promo_type'] == 'bundling') {
+        tempBundlingDiscountAmount += promoService.calculateBundlingDiscount(
+          penjualanDetailModelList, 
+          promo
+        );
+      }
     }
     bundlingDiscountAmount.value = tempBundlingDiscountAmount;
 
@@ -1119,7 +1121,7 @@ class HomeController extends GetxController {
     selectedOrderType.value = "Dine In";
     manualDiscountValue.value = 0;
     manualDiscountIsPercent.value = false;
-    appliedPromo.value = null; // Clear manually applied promo
+    appliedPromos.clear(); // Clear manually applied promos
     bundlingDiscountAmount.value = 0;
     manualCashAmount.value = 0;
     currentIdPos = null;
@@ -1140,24 +1142,47 @@ class HomeController extends GetxController {
     } catch (_) {}
   }
 
-  void applyPromo(Map<String, dynamic>? promo) {
-    if (promo != null && promo['promo_type'] == 'bundling') {
-      int discount = promoService.calculateBundlingDiscount(penjualanDetailModelList, promo);
-      if (discount == 0) {
-        Get.snackbar(
-          'Promo Bundling Tidak Aktif', 
-          'Isi keranjang belum memenuhi syarat kelengkapan kombinasi paket/qty untuk promo ini.',
-          backgroundColor: Colors.orange.shade800,
-          colorText: Colors.white,
-          snackPosition: SnackPosition.TOP,
-          duration: const Duration(seconds: 3),
-        );
-        return; // Tolak pemasangan promo
-      }
-    }
+  void applyPromo(Map<String, dynamic> promo) {
+    bool isAlreadyApplied = appliedPromos.any((p) => p['id'] == promo['id']);
 
-    appliedPromo.value = promo;
+    if (isAlreadyApplied) {
+      appliedPromos.removeWhere((p) => p['id'] == promo['id']);
+    } else {
+      if (promo['promo_type'] == 'bundling') {
+        int discount = promoService.calculateBundlingDiscount(penjualanDetailModelList, promo);
+        if (discount == 0) {
+          Get.snackbar(
+            'Promo Bundling Tidak Aktif', 
+            'Isi keranjang belum memenuhi syarat kelengkapan kombinasi paket/qty untuk promo ini.',
+            backgroundColor: Colors.orange.shade800,
+            colorText: Colors.white,
+            snackPosition: SnackPosition.TOP,
+            duration: const Duration(seconds: 3),
+          );
+          return; // Tolak pemasangan promo
+        }
+      }
+      appliedPromos.add(promo);
+    }
     // Recalculate prices for all items currently in cart
+    for (int i = 0; i < penjualanDetailModelList.length; i++) {
+      var item = penjualanDetailModelList[i];
+      final promoDiscount = _calculateBestPriceForCartItem(
+          item.idProduk, item.hargaAwal, selectedOrderType.value);
+
+      penjualanDetailModelList[i] = item.copyWith(
+        hargaJual: promoDiscount.finalPrice,
+        discountTotal: promoDiscount.discountTotal,
+        discountType: promoDiscount.discountType,
+        subtotal: promoDiscount.finalPrice * item.jumlah,
+      );
+    }
+    penjualanDetailModelList.refresh();
+    calculateTotals();
+  }
+
+  void clearPromos() {
+    appliedPromos.clear();
     for (int i = 0; i < penjualanDetailModelList.length; i++) {
       var item = penjualanDetailModelList[i];
       final promoDiscount = _calculateBestPriceForCartItem(
