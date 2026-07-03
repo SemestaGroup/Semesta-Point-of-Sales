@@ -58,6 +58,22 @@ class RecapController extends GetxController {
     try {
       await fetchPaymentModes();
       await calculateShiftTotals();
+
+      // Trigger background server pull for latest transaction and payment data
+      if (Get.isRegistered<SyncService>()) {
+        final syncService = Get.find<SyncService>();
+        Future.wait([
+          syncService.pullRemoteOrders(unpaidOnly: false),
+          syncService.pullRemotePayments(),
+          syncService.pullCreditNotes(),
+        ]).then((_) {
+          // Re-calculate totals using the updated database state
+          calculateShiftTotals();
+          refreshHistory();
+        }).catchError((e) {
+          debugPrint("RecapController: Background server refresh failed: $e");
+        });
+      }
     } catch (e) {
       debugPrint("RecapController: Error in initRecap: $e");
     } finally {

@@ -1,3 +1,19 @@
 {
-    "java.configuration.updateBuildConfiguration": "automatic"
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "dart.flutterSdkPath": "/home/cornfuze/development/flutter",
+  "dart.flutterSdkVersion": "3.44.4",
+  "dart.checkForSdkUpdates": false,
+  "dart.openDevTools": "flutter",
+  "editor.formatOnSave": true,
+  "editor.rulers": [80, 120],
+  "[dart]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.defaultFormatter": "Dart-Code.dart-code"
+  },
+  "files.exclude": {
+    "**/.dart_tool": true,
+    "**/build": true,
+    "**/.pub-cache": true
+  }
 }

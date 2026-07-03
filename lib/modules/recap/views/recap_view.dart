@@ -19,8 +19,130 @@ class RecapView extends StatelessWidget {
         .format(number);
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, bool isMobile) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (isMobile) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.account_balance_wallet_rounded,
+                    color: AppTheme.primaryColor,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Shift Reconciliation",
+                        style: TextStyle(
+                          fontSize: 16.sp,
+                          fontFamily: AppTheme.fontBold,
+                          color: AppTheme.textColor(context),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        "Manage actual cash for active shift",
+                        style: TextStyle(
+                          fontSize: 11.sp,
+                          color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded,
+                      color: AppTheme.primaryColor),
+                  onPressed: () {
+                    final ctrl = Get.find<RecapController>();
+                    ctrl.initRecap();
+                    ctrl.refreshHistory();
+                  },
+                  tooltip: "Refresh Data",
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 38,
+                    child: ElevatedButton.icon(
+                      onPressed: () =>
+                          Get.find<RecapController>().confirmEndOfDay(context),
+                      icon: const Icon(Icons.storefront_rounded,
+                          size: 16, color: Colors.white),
+                      label: const Text(
+                        "End of Day",
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontBold,
+                          fontSize: 12,
+                          color: Colors.white,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.deepPurple,
+                        padding: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: SizedBox(
+                    height: 38,
+                    child: ElevatedButton.icon(
+                      onPressed: () =>
+                          Get.find<RecapController>().confirmCloseShift(context),
+                      icon: const Icon(Icons.lock_outline_rounded,
+                          size: 16, color: Colors.white),
+                      label: const Text(
+                        "Close Shift",
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontBold,
+                          fontSize: 12,
+                          color: Colors.white,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFE63946),
+                        padding: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
       child: Row(
@@ -132,13 +254,15 @@ class RecapView extends StatelessWidget {
     );
   }
 
-  Widget _buildSubHeader(BuildContext context) {
+  Widget _buildSubHeader(BuildContext context, bool isMobile) {
     return TabBar(
       indicatorColor: AppTheme.primaryColor,
       labelColor: AppTheme.primaryColor,
       unselectedLabelColor: Colors.grey,
-      indicatorWeight: 3,
-      labelStyle: AppTheme.bodyLarge.copyWith(fontFamily: AppTheme.fontBold),
+      indicatorWeight: isMobile ? 2 : 3,
+      labelStyle: isMobile 
+          ? TextStyle(fontFamily: AppTheme.fontBold, fontSize: 13.sp)
+          : AppTheme.bodyLarge.copyWith(fontFamily: AppTheme.fontBold),
       tabs: const [
         Tab(text: "Recap Summary"),
         Tab(text: "History"),
@@ -155,14 +279,21 @@ class RecapView extends StatelessWidget {
         ? Get.find<RecapController>()
         : Get.put(RecapController());
 
+    final isMobile = MediaQuery.of(context).size.shortestSide < 600;
+
+    // Refresh data and pull latest transactions from server automatically when view is opened
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      controller.initRecap();
+      controller.refreshHistory();
+    });
+
     return DefaultTabController(
       length: 2,
       child: Scaffold(
         backgroundColor: AppTheme.scaffoldBackgroundColor(context),
-        body: SafeArea(
-          child: Column(
-            children: [
-              Container(
+        body: Column(
+          children: [
+            Container(
                 decoration: BoxDecoration(
                   color: AppTheme.cardColor(context),
                   boxShadow: [
@@ -178,27 +309,26 @@ class RecapView extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    _buildHeader(context),
-                    _buildSubHeader(context),
+                    _buildHeader(context, isMobile),
+                    _buildSubHeader(context, isMobile),
                   ],
                 ),
               ),
               Expanded(
                 child: TabBarView(
                   children: [
-                    _buildRecapTab(context, controller),
-                    _buildHistoryTab(context, controller),
+                    _buildRecapTab(context, controller, isMobile),
+                    _buildHistoryTab(context, controller, isMobile),
                   ],
                 ),
               ),
             ],
           ),
         ),
-      ),
     );
   }
 
-  Widget _buildRecapTab(BuildContext context, RecapController controller) {
+  Widget _buildRecapTab(BuildContext context, RecapController controller, bool isMobile) {
     return Obx(() {
       if (controller.isLoading.value) {
         return const Center(
@@ -207,6 +337,84 @@ class RecapView extends StatelessWidget {
 
       final isDark = Theme.of(context).brightness == Brightness.dark;
 
+      final statCards = [
+        _buildStatCard(
+            "Total Recorded",
+            _formatRupiah(controller.getTotalRecorded()),
+            AppTheme.primaryColor,
+            context),
+        _buildStatCard(
+            "Total Audited",
+            _formatRupiah(controller.getTotalAudited()),
+            Colors.green,
+            context),
+        _buildStatCard(
+            "Total Difference",
+            _formatRupiah(controller.getTotalDiff()),
+            controller.getTotalDiff() < 0
+                ? Colors.red
+                : (controller.getTotalDiff() > 0
+                    ? Colors.orange
+                    : Colors.grey),
+            context),
+      ];
+
+      final openingBalanceBanner = Builder(builder: (context) {
+        final shift = Get.find<ShiftController>().activeShift.value;
+        final openingBal = shift?.startingBalance ?? 0;
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Colors.blue.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(10.r),
+            border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+          ),
+          child: Row(children: [
+            const Icon(Icons.account_balance_wallet_outlined,
+                size: 16, color: Colors.blue),
+            const SizedBox(width: 8),
+            const Text('Opening Balance (Modal Awal):',
+                style: TextStyle(fontFamily: AppTheme.fontMedium, fontSize: 12, color: Colors.blue)),
+            const Spacer(),
+            Text(_formatRupiah(openingBal),
+                style: const TextStyle(
+                    fontFamily: AppTheme.fontBold, fontSize: 12, color: Colors.blue)),
+          ]),
+        );
+      });
+
+      if (isMobile) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header Stats (scroll horizontal di mobile agar tidak overflow)
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  children: statCards.map((card) => Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: SizedBox(width: 140, child: card),
+                  )).toList(),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              openingBalanceBanner,
+
+              // Detailed Breakdown stacked vertically
+              _buildPaymentModesSection(context, controller, isDark, true),
+              const SizedBox(height: 16),
+              _buildCashFlowSection(context, controller, isDark, true),
+            ],
+          ),
+        );
+      }
+
       return Padding(
         padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
         child: Column(
@@ -214,57 +422,17 @@ class RecapView extends StatelessWidget {
             // Header Stats
             Row(
               children: [
-                _buildStatCard(
-                    "Total Recorded",
-                    _formatRupiah(controller.getTotalRecorded()),
-                    AppTheme.primaryColor,
-                    context),
+                Expanded(child: statCards[0]),
                 SizedBox(width: 16.w),
-                _buildStatCard(
-                    "Total Audited",
-                    _formatRupiah(controller.getTotalAudited()),
-                    Colors.green,
-                    context),
+                Expanded(child: statCards[1]),
                 SizedBox(width: 16.w),
-                _buildStatCard(
-                    "Total Difference",
-                    _formatRupiah(controller.getTotalDiff()),
-                    controller.getTotalDiff() < 0
-                        ? Colors.red
-                        : (controller.getTotalDiff() > 0
-                            ? Colors.orange
-                            : Colors.grey),
-                    context),
+                Expanded(child: statCards[2]),
               ],
             ),
             SizedBox(height: 24.h),
 
             // Opening Balance banner
-            Builder(builder: (context) {
-              final shift = Get.find<ShiftController>().activeShift.value;
-              final openingBal = shift?.startingBalance ?? 0;
-              return Container(
-                width: double.infinity,
-                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
-                margin: EdgeInsets.only(bottom: 12.h),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(10.r),
-                  border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
-                ),
-                child: Row(children: [
-                  Icon(Icons.account_balance_wallet_outlined,
-                      size: 16.sp, color: Colors.blue),
-                  SizedBox(width: 8.w),
-                  Text('Opening Balance (Modal Awal):',
-                      style: AppTheme.labelMedium.copyWith(color: Colors.blue)),
-                  const Spacer(),
-                  Text(_formatRupiah(openingBal),
-                      style: AppTheme.labelMedium.copyWith(
-                          fontFamily: AppTheme.fontBold, color: Colors.blue)),
-                ]),
-              );
-            }),
+            openingBalanceBanner,
 
             // Detailed Breakdown
             Expanded(
@@ -273,12 +441,12 @@ class RecapView extends StatelessWidget {
                   Expanded(
                       flex: 3,
                       child: _buildPaymentModesSection(
-                          context, controller, isDark)),
+                          context, controller, isDark, false)),
                   SizedBox(width: 16.w),
                   Expanded(
                       flex: 2,
                       child:
-                          _buildCashFlowSection(context, controller, isDark)),
+                          _buildCashFlowSection(context, controller, isDark, false)),
                 ],
               ),
             ),
@@ -289,7 +457,7 @@ class RecapView extends StatelessWidget {
   }
 
   Widget _buildPaymentModesSection(
-      BuildContext context, RecapController controller, bool isDark) {
+      BuildContext context, RecapController controller, bool isDark, bool isMobile) {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.cardColor(context),
@@ -335,125 +503,301 @@ class RecapView extends StatelessWidget {
               ],
             ),
           ),
-          Expanded(
-            child: ListView.separated(
-              itemCount: controller.paymentModes.length,
-              separatorBuilder: (context, index) =>
-                  Divider(height: 1, color: AppTheme.borderColor(context)),
-              itemBuilder: (context, index) {
-                final mode = controller.paymentModes[index];
-                final recorded = controller.getRecordedAmount(mode.id);
-                final audited = controller.getAuditedAmount(mode.id);
-                final diff = controller.getDiffAmount(mode.id);
+          isMobile
+              ? ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: controller.paymentModes.length,
+                  separatorBuilder: (context, index) =>
+                      Divider(height: 1, color: AppTheme.borderColor(context)),
+                  itemBuilder: (context, index) {
+                    final mode = controller.paymentModes[index];
+                    final recorded = controller.getRecordedAmount(mode.id);
+                    final audited = controller.getAuditedAmount(mode.id);
+                    final diff = controller.getDiffAmount(mode.id);
 
-                return InkWell(
-                  onTap: () async {
-                    final result = await showDialog<int>(
-                      context: context,
-                      builder: (context) => AuditKeypadDialog(
-                        title: mode.name,
-                        initialValue: audited,
+                    return InkWell(
+                      onTap: () async {
+                        final result = await showDialog<int>(
+                          context: context,
+                          builder: (context) => AuditKeypadDialog(
+                            title: mode.name,
+                            initialValue: audited,
+                          ),
+                        );
+                        if (result != null) {
+                          controller.updateAuditAmount(mode.id, result);
+                        }
+                      },
+                      child: Padding(
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Row(
+                                children: [
+                                  Icon(Icons.payment_rounded,
+                                      size: 14.sp, color: AppTheme.primaryColor),
+                                  SizedBox(width: 8.w),
+                                  Text(mode.name,
+                                      style: AppTheme.bodyLarge.copyWith(
+                                          fontFamily: AppTheme.fontMedium,
+                                          fontSize: 13.sp)),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(_formatRupiah(recorded),
+                                  style:
+                                      AppTheme.bodyLarge.copyWith(fontSize: 12.sp),
+                                  textAlign: TextAlign.right),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Container(
+                                margin: EdgeInsets.only(left: 8.w),
+                                padding: EdgeInsets.symmetric(
+                                    horizontal: 6.w, vertical: 4.h),
+                                decoration: BoxDecoration(
+                                  color: audited > 0
+                                      ? AppTheme.primaryColor.withValues(alpha: 0.1)
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(6.r),
+                                  border: Border.all(
+                                      color: audited > 0
+                                          ? AppTheme.primaryColor
+                                              .withValues(alpha: 0.3)
+                                          : AppTheme.borderColor(context)),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Text(_formatRupiah(audited),
+                                        style: AppTheme.bodyLarge.copyWith(
+                                            color: audited > 0
+                                                ? AppTheme.primaryColor
+                                                : Colors.grey,
+                                            fontFamily: AppTheme.fontBold,
+                                            fontSize: 12.sp)),
+                                    SizedBox(width: 4.w),
+                                    Icon(Icons.edit_note_rounded,
+                                        size: 14.sp,
+                                        color: AppTheme.primaryColor
+                                            .withValues(alpha: 0.5)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(_formatRupiah(diff),
+                                  style: AppTheme.bodyLarge.copyWith(
+                                      color: diff < 0
+                                          ? Colors.red
+                                          : (diff > 0
+                                              ? Colors.orange
+                                              : Colors.grey),
+                                      fontFamily: AppTheme.fontBold,
+                                      fontSize: 12.sp),
+                                  textAlign: TextAlign.right),
+                            ),
+                          ],
+                        ),
                       ),
                     );
-                    if (result != null) {
-                      controller.updateAuditAmount(mode.id, result);
-                    }
                   },
-                  child: Padding(
-                    padding:
-                        EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 3,
+                )
+              : Expanded(
+                  child: ListView.separated(
+                    itemCount: controller.paymentModes.length,
+                    separatorBuilder: (context, index) =>
+                        Divider(height: 1, color: AppTheme.borderColor(context)),
+                    itemBuilder: (context, index) {
+                      final mode = controller.paymentModes[index];
+                      final recorded = controller.getRecordedAmount(mode.id);
+                      final audited = controller.getAuditedAmount(mode.id);
+                      final diff = controller.getDiffAmount(mode.id);
+
+                      return InkWell(
+                        onTap: () async {
+                          final result = await showDialog<int>(
+                            context: context,
+                            builder: (context) => AuditKeypadDialog(
+                              title: mode.name,
+                              initialValue: audited,
+                            ),
+                          );
+                          if (result != null) {
+                            controller.updateAuditAmount(mode.id, result);
+                          }
+                        },
+                        child: Padding(
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
                           child: Row(
                             children: [
-                              Icon(Icons.payment_rounded,
-                                  size: 14.sp, color: AppTheme.primaryColor),
-                              SizedBox(width: 8.w),
-                              Text(mode.name,
-                                  style: AppTheme.bodyLarge.copyWith(
-                                      fontFamily: AppTheme.fontMedium,
-                                      fontSize: 13.sp)),
+                              Expanded(
+                                flex: 3,
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.payment_rounded,
+                                        size: 14.sp, color: AppTheme.primaryColor),
+                                    SizedBox(width: 8.w),
+                                    Text(mode.name,
+                                        style: AppTheme.bodyLarge.copyWith(
+                                            fontFamily: AppTheme.fontMedium,
+                                            fontSize: 13.sp)),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(_formatRupiah(recorded),
+                                    style:
+                                        AppTheme.bodyLarge.copyWith(fontSize: 12.sp),
+                                    textAlign: TextAlign.right),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Container(
+                                  margin: EdgeInsets.only(left: 8.w),
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 6.w, vertical: 4.h),
+                                  decoration: BoxDecoration(
+                                    color: audited > 0
+                                        ? AppTheme.primaryColor.withValues(alpha: 0.1)
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(6.r),
+                                    border: Border.all(
+                                        color: audited > 0
+                                            ? AppTheme.primaryColor
+                                                .withValues(alpha: 0.3)
+                                            : AppTheme.borderColor(context)),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      Text(_formatRupiah(audited),
+                                          style: AppTheme.bodyLarge.copyWith(
+                                              color: audited > 0
+                                                  ? AppTheme.primaryColor
+                                                  : Colors.grey,
+                                              fontFamily: AppTheme.fontBold,
+                                              fontSize: 12.sp)),
+                                      SizedBox(width: 4.w),
+                                      Icon(Icons.edit_note_rounded,
+                                          size: 14.sp,
+                                          color: AppTheme.primaryColor
+                                              .withValues(alpha: 0.5)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(_formatRupiah(diff),
+                                    style: AppTheme.bodyLarge.copyWith(
+                                        color: diff < 0
+                                            ? Colors.red
+                                            : (diff > 0
+                                                ? Colors.orange
+                                                : Colors.grey),
+                                        fontFamily: AppTheme.fontBold,
+                                        fontSize: 12.sp),
+                                    textAlign: TextAlign.right),
+                              ),
                             ],
                           ),
                         ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(_formatRupiah(recorded),
-                              style:
-                                  AppTheme.bodyLarge.copyWith(fontSize: 12.sp),
-                              textAlign: TextAlign.right),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Container(
-                            margin: EdgeInsets.only(left: 8.w),
-                            padding: EdgeInsets.symmetric(
-                                horizontal: 6.w, vertical: 4.h),
-                            decoration: BoxDecoration(
-                              color: audited > 0
-                                  ? AppTheme.primaryColor.withValues(alpha: 0.1)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(6.r),
-                              border: Border.all(
-                                  color: audited > 0
-                                      ? AppTheme.primaryColor
-                                          .withValues(alpha: 0.3)
-                                      : AppTheme.borderColor(context)),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                Text(_formatRupiah(audited),
-                                    style: AppTheme.bodyLarge.copyWith(
-                                        color: audited > 0
-                                            ? AppTheme.primaryColor
-                                            : Colors.grey,
-                                        fontFamily: AppTheme.fontBold,
-                                        fontSize: 12.sp)),
-                                SizedBox(width: 4.w),
-                                Icon(Icons.edit_note_rounded,
-                                    size: 14.sp,
-                                    color: AppTheme.primaryColor
-                                        .withValues(alpha: 0.5)),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(_formatRupiah(diff),
-                              style: AppTheme.bodyLarge.copyWith(
-                                  color: diff < 0
-                                      ? Colors.red
-                                      : (diff > 0
-                                          ? Colors.orange
-                                          : Colors.grey),
-                                  fontFamily: AppTheme.fontBold,
-                                  fontSize: 12.sp),
-                              textAlign: TextAlign.right),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
-          ),
+                ),
         ],
       ),
     );
   }
 
   Widget _buildCashFlowSection(
-      BuildContext context, RecapController controller, bool isDark) {
+      BuildContext context, RecapController controller, bool isDark, bool isMobile) {
     return Obx(() {
       final items = controller.cashFlowItems;
       final cashOutItems = items.where((e) => e.direction == 'out').toList();
       final cashInItems = items.where((e) => e.direction == 'in').toList();
       final totalOut = cashOutItems.fold(0, (sum, e) => sum + e.amount);
       final totalIn = cashInItems.fold(0, (sum, e) => sum + e.amount);
+
+      final listContent = cashOutItems.isEmpty && cashInItems.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.account_balance_wallet_outlined,
+                      size: 28.sp, color: Colors.grey.shade400),
+                  SizedBox(height: 8.h),
+                  Text('No cash flow recorded',
+                      style: AppTheme.bodyLarge.copyWith(
+                          color: Colors.grey, fontSize: 12.sp)),
+                ],
+              ),
+            )
+          : ListView.separated(
+              shrinkWrap: isMobile,
+              physics: isMobile ? const NeverScrollableScrollPhysics() : null,
+              itemCount: items.length,
+              separatorBuilder: (_, __) => Divider(
+                  height: 1, color: AppTheme.borderColor(context)),
+              itemBuilder: (context, index) {
+                final item = items[index];
+                final isOut = item.direction == 'out';
+                return Padding(
+                  padding: EdgeInsets.symmetric(
+                      horizontal: 14.w, vertical: 8.h),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(5.w),
+                        decoration: BoxDecoration(
+                          color: (isOut ? Colors.red : Colors.green)
+                              .withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(5.r),
+                        ),
+                        child: Icon(
+                          isOut
+                              ? Icons.arrow_upward_rounded
+                              : Icons.arrow_downward_rounded,
+                          size: 12.sp,
+                          color: isOut ? Colors.red : Colors.green,
+                        ),
+                      ),
+                      SizedBox(width: 8.w),
+                      Expanded(
+                        child: Text(
+                          item.expenseName.isNotEmpty
+                              ? item.expenseName
+                              : 'Expense',
+                          style: AppTheme.bodyLarge
+                              .copyWith(fontSize: 12.sp),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        _formatRupiah(item.amount),
+                        style: AppTheme.bodyLarge.copyWith(
+                          fontSize: 12.sp,
+                          fontFamily: AppTheme.fontBold,
+                          color: isOut ? Colors.red : Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
 
       return Container(
         decoration: BoxDecoration(
@@ -583,81 +927,18 @@ class RecapView extends StatelessWidget {
             const Divider(height: 1),
 
             // List of expense rows
-            Expanded(
-              child: cashOutItems.isEmpty && cashInItems.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.account_balance_wallet_outlined,
-                              size: 28.sp, color: Colors.grey.shade400),
-                          SizedBox(height: 8.h),
-                          Text('No cash flow recorded',
-                              style: AppTheme.bodyLarge.copyWith(
-                                  color: Colors.grey, fontSize: 12.sp)),
-                        ],
-                      ),
-                    )
-                  : ListView.separated(
-                      itemCount: items.length,
-                      separatorBuilder: (_, __) => Divider(
-                          height: 1, color: AppTheme.borderColor(context)),
-                      itemBuilder: (context, index) {
-                        final item = items[index];
-                        final isOut = item.direction == 'out';
-                        return Padding(
-                          padding: EdgeInsets.symmetric(
-                              horizontal: 14.w, vertical: 8.h),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: EdgeInsets.all(5.w),
-                                decoration: BoxDecoration(
-                                  color: (isOut ? Colors.red : Colors.green)
-                                      .withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(5.r),
-                                ),
-                                child: Icon(
-                                  isOut
-                                      ? Icons.arrow_upward_rounded
-                                      : Icons.arrow_downward_rounded,
-                                  size: 12.sp,
-                                  color: isOut ? Colors.red : Colors.green,
-                                ),
-                              ),
-                              SizedBox(width: 8.w),
-                              Expanded(
-                                child: Text(
-                                  item.expenseName.isNotEmpty
-                                      ? item.expenseName
-                                      : 'Expense',
-                                  style: AppTheme.bodyLarge
-                                      .copyWith(fontSize: 12.sp),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              Text(
-                                _formatRupiah(item.amount),
-                                style: AppTheme.bodyLarge.copyWith(
-                                  fontSize: 12.sp,
-                                  fontFamily: AppTheme.fontBold,
-                                  color: isOut ? Colors.red : Colors.green,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-            ),
+            isMobile
+                ? listContent
+                : Expanded(
+                    child: listContent,
+                  ),
           ],
         ),
       );
     });
   }
 
-  Widget _buildHistoryTab(BuildContext context, RecapController controller) {
+  Widget _buildHistoryTab(BuildContext context, RecapController controller, bool isMobile) {
     return Obx(
       () {
         final history = controller.shiftHistory;
@@ -668,8 +949,10 @@ class RecapView extends StatelessWidget {
                   style: AppTheme.bodyLarge.copyWith(color: Colors.grey)));
         }
 
+        final pad = isMobile ? 12.0 : 24.w;
+
         return ListView.builder(
-          padding: EdgeInsets.all(24.w),
+          padding: EdgeInsets.all(pad),
           itemCount: history.length,
           itemBuilder: (context, index) {
             final shift = history[index];
@@ -716,13 +999,14 @@ class RecapView extends StatelessWidget {
             } catch (_) {}
 
             final difference = actualCash - systemCash;
+            final innerPad = isMobile ? 12.0 : 20.w;
 
             return InkWell(
               onTap: () => _showShiftDetailDialog(context, shift),
               borderRadius: BorderRadius.circular(16.r),
               child: Container(
-                margin: EdgeInsets.only(bottom: 16.h),
-                padding: EdgeInsets.all(20.w),
+                margin: EdgeInsets.only(bottom: isMobile ? 10.0 : 16.h),
+                padding: EdgeInsets.all(innerPad),
                 decoration: BoxDecoration(
                   color: shift['shift_name'] == 'End of Day'
                       ? Colors.purple.withValues(alpha: 0.05)
@@ -738,35 +1022,40 @@ class RecapView extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                if (shift['shift_name'] == 'End of Day') ...[
-                                  Icon(Icons.auto_awesome,
-                                      color: Colors.purple, size: 20.sp),
-                                  SizedBox(width: 8.w),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  if (shift['shift_name'] == 'End of Day') ...[
+                                    Icon(Icons.auto_awesome,
+                                        color: Colors.purple, size: isMobile ? 16 : 20.sp),
+                                    const SizedBox(width: 6),
+                                  ],
+                                  Expanded(
+                                    child: Text(
+                                        "${shift['shift_name']} • ${shift['user_id'] ?? 'Kasir'}",
+                                        overflow: TextOverflow.ellipsis,
+                                        style: AppTheme.titleLarge.copyWith(
+                                            fontSize: isMobile ? 14 : 18.sp,
+                                            color:
+                                                shift['shift_name'] == 'End of Day'
+                                                    ? Colors.purple
+                                                    : null)),
+                                  ),
                                 ],
-                                Text(
-                                    "${shift['shift_name']} • ${shift['user_id'] ?? 'Kasir'}",
-                                    style: AppTheme.titleLarge.copyWith(
-                                        fontSize: 18.sp,
-                                        color:
-                                            shift['shift_name'] == 'End of Day'
-                                                ? Colors.purple
-                                                : null)),
-                              ],
-                            ),
-                            Text("$dateStr | $timeRange",
-                                style: AppTheme.labelMedium),
-                          ],
+                              ),
+                              Text("$dateStr | $timeRange",
+                                  style: isMobile ? const TextStyle(fontSize: 11) : AppTheme.labelMedium),
+                            ],
+                          ),
                         ),
                         Row(
                           children: [
                             IconButton(
                               icon: Icon(Icons.print,
-                                  color: AppTheme.primaryColor, size: 22.sp),
+                                  color: AppTheme.primaryColor, size: isMobile ? 18 : 22.sp),
                               onPressed: () {
                                 final shiftModel =
                                     ShiftSessionModel.fromJson(shift);

@@ -742,7 +742,9 @@ class SettingController extends GetxController {
       }
 
       bytes += generator.feed(1);
-      bytes += generator.cut();
+      if (isAutoCut) {
+        bytes += generator.cut();
+      }
     }
 
     return bytes;

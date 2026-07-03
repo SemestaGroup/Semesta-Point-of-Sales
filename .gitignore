@@ -18,10 +18,8 @@ migrate_working_dir/
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# .vscode folder — uncommented so team gets shared settings
+.vscode/*
 
 # Flutter/Dart/Pub related
 **/doc/api/
@@ -48,6 +46,14 @@ app.*.map.json
 android/local.properties
 ios/Flutter/Generated.xcconfig
 ios/Flutter/flutter_export_environment.sh
+
+# FVM — Flutter version management (local per machine)
+.fvm/flutter_sdk
+.fvm/versions/
+
+# Environment config — GITIGNORE .env, COMMIT .env.example
+.env
+.env.*
 
 # Project logs and temporary files
 error_list.txt

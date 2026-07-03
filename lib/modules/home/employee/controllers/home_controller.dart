@@ -386,7 +386,6 @@ class HomeController extends GetxController {
 
   Future<void> getProductData({bool silent = false}) async {
     try {
-      productModelList.clear();
       if (!silent) isLoadingProduct.value = true;
 
       // Only show brands that have at least one active product
@@ -456,7 +455,7 @@ class HomeController extends GetxController {
       isLoadingProduct.value = false;
 
       if (localProducts.isNotEmpty) {
-        productModelList.addAll(localProducts.map((e) {
+        final List<ProductModel> newProducts = localProducts.map((e) {
           return ProductModel.fromJson({
             'id': e['id_produk'],
             'category_id': e['id_kategori'],
@@ -475,13 +474,16 @@ class HomeController extends GetxController {
             'parent': e['parent'],
             'children': e['children'],
           });
-        }).toList());
+        }).toList();
+        productModelList.value = newProducts;
         return;
       }
 
+      productModelList.clear();
       debugPrint('Tidak ada data produk di database lokal');
       return;
     } catch (e) {
+      isLoadingProduct.value = false;
       Get.snackbar('Error', 'Gagal memuat data produk lokal: $e');
       return;
     }
