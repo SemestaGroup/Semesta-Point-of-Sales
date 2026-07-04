@@ -21,6 +21,8 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBackgroundColor(context),
       body: SafeArea(
+        left: false,
+        right: false,
         child: Column(
           children: [
             _buildHeader(context),

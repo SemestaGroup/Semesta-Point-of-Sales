@@ -36,6 +36,8 @@ class HomeAdminScreen extends GetView<HomeAdminController> {
       body: Obx(() => ctrl.isLoading.value
           ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
           : SafeArea(
+              left: false,
+              right: false,
               child: SingleChildScrollView(
                 padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
                 child: Column(

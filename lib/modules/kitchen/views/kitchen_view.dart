@@ -17,6 +17,8 @@ class KitchenView extends StatelessWidget {
       child: Scaffold(
         backgroundColor: AppTheme.scaffoldBackgroundColor(context),
         body: SafeArea(
+          left: false,
+          right: false,
           child: Column(
             children: [
               Container(

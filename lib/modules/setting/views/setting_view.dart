@@ -24,6 +24,8 @@ class SettingScreen extends GetView<SettingController> {
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBackgroundColor(context),
       body: SafeArea(
+        left: false,
+        right: false,
         child: Obx(() => controller.isLoading.value
             ? const Center(
                 child: CircularProgressIndicator(

@@ -173,6 +173,8 @@ class HomeScreen extends StatelessWidget {
       backgroundColor: AppTheme.scaffoldBackgroundColor(context),
       resizeToAvoidBottomInset: false,
       body: SafeArea(
+        left: false,
+        right: false,
 
         // FIX: Removed monolithic Obx wrapping the ENTIRE body.
         // Previously every reactive change (e.g., cart update) caused a full
@@ -539,12 +541,12 @@ class HomeScreen extends StatelessWidget {
 
   Widget _buildSecondaryAction(
       BuildContext context, String label, IconData icon,
-      {VoidCallback? onTap,
+      {dynamic onTap,
       Color? backgroundColor,
       Function(TapDownDetails)? onTapDown}) {
     return GestureDetector(
-      onTap: onTap,
-      onTapDown: onTapDown,
+      onTap: onTap is VoidCallback ? onTap : null,
+      onTapDown: onTapDown ?? (onTap is Function(TapDownDetails) ? onTap : null),
       child: Container(
         // Padding diperkecil drastis
         padding: EdgeInsets.symmetric(vertical: 4.h, horizontal: 8.w),
@@ -3169,9 +3171,13 @@ class HomeScreen extends StatelessWidget {
 
   // RESTORED UI HELPER METHODS
   Widget _buildIconButton(BuildContext context, IconData icon,
-      {Function? onTap}) {
+      {dynamic onTap}) {
     return GestureDetector(
-      onTapDown: onTap is Function(TapDownDetails) ? onTap : null,
+      onTapDown: onTap is Function(TapDownDetails)
+          ? onTap
+          : (onTap is Function(TapDownDetails)
+              ? (details) => onTap(details)
+              : (onTap is Function ? (details) => (onTap as Function)(details) : null)),
       onTap: onTap is VoidCallback ? onTap : null,
       child: Container(
         padding: EdgeInsets.all(6.w), // Diperkecil drastis dari 12.w

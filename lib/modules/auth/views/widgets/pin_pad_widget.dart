@@ -46,14 +46,17 @@ class _PinPadWidgetState extends State<PinPadWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final double shortestSide = MediaQuery.of(context).size.shortestSide;
+    final bool isMobile = shortestSide < 600;
+
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: EdgeInsets.symmetric(horizontal: 200.w),
+      insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 24.0 : 200.w),
       child: Container(
-        padding: EdgeInsets.all(32.r),
+        padding: EdgeInsets.all(isMobile ? 20.0 : 32.r),
         decoration: BoxDecoration(
           color: AppTheme.cardColor(context),
-          borderRadius: BorderRadius.circular(24.r),
+          borderRadius: BorderRadius.circular(isMobile ? 16.0 : 24.r),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.1),
@@ -69,49 +72,56 @@ class _PinPadWidgetState extends State<PinPadWidget> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                   Container(
-                     padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-                     decoration: BoxDecoration(
-                       color: AppTheme.scaffoldBackgroundColor(context),
-                       borderRadius: BorderRadius.circular(12.r),
-                       border: Border.all(color: AppTheme.borderColor(context)),
-                     ),
-                     child: Row(
-                       children: [
-                         CircleAvatar(
-                           radius: 16.r,
-                           backgroundColor: AppTheme.primaryColor,
-                           child: Text(
-                             widget.initials ?? '?',
-                             style: TextStyle(fontSize: 12.sp, color: Colors.white, fontWeight: FontWeight.bold),
-                           ),
-                         ),
-                         SizedBox(width: 8.w),
-                         Text(
-                           widget.staffName!,
-                           style: TextStyle(
-                             fontFamily: AppTheme.fontBold,
-                             fontSize: 14.sp,
-                             color: AppTheme.textColor(context),
-                           ),
-                         ),
-                       ],
-                     ),
-                   ),
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 12.0 : 16.w, 
+                      vertical: isMobile ? 6.0 : 8.h
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.scaffoldBackgroundColor(context),
+                      borderRadius: BorderRadius.circular(isMobile ? 8.0 : 12.r),
+                      border: Border.all(color: AppTheme.borderColor(context)),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: isMobile ? 12.0 : 16.r,
+                          backgroundColor: AppTheme.primaryColor,
+                          child: Text(
+                            widget.initials ?? '?',
+                            style: TextStyle(
+                              fontSize: isMobile ? 10.0 : 12.sp, 
+                              color: Colors.white, 
+                              fontWeight: FontWeight.bold
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8.0),
+                        Text(
+                          widget.staffName!,
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontBold,
+                            fontSize: isMobile ? 12.0 : 14.sp,
+                            color: AppTheme.textColor(context),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
-              SizedBox(height: 20.h),
+              const SizedBox(height: 16.0),
             ],
             
             Text(
               widget.title,
               style: TextStyle(
                 fontFamily: AppTheme.fontBold,
-                fontSize: 22.sp,
+                fontSize: isMobile ? 18.0 : 22.sp,
                 color: AppTheme.textColor(context),
               ),
             ),
-            SizedBox(height: 32.h),
+            const SizedBox(height: 24.0),
             
             // PIN Indicators
             Row(
@@ -119,78 +129,81 @@ class _PinPadWidgetState extends State<PinPadWidget> {
               children: List.generate(widget.pinLength, (index) {
                 bool isFilled = index < _currentPin.length;
                 return Container(
-                  margin: EdgeInsets.symmetric(horizontal: 12.w),
-                  width: 16.w,
-                  height: 1.5.h,
+                  margin: const EdgeInsets.symmetric(horizontal: 8.0),
+                  width: 12.0,
+                  height: 12.0,
                   decoration: BoxDecoration(
+                    shape: BoxShape.circle,
                     color: isFilled ? AppTheme.primaryColor : Colors.grey[300],
                   ),
                 );
               }),
             ),
-            SizedBox(height: 48.h),
+            const SizedBox(height: 32.0),
             
             // Number Pad
-            _buildNumberPad(),
+            _buildNumberPad(isMobile),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildNumberPad() {
+  Widget _buildNumberPad(bool isMobile) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        _buildPadRow(['1', '2', '3']),
-        SizedBox(height: 16.h),
-        _buildPadRow(['4', '5', '6']),
-        SizedBox(height: 16.h),
-        _buildPadRow(['7', '8', '9']),
-        SizedBox(height: 16.h),
+        _buildPadRow(['1', '2', '3'], isMobile),
+        const SizedBox(height: 12.0),
+        _buildPadRow(['4', '5', '6'], isMobile),
+        const SizedBox(height: 12.0),
+        _buildPadRow(['7', '8', '9'], isMobile),
+        const SizedBox(height: 12.0),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-             const SizedBox(width: 70, height: 70), // Empty space
-             _buildPadButton('0'),
-             _buildPadButton('backspace'),
+            SizedBox(width: isMobile ? 60.0 : 70.w), // Empty space
+            _buildPadButton('0', isMobile),
+            _buildPadButton('backspace', isMobile),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildPadRow(List<String> digits) {
+  Widget _buildPadRow(List<String> digits, bool isMobile) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: digits.map((d) => _buildPadButton(d)).toList(),
+      children: digits.map((d) => _buildPadButton(d, isMobile)).toList(),
     );
   }
 
-  Widget _buildPadButton(String val) {
+  Widget _buildPadButton(String val, bool isMobile) {
     bool isBackspace = val == 'backspace';
+    final double buttonSize = isMobile ? 60.0 : 70.w;
     
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: 10.w),
-      width: 70.w,
-      height: 70.w,
+      margin: const EdgeInsets.symmetric(horizontal: 8.0),
+      width: buttonSize,
+      height: buttonSize,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: isBackspace ? _onBackspace : () => _onDigitPress(val),
-          borderRadius: BorderRadius.circular(16.r),
+          borderRadius: BorderRadius.circular(isMobile ? 12.0 : 16.r),
           child: Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16.r),
+              borderRadius: BorderRadius.circular(isMobile ? 12.0 : 16.r),
               border: Border.all(color: AppTheme.borderColor(context).withValues(alpha: 0.5)),
             ),
             alignment: Alignment.center,
             child: isBackspace
-                ? Icon(Icons.backspace_outlined, color: AppTheme.primaryColor, size: 24.sp)
+                ? Icon(Icons.backspace_outlined, color: AppTheme.primaryColor, size: isMobile ? 20.0 : 24.sp)
                 : Text(
                     val,
                     style: TextStyle(
                       fontFamily: AppTheme.fontMedium,
-                      fontSize: 24.sp,
+                      fontSize: isMobile ? 20.0 : 24.sp,
                       color: AppTheme.textColor(context),
                     ),
                   ),

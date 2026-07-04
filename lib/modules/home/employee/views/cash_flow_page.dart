@@ -192,6 +192,241 @@ class _CashFlowPageState extends State<CashFlowPage>
   }
 
   Widget _buildCashOutTab() {
+    final isMobile = MediaQuery.of(context).size.shortestSide < 600;
+    if (isMobile) {
+      return _buildCashOutMobile();
+    }
+    return _buildCashOutTablet();
+  }
+
+  Widget _buildCashOutMobile() {
+    return Form(
+      key: _formKey,
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildLabel('Amount *'),
+                  InkWell(
+                    onTap: () {
+                      setState(() {
+                        _isAmountFocused = true;
+                      });
+                      FocusScope.of(context).unfocus();
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.cardColor(context),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: _isAmountFocused
+                              ? AppTheme.primaryColor
+                              : AppTheme.borderColor(context),
+                          width: _isAmountFocused ? 1.8 : 1.0,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _formatDisplayAmount(),
+                              style: TextStyle(
+                                fontSize: 18.sp,
+                                fontFamily: AppTheme.fontBold,
+                                color: _typedAmount.isEmpty
+                                    ? Colors.grey.shade400
+                                    : AppTheme.textColor(context),
+                              ),
+                            ),
+                          ),
+                          if (_typedAmount.isNotEmpty)
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _typedAmount = "";
+                                });
+                              },
+                              child: const Icon(Icons.clear,
+                                  size: 20, color: Colors.grey),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildLabel('Expense Name'),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildPresetChip("Galon"),
+                      _buildPresetChip("Uang Bensin"),
+                      _buildPresetChip("Parkir"),
+                      _buildPresetChip("Es Batu"),
+                      _buildPresetChip("ATK / Print"),
+                      _buildPresetChip("Service"),
+                      _buildPresetChip("Kustom..."),
+                    ],
+                  ),
+                  if (_selectedPreset == "Kustom...") ...[
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: _nameController,
+                      autofocus: true,
+                      style: TextStyle(
+                          fontSize: 14.sp,
+                          color: AppTheme.textColor(context)),
+                      decoration:
+                          _inputDecoration('Enter custom name...'),
+                      onTap: () {
+                        setState(() {
+                          _isAmountFocused = false;
+                        });
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  _buildLabel('Note (Optional)'),
+                  TextFormField(
+                    controller: _noteController,
+                    maxLines: 2,
+                    style: TextStyle(
+                        fontSize: 14.sp,
+                        color: AppTheme.textColor(context)),
+                    decoration: _inputDecoration('Add some details...'),
+                    onTap: () {
+                      setState(() {
+                        _isAmountFocused = false;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Static Bottom Numpad & Submit button for Mobile
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.cardColor(context),
+              border: Border(top: BorderSide(color: AppTheme.borderColor(context))),
+            ),
+            child: SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    height: 160,
+                    child: _buildNumpadMobile(),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 46,
+                    child: ElevatedButton(
+                      onPressed: _isSubmitting ? null : _submitExpense,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                        elevation: 0,
+                      ),
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Text(
+                              'Submit Cash Out',
+                              style: TextStyle(
+                                fontFamily: AppTheme.fontBold,
+                                fontSize: 15,
+                                color: Colors.white,
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNumpadMobile() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(child: _buildNumRowMobile(["7", "8", "9"])),
+        const SizedBox(height: 6),
+        Expanded(child: _buildNumRowMobile(["4", "5", "6"])),
+        const SizedBox(height: 6),
+        Expanded(child: _buildNumRowMobile(["1", "2", "3"])),
+        const SizedBox(height: 6),
+        Expanded(child: _buildNumRowMobile(["0", "000", "⌫"])),
+      ],
+    );
+  }
+
+  Widget _buildNumRowMobile(List<String> keys) {
+    return Row(
+      children: keys.map((key) {
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: _buildNumKeyMobile(key),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildNumKeyMobile(String key) {
+    bool isBackspace = key == "⌫";
+    return Material(
+      color: isBackspace
+          ? Colors.red.withAlpha((255 * 0.1).round())
+          : AppTheme.cardColor(context),
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: () => _onKeyTap(key),
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            border: Border.all(color: AppTheme.borderColor(context)),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: isBackspace
+              ? const Icon(Icons.backspace_outlined, color: Colors.red, size: 18)
+              : Text(
+                  key,
+                  style: TextStyle(
+                    fontSize: 16.sp,
+                    fontFamily: AppTheme.fontBold,
+                    color: AppTheme.textColor(context),
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCashOutTablet() {
     // Detect keyboard bottom inset height
     double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
 

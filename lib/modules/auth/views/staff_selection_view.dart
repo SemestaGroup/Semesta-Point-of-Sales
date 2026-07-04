@@ -14,6 +14,8 @@ class StaffSelectionView extends GetView<AuthController> {
   Widget build(BuildContext context) {
     debugPrint("StaffSelectionView: build() started");
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final double shortestSide = MediaQuery.of(context).size.shortestSide;
+    final bool isMobile = shortestSide < 600;
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
@@ -21,17 +23,21 @@ class StaffSelectionView extends GetView<AuthController> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leadingWidth: 150.w,
+        leadingWidth: isMobile ? 100.0 : 150.w,
         leading: controller.userService.getPrefBool('has_active_staff')
             ? Padding(
-                padding: EdgeInsets.only(left: 24.w, top: 8.h, bottom: 8.h),
+                padding: EdgeInsets.only(
+                  left: isMobile ? 16.0 : 24.w, 
+                  top: isMobile ? 8.0 : 8.h, 
+                  bottom: isMobile ? 8.0 : 8.h
+                ),
                 child: InkWell(
                   onTap: () => Get.back(),
-                  borderRadius: BorderRadius.circular(12.r),
+                  borderRadius: BorderRadius.circular(isMobile ? 8.0 : 12.r),
                   child: Container(
                     decoration: BoxDecoration(
                         color: AppTheme.cardColor(context),
-                        borderRadius: BorderRadius.circular(12.r),
+                        borderRadius: BorderRadius.circular(isMobile ? 8.0 : 12.r),
                         border:
                             Border.all(color: AppTheme.borderColor(context)),
                         boxShadow: isDark
@@ -47,13 +53,13 @@ class StaffSelectionView extends GetView<AuthController> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.arrow_back_ios_new,
-                            color: AppTheme.primaryColor, size: 16.sp),
-                        SizedBox(width: 8.w),
+                            color: AppTheme.primaryColor, size: isMobile ? 12.0 : 16.sp),
+                        const SizedBox(width: 4.0),
                         Text(
                           'Back',
                           style: TextStyle(
                             fontFamily: AppTheme.fontBold,
-                            fontSize: 14.sp,
+                            fontSize: isMobile ? 12.0 : 14.sp,
                             color: AppTheme.primaryColor,
                           ),
                         ),
@@ -67,15 +73,19 @@ class StaffSelectionView extends GetView<AuthController> {
           // Lock Account button (visible to everyone who has an active session to lock)
           if (controller.userService.getPrefBool('has_active_staff'))
             Padding(
-              padding: EdgeInsets.only(right: 12.w, top: 8.h, bottom: 8.h),
+              padding: EdgeInsets.only(
+                right: isMobile ? 8.0 : 12.w, 
+                top: isMobile ? 8.0 : 8.h, 
+                bottom: isMobile ? 8.0 : 8.h
+              ),
               child: InkWell(
                 onTap: () => controller.lockAccount(),
-                borderRadius: BorderRadius.circular(12.r),
+                borderRadius: BorderRadius.circular(isMobile ? 8.0 : 12.r),
                 child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 16.w),
+                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 10.0 : 16.w),
                   decoration: BoxDecoration(
                     color: Colors.orange.shade600.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12.r),
+                    borderRadius: BorderRadius.circular(isMobile ? 8.0 : 12.r),
                     border: Border.all(
                         color: Colors.orange.shade600.withValues(alpha: 0.2)),
                   ),
@@ -83,13 +93,13 @@ class StaffSelectionView extends GetView<AuthController> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.lock_outline_rounded,
-                          color: Colors.orange.shade700, size: 16.sp),
-                      SizedBox(width: 8.w),
+                          color: Colors.orange.shade700, size: isMobile ? 12.0 : 16.sp),
+                      const SizedBox(width: 4.0),
                       Text(
-                        'Lock App',
+                        isMobile ? 'Lock' : 'Lock App',
                         style: TextStyle(
                           fontFamily: AppTheme.fontBold,
-                          fontSize: 14.sp,
+                          fontSize: isMobile ? 12.0 : 14.sp,
                           color: Colors.orange.shade700,
                         ),
                       ),
@@ -105,7 +115,11 @@ class StaffSelectionView extends GetView<AuthController> {
               if (role != 'owner') return const SizedBox.shrink();
 
               return Padding(
-                padding: EdgeInsets.only(right: 24.w, top: 8.h, bottom: 8.h),
+                padding: EdgeInsets.only(
+                  right: isMobile ? 16.0 : 24.w, 
+                  top: isMobile ? 8.0 : 8.h, 
+                  bottom: isMobile ? 8.0 : 8.h
+                ),
                 child: Row(
                   children: [
                     // Sync Staff button
@@ -113,13 +127,13 @@ class StaffSelectionView extends GetView<AuthController> {
                           onTap: controller.isLoading.value
                               ? null
                               : () => controller.refreshStaff(),
-                          borderRadius: BorderRadius.circular(12.r),
+                          borderRadius: BorderRadius.circular(isMobile ? 8.0 : 12.r),
                           child: Container(
-                            padding: EdgeInsets.symmetric(horizontal: 14.w),
+                            padding: EdgeInsets.symmetric(horizontal: isMobile ? 10.0 : 14.w),
                             decoration: BoxDecoration(
                               color:
                                   AppTheme.primaryColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12.r),
+                              borderRadius: BorderRadius.circular(isMobile ? 8.0 : 12.r),
                               border: Border.all(
                                   color: AppTheme.primaryColor
                                       .withValues(alpha: 0.2)),
@@ -129,20 +143,20 @@ class StaffSelectionView extends GetView<AuthController> {
                               children: [
                                 controller.isLoading.value
                                     ? SizedBox(
-                                        width: 16.w,
-                                        height: 16.w,
+                                        width: isMobile ? 12.0 : 16.w,
+                                        height: isMobile ? 12.0 : 16.w,
                                         child: const CircularProgressIndicator(
                                             strokeWidth: 2,
                                             color: AppTheme.primaryColor))
                                     : Icon(Icons.sync_rounded,
                                         color: AppTheme.primaryColor,
-                                        size: 16.sp),
-                                SizedBox(width: 8.w),
+                                        size: isMobile ? 12.0 : 16.sp),
+                                const SizedBox(width: 4.0),
                                 Text(
-                                  'Sync Staff',
+                                  isMobile ? 'Sync' : 'Sync Staff',
                                   style: TextStyle(
                                     fontFamily: AppTheme.fontBold,
-                                    fontSize: 14.sp,
+                                    fontSize: isMobile ? 12.0 : 14.sp,
                                     color: AppTheme.primaryColor,
                                   ),
                                 ),
@@ -150,16 +164,16 @@ class StaffSelectionView extends GetView<AuthController> {
                             ),
                           ),
                         )),
-                    SizedBox(width: 12.w),
+                    const SizedBox(width: 8.0),
                     // Logout Location button
                     InkWell(
                       onTap: () => controller.logoutLocation(),
-                      borderRadius: BorderRadius.circular(12.r),
+                      borderRadius: BorderRadius.circular(isMobile ? 8.0 : 12.r),
                       child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: 16.w),
+                        padding: EdgeInsets.symmetric(horizontal: isMobile ? 10.0 : 16.w),
                         decoration: BoxDecoration(
                           color: Colors.redAccent.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12.r),
+                          borderRadius: BorderRadius.circular(isMobile ? 8.0 : 12.r),
                           border: Border.all(
                               color: Colors.redAccent.withValues(alpha: 0.2)),
                         ),
@@ -167,13 +181,13 @@ class StaffSelectionView extends GetView<AuthController> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.power_settings_new,
-                                color: Colors.redAccent, size: 16.sp),
-                            SizedBox(width: 8.w),
+                                color: Colors.redAccent, size: isMobile ? 12.0 : 16.sp),
+                            const SizedBox(width: 4.0),
                             Text(
-                              'Logout Location',
+                              isMobile ? 'Logout' : 'Logout Location',
                               style: TextStyle(
                                 fontFamily: AppTheme.fontBold,
-                                fontSize: 14.sp,
+                                fontSize: isMobile ? 12.0 : 14.sp,
                                 color: Colors.redAccent,
                               ),
                             ),
@@ -191,33 +205,33 @@ class StaffSelectionView extends GetView<AuthController> {
         ],
       ),
       body: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 100.w),
+        padding: EdgeInsets.symmetric(horizontal: isMobile ? 24.0 : 100.w),
         child: Column(
           children: [
-            SizedBox(height: 30.h),
+            SizedBox(height: isMobile ? 16.0 : 30.h),
             Text(
               'Switch Staff',
               style: TextStyle(
                 fontFamily: AppTheme.fontBold,
-                fontSize: 32.sp,
+                fontSize: isMobile ? 24.0 : 32.sp,
                 color: AppTheme.textColor(context),
               ),
             ),
-            SizedBox(height: 8.h),
+            const SizedBox(height: 6.0),
             Text(
               'Please select your account and enter your PIN to continue.',
               style: TextStyle(
                 fontFamily: AppTheme.fontMedium,
-                fontSize: 16.sp,
+                fontSize: isMobile ? 13.0 : 16.sp,
                 color: AppTheme.secondaryTextColor(context),
               ),
             ),
-            SizedBox(height: 40.h),
+            SizedBox(height: isMobile ? 24.0 : 40.h),
 
             // Search Bar
-            _buildSearchBar(context),
+            _buildSearchBar(context, isMobile),
 
-            SizedBox(height: 40.h),
+            SizedBox(height: isMobile ? 24.0 : 40.h),
 
             // Grid of Staff
             Expanded(
@@ -228,13 +242,13 @@ class StaffSelectionView extends GetView<AuthController> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(CupertinoIcons.person_3,
-                            size: 60.sp, color: AppTheme.borderColor(context)),
-                        SizedBox(height: 16.h),
+                            size: isMobile ? 48.0 : 60.sp, color: AppTheme.borderColor(context)),
+                        const SizedBox(height: 16.0),
                         Text(
                           'No users found',
                           style: TextStyle(
                             fontFamily: AppTheme.fontMedium,
-                            fontSize: 18.sp,
+                            fontSize: isMobile ? 14.0 : 18.sp,
                             color: AppTheme.textColorSecondary,
                           ),
                         ),
@@ -244,12 +258,12 @@ class StaffSelectionView extends GetView<AuthController> {
                 }
 
                 return GridView.builder(
-                  padding: EdgeInsets.only(bottom: 20.h, top: 10.h),
+                  padding: EdgeInsets.only(bottom: isMobile ? 16.0 : 20.h, top: 10.h),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 4,
-                    crossAxisSpacing: 30.w,
-                    mainAxisSpacing: 30.h,
-                    childAspectRatio: 0.85,
+                    crossAxisCount: isMobile ? 2 : 4,
+                    crossAxisSpacing: isMobile ? 16.0 : 30.w,
+                    mainAxisSpacing: isMobile ? 16.0 : 30.h,
+                    childAspectRatio: isMobile ? 0.95 : 0.85,
                   ),
                   itemCount: controller.filteredStaff.length +
                       (controller.userService.getRole().toLowerCase() == 'owner'
@@ -261,22 +275,22 @@ class StaffSelectionView extends GetView<AuthController> {
                             'owner';
                     // Last slot for owner = Add Staff card
                     if (isOwner && index == controller.filteredStaff.length) {
-                      return _buildAddStaffCard(context);
+                      return _buildAddStaffCard(context, isMobile);
                     }
                     final staff = controller.filteredStaff[index];
-                    return _buildStaffItem(context, staff);
+                    return _buildStaffItem(context, staff, isMobile);
                   },
                 );
               }),
             ),
 
             Padding(
-              padding: EdgeInsets.symmetric(vertical: 24.h),
+              padding: EdgeInsets.symmetric(vertical: isMobile ? 16.0 : 24.h),
               child: Text(
                 'Powered by Flink POS',
                 style: TextStyle(
                   fontFamily: AppTheme.fontMedium,
-                  fontSize: 12.sp,
+                  fontSize: isMobile ? 10.0 : 12.sp,
                   color: AppTheme.borderColor(context),
                 ),
               ),
@@ -287,12 +301,12 @@ class StaffSelectionView extends GetView<AuthController> {
     );
   }
 
-  Widget _buildSearchBar(BuildContext context) {
+  Widget _buildSearchBar(BuildContext context, bool isMobile) {
     return Container(
-      width: 500.w,
+      width: isMobile ? double.infinity : 500.w,
       decoration: BoxDecoration(
         color: AppTheme.cardColor(context),
-        borderRadius: BorderRadius.circular(16.r),
+        borderRadius: BorderRadius.circular(isMobile ? 12.0 : 16.r),
         border: Border.all(color: AppTheme.borderColor(context)),
         boxShadow: [
           BoxShadow(
@@ -311,24 +325,24 @@ class StaffSelectionView extends GetView<AuthController> {
           hintText: 'Search by name or role...',
           hintStyle: TextStyle(
             fontFamily: AppTheme.fontMedium,
-            fontSize: 15.sp,
+            fontSize: isMobile ? 14.0 : 15.sp,
             color: AppTheme.secondaryTextColor(context),
           ),
           prefixIcon: Icon(CupertinoIcons.search,
-              color: AppTheme.secondaryTextColor(context), size: 20.sp),
+              color: AppTheme.secondaryTextColor(context), size: isMobile ? 18.0 : 20.sp),
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(vertical: 18.h),
+          contentPadding: EdgeInsets.symmetric(vertical: isMobile ? 12.0 : 18.h),
         ),
         style: TextStyle(
           fontFamily: AppTheme.fontMedium,
-          fontSize: 15.sp,
+          fontSize: isMobile ? 14.0 : 15.sp,
           color: AppTheme.textColor(context),
         ),
       ),
     );
   }
 
-  Widget _buildStaffItem(BuildContext context, StaffModel staff) {
+  Widget _buildStaffItem(BuildContext context, StaffModel staff, bool isMobile) {
     final List<Color> colors = [
       const Color(0xFF264653),
       const Color(0xFF2A9D8F),
@@ -346,7 +360,7 @@ class StaffSelectionView extends GetView<AuthController> {
       child: Container(
         decoration: BoxDecoration(
           color: AppTheme.cardColor(context),
-          borderRadius: BorderRadius.circular(24.r),
+          borderRadius: BorderRadius.circular(isMobile ? 16.0 : 24.r),
           border: Border.all(color: AppTheme.borderColor(context)),
           boxShadow: [
             BoxShadow(
@@ -363,13 +377,13 @@ class StaffSelectionView extends GetView<AuthController> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 90.w,
-              height: 90.w,
+              width: isMobile ? 64.0 : 90.w,
+              height: isMobile ? 64.0 : 90.w,
               decoration: BoxDecoration(
                 color: avatarColor,
                 shape: BoxShape.circle,
                 border:
-                    Border.all(color: AppTheme.cardColor(context), width: 4.w),
+                    Border.all(color: AppTheme.cardColor(context), width: isMobile ? 3.0 : 4.w),
                 boxShadow: [
                   BoxShadow(
                     color: avatarColor.withValues(alpha: 0.4),
@@ -383,38 +397,33 @@ class StaffSelectionView extends GetView<AuthController> {
                 staff.initials,
                 style: TextStyle(
                   fontFamily: AppTheme.fontBold,
-                  fontSize: 32.sp,
-                  color: Colors.white, // Ensure white text for colors
+                  fontSize: isMobile ? 22.0 : 32.sp,
+                  color: Colors.white,
                 ),
               ),
             ),
-            SizedBox(height: 24.h),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.w),
-              child: Text(
-                staff.fullName,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontFamily: AppTheme.fontBold,
-                  fontSize: 18.sp,
-                  color: AppTheme.textColor(context),
-                ),
+            const SizedBox(height: 12.0),
+            Text(
+              staff.fullName,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: AppTheme.fontBold,
+                fontSize: isMobile ? 14.0 : 16.sp,
+                color: AppTheme.textColor(context),
               ),
             ),
-            SizedBox(height: 6.h),
+            const SizedBox(height: 4.0),
             Container(
-              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
+              padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.0),
               decoration: BoxDecoration(
                 color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20.r),
+                borderRadius: BorderRadius.circular(30),
               ),
               child: Text(
                 (staff.role ?? 'User').toUpperCase(),
                 style: TextStyle(
                   fontFamily: AppTheme.fontBold,
-                  fontSize: 10.sp,
+                  fontSize: isMobile ? 9.0 : 10.sp,
                   color: AppTheme.primaryColor,
                   letterSpacing: 0.5,
                 ),
@@ -426,57 +435,14 @@ class StaffSelectionView extends GetView<AuthController> {
     );
   }
 
-  void _showPinDialog(BuildContext context, StaffModel staff) {
-    Get.dialog(
-      PinPadWidget(
-        staffName: staff.fullName,
-        initials: staff.initials,
-        onCompleted: (pin) => _verifyPin(staff, pin),
-      ),
-      barrierDismissible: true,
-    );
-  }
-
-  void _verifyPin(StaffModel staff, String inputPin) async {
-    final storedPin = (staff.pin ?? '').trim();
-
-    // If no PIN is configured for this staff, explicitly block access.
-    // An empty PIN is a security risk. Admin must set it from backend.
-    if (storedPin.isEmpty) {
-      Get.back(); // close dialog
-      Get.snackbar(
-        'Access Denied',
-        'This account does not have a configured PIN. Please contact the Admin to set a PIN.',
-        backgroundColor: Colors.red.shade700,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 3),
-      );
-      return;
-    }
-
-    if (inputPin == storedPin) {
-      Get.back(); // close dialog
-      controller.completeStaffLogin(staff);
-    } else {
-      // Shake/clear feedback — snackbar over the dialog
-      Get.snackbar(
-        'Incorrect PIN',
-        'The PIN you entered is wrong. Please try again.',
-        backgroundColor: Colors.red.shade700,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 2),
-      );
-    }
-  }
-
-  Widget _buildAddStaffCard(BuildContext context) {
+  Widget _buildAddStaffCard(BuildContext context, bool isMobile) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
-      onTap: () => _showAddStaffDialog(context),
+      onTap: () => _showAddStaffDialog(context, isMobile),
       child: Container(
         decoration: BoxDecoration(
           color: AppTheme.cardColor(context),
-          borderRadius: BorderRadius.circular(24.r),
+          borderRadius: BorderRadius.circular(isMobile ? 16.0 : 24.r),
           border: Border.all(
             color: AppTheme.primaryColor.withValues(alpha: 0.3),
             width: 1.5,
@@ -494,36 +460,36 @@ class StaffSelectionView extends GetView<AuthController> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 90.w,
-              height: 90.w,
+              width: isMobile ? 64.0 : 90.w,
+              height: isMobile ? 64.0 : 90.w,
               decoration: BoxDecoration(
                 color: AppTheme.primaryColor.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: Icon(Icons.person_add_rounded,
-                  size: 36.sp, color: AppTheme.primaryColor),
+                  size: isMobile ? 28.0 : 36.sp, color: AppTheme.primaryColor),
             ),
-            SizedBox(height: 24.h),
+            const SizedBox(height: 12.0),
             Text(
               'Add Staff',
               style: TextStyle(
                 fontFamily: AppTheme.fontBold,
-                fontSize: 18.sp,
+                fontSize: isMobile ? 14.0 : 18.sp,
                 color: AppTheme.primaryColor,
               ),
             ),
-            SizedBox(height: 6.h),
+            const SizedBox(height: 4.0),
             Container(
-              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
+              padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.0),
               decoration: BoxDecoration(
                 color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20.r),
+                borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
                 'OWNER ONLY',
                 style: TextStyle(
                   fontFamily: AppTheme.fontBold,
-                  fontSize: 10.sp,
+                  fontSize: isMobile ? 9.0 : 10.sp,
                   color: AppTheme.primaryColor,
                   letterSpacing: 0.5,
                 ),
@@ -535,7 +501,48 @@ class StaffSelectionView extends GetView<AuthController> {
     );
   }
 
-  void _showAddStaffDialog(BuildContext context) {
+  void _showPinDialog(BuildContext context, StaffModel staff) {
+    Get.dialog(
+      PinPadWidget(
+        title: 'Enter PIN for ${staff.fullName}',
+        staffName: staff.fullName,
+        initials: staff.initials,
+        onCompleted: (pin) => _verifyPin(staff, pin),
+      ),
+      barrierDismissible: true,
+    );
+  }
+
+  void _verifyPin(StaffModel staff, String inputPin) async {
+    final storedPin = (staff.pin ?? '').trim();
+
+    if (storedPin.isEmpty) {
+      Get.back(); // close dialog
+      Get.snackbar(
+        'Access Denied',
+        'This account does not have a configured PIN. Please contact the Admin to set a PIN.',
+        backgroundColor: Colors.red.shade700,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
+      return;
+    }
+
+    if (inputPin == storedPin) {
+      Get.back(); // close dialog
+      controller.completeStaffLogin(staff);
+    } else {
+      Get.snackbar(
+        'Incorrect PIN',
+        'The PIN you entered is wrong. Please try again.',
+        backgroundColor: Colors.red.shade700,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
+    }
+  }
+
+  void _showAddStaffDialog(BuildContext context, [bool isMobile = false]) {
     final firstnameCtrl = TextEditingController();
     final lastnameCtrl = TextEditingController();
     final pinCtrl = TextEditingController();
@@ -551,14 +558,17 @@ class StaffSelectionView extends GetView<AuthController> {
     Get.dialog(
       Dialog(
         backgroundColor: Colors.transparent,
-        insetPadding: EdgeInsets.symmetric(horizontal: 60.w, vertical: 24.h),
+        insetPadding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 16.0 : 60.w, 
+          vertical: isMobile ? 16.0 : 24.h
+        ),
         child: Container(
-          width: 520.w,
+          width: isMobile ? double.infinity : 520.w,
           constraints: BoxConstraints(
               maxHeight: MediaQuery.of(context).size.height * 0.85),
           decoration: BoxDecoration(
             color: AppTheme.cardColor(context),
-            borderRadius: BorderRadius.circular(28.r),
+            borderRadius: BorderRadius.circular(isMobile ? 16.0 : 28.r),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.15),
@@ -570,7 +580,7 @@ class StaffSelectionView extends GetView<AuthController> {
           child: SingleChildScrollView(
             physics: const ClampingScrollPhysics(),
             child: Padding(
-              padding: EdgeInsets.all(32.w),
+              padding: EdgeInsets.all(isMobile ? 20.0 : 32.w),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -579,16 +589,16 @@ class StaffSelectionView extends GetView<AuthController> {
                   Row(
                     children: [
                       Container(
-                        width: 48.w,
-                        height: 48.w,
+                        width: isMobile ? 40.0 : 48.w,
+                        height: isMobile ? 40.0 : 48.w,
                         decoration: BoxDecoration(
                           color: AppTheme.primaryColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(14.r),
+                          borderRadius: BorderRadius.circular(isMobile ? 10.0 : 14.r),
                         ),
                         child: Icon(Icons.person_add_alt_1_rounded,
-                            color: AppTheme.primaryColor, size: 24.sp),
+                            color: AppTheme.primaryColor, size: isMobile ? 20.0 : 24.sp),
                       ),
-                      SizedBox(width: 16.w),
+                      const SizedBox(width: 12.0),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -597,16 +607,16 @@ class StaffSelectionView extends GetView<AuthController> {
                               'Add New Staff',
                               style: TextStyle(
                                 fontFamily: AppTheme.fontBold,
-                                fontSize: 20.sp,
+                                fontSize: isMobile ? 16.0 : 20.sp,
                                 color: AppTheme.textColor(context),
                               ),
                             ),
-                            SizedBox(height: 2.h),
+                            const SizedBox(height: 2.0),
                             Text(
                               'Fill in the details to create a new account',
                               style: TextStyle(
                                 fontFamily: AppTheme.fontRegular,
-                                fontSize: 12.sp,
+                                fontSize: isMobile ? 11.0 : 12.sp,
                                 color: AppTheme.secondaryTextColor(context),
                               ),
                             ),
@@ -617,50 +627,53 @@ class StaffSelectionView extends GetView<AuthController> {
                         onPressed: () => Get.back(),
                         icon: Icon(Icons.close_rounded,
                             color: AppTheme.secondaryTextColor(context),
-                            size: 20.sp),
+                            size: isMobile ? 18.0 : 20.sp),
                         style: IconButton.styleFrom(
                           backgroundColor: AppTheme.borderColor(context)
                               .withValues(alpha: 0.5),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10.r)),
+                              borderRadius: BorderRadius.circular(isMobile ? 8.0 : 10.r)),
                         ),
                       ),
                     ],
                   ),
 
-                  SizedBox(height: 28.h),
+                  SizedBox(height: isMobile ? 20.0 : 28.h),
                   Divider(height: 1, color: AppTheme.borderColor(context)),
-                  SizedBox(height: 24.h),
+                  SizedBox(height: isMobile ? 16.0 : 24.h),
 
                   // First Name
-                  _buildDialogFieldLabel(context, 'First Name', required: true),
-                  SizedBox(height: 8.h),
+                  _buildDialogFieldLabel(context, 'First Name', isMobile, required: true),
+                  const SizedBox(height: 8.0),
                   _buildDialogTextField(
                     context,
+                    isMobile,
                     controller: firstnameCtrl,
                     hint: 'e.g. John',
                     icon: CupertinoIcons.person,
                   ),
 
-                  SizedBox(height: 18.h),
+                  SizedBox(height: isMobile ? 12.0 : 18.h),
 
                   // Last Name
-                  _buildDialogFieldLabel(context, 'Last Name', required: false),
-                  SizedBox(height: 8.h),
+                  _buildDialogFieldLabel(context, 'Last Name', isMobile, required: false),
+                  const SizedBox(height: 8.0),
                   _buildDialogTextField(
                     context,
+                    isMobile,
                     controller: lastnameCtrl,
                     hint: 'e.g. Doe (optional)',
                     icon: CupertinoIcons.person,
                   ),
 
-                  SizedBox(height: 18.h),
+                  SizedBox(height: isMobile ? 12.0 : 18.h),
 
                   // PIN
-                  _buildDialogFieldLabel(context, 'PIN', required: false),
-                  SizedBox(height: 8.h),
+                  _buildDialogFieldLabel(context, 'PIN', isMobile, required: false),
+                  const SizedBox(height: 8.0),
                   _buildDialogTextField(
                     context,
+                    isMobile,
                     controller: pinCtrl,
                     hint: 'Leave blank to use 0000',
                     icon: CupertinoIcons.lock,
@@ -669,76 +682,68 @@ class StaffSelectionView extends GetView<AuthController> {
                     maxLength: 6,
                   ),
 
-                  SizedBox(height: 18.h),
+                  SizedBox(height: isMobile ? 12.0 : 18.h),
 
-                  // Role
-                  _buildDialogFieldLabel(context, 'Role', required: false),
-                  SizedBox(height: 8.h),
-                  Obx(() => Container(
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.05)
-                              : Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(14.r),
-                          border:
-                              Border.all(color: AppTheme.borderColor(context)),
-                        ),
-                        child: DropdownButtonFormField<String>(
-                          initialValue: selectedRole.value,
-                          decoration: InputDecoration(
-                            prefixIcon: Icon(CupertinoIcons.shield,
-                                size: 18.sp,
+                  // Role Selection
+                  _buildDialogFieldLabel(context, 'Role', isMobile, required: false),
+                  const SizedBox(height: 8.0),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(isMobile ? 10.0 : 14.r),
+                      border: Border.all(color: AppTheme.borderColor(context)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: Obx(() => DropdownButton<String>(
+                            value: selectedRole.value,
+                            isExpanded: true,
+                            dropdownColor: AppTheme.cardColor(context),
+                            icon: Icon(CupertinoIcons.chevron_down,
+                                size: isMobile ? 16.0 : 18.sp,
                                 color: AppTheme.secondaryTextColor(context)),
-                            border: InputBorder.none,
-                            contentPadding:
-                                EdgeInsets.symmetric(vertical: 14.h),
-                          ),
-                          style: TextStyle(
-                            fontFamily: AppTheme.fontMedium,
-                            fontSize: 14.sp,
-                            color: AppTheme.textColor(context),
-                          ),
-                          dropdownColor: AppTheme.cardColor(context),
-                          items: roleLabels.entries
-                              .map((e) => DropdownMenuItem(
-                                    value: e.key,
-                                    child: Text(e.value,
-                                        style: const TextStyle(
-                                            fontFamily: AppTheme.fontMedium)),
-                                  ))
-                              .toList(),
-                          onChanged: (val) {
-                            if (val != null) selectedRole.value = val;
-                          },
-                        ),
-                      )),
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontMedium,
+                              fontSize: isMobile ? 13.0 : 14.sp,
+                              color: AppTheme.textColor(context),
+                            ),
+                            items: roleLabels.entries.map((entry) {
+                              return DropdownMenuItem<String>(
+                                value: entry.key,
+                                child: Text(entry.value),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) selectedRole.value = val;
+                            },
+                          )),
+                    ),
+                  ),
 
-                  SizedBox(height: 32.h),
+                  SizedBox(height: isMobile ? 24.0 : 32.h),
 
-                  // Action buttons
+                  // Action Buttons
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton(
                           onPressed: () => Get.back(),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor:
-                                AppTheme.secondaryTextColor(context),
-                            side: BorderSide(
-                                color: AppTheme.borderColor(context)),
-                            padding: EdgeInsets.symmetric(vertical: 14.h),
+                            foregroundColor: AppTheme.secondaryTextColor(context),
+                            side: BorderSide(color: AppTheme.borderColor(context)),
+                            padding: EdgeInsets.symmetric(vertical: isMobile ? 12.0 : 14.h),
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14.r)),
+                                borderRadius: BorderRadius.circular(isMobile ? 10.0 : 14.r)),
                           ),
                           child: Text(
                             'Cancel',
                             style: TextStyle(
                                 fontFamily: AppTheme.fontMedium,
-                                fontSize: 15.sp),
+                                fontSize: isMobile ? 14.0 : 15.sp),
                           ),
                         ),
                       ),
-                      SizedBox(width: 12.w),
+                      const SizedBox(width: 12.0),
                       Expanded(
                         flex: 2,
                         child: Obx(() => ElevatedButton(
@@ -749,18 +754,16 @@ class StaffSelectionView extends GetView<AuthController> {
                                         Get.snackbar(
                                           'Required Field',
                                           'First name is required.',
-                                          backgroundColor:
-                                              Colors.orange.shade600,
+                                          backgroundColor: Colors.orange.shade600,
                                           colorText: Colors.white,
                                         );
                                         return;
-                                      }
+                                        }
                                       await controller.addStaff(
                                         firstname: firstnameCtrl.text.trim(),
-                                        lastname:
-                                            lastnameCtrl.text.trim().isEmpty
-                                                ? null
-                                                : lastnameCtrl.text.trim(),
+                                        lastname: lastnameCtrl.text.trim().isEmpty
+                                            ? null
+                                            : lastnameCtrl.text.trim(),
                                         roleId: selectedRole.value,
                                         pin: pinCtrl.text.isEmpty
                                             ? '0000'
@@ -772,30 +775,29 @@ class StaffSelectionView extends GetView<AuthController> {
                                 foregroundColor: Colors.white,
                                 disabledBackgroundColor: AppTheme.primaryColor
                                     .withValues(alpha: 0.5),
-                                padding: EdgeInsets.symmetric(vertical: 14.h),
+                                padding: EdgeInsets.symmetric(vertical: isMobile ? 12.0 : 14.h),
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14.r)),
+                                    borderRadius: BorderRadius.circular(isMobile ? 10.0 : 14.r)),
                               ),
                               child: controller.isAddingStaff.value
                                   ? SizedBox(
-                                      width: 20.w,
-                                      height: 20.w,
+                                      width: isMobile ? 18.0 : 20.w,
+                                      height: isMobile ? 18.0 : 20.w,
                                       child: const CircularProgressIndicator(
                                           color: Colors.white, strokeWidth: 2),
                                     )
                                   : Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
+                                      mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
                                         Icon(Icons.person_add_alt_1_rounded,
-                                            size: 18.sp),
-                                        SizedBox(width: 8.w),
+                                            size: isMobile ? 16.0 : 18.sp),
+                                        const SizedBox(width: 8.0),
                                         Text(
                                           'Add Staff',
                                           style: TextStyle(
                                               fontFamily: AppTheme.fontBold,
-                                              fontSize: 15.sp),
+                                              fontSize: isMobile ? 14.0 : 15.sp),
                                         ),
                                       ],
                                     ),
@@ -813,7 +815,7 @@ class StaffSelectionView extends GetView<AuthController> {
     );
   }
 
-  Widget _buildDialogFieldLabel(BuildContext context, String label,
+  Widget _buildDialogFieldLabel(BuildContext context, String label, bool isMobile,
       {bool required = false}) {
     return Row(
       children: [
@@ -821,15 +823,15 @@ class StaffSelectionView extends GetView<AuthController> {
           label,
           style: TextStyle(
             fontFamily: AppTheme.fontMedium,
-            fontSize: 13.sp,
+            fontSize: isMobile ? 12.0 : 13.sp,
             color: AppTheme.textColor(context),
           ),
         ),
         if (required) ...[
-          SizedBox(width: 4.w),
+          const SizedBox(width: 4.0),
           Text(
             '*',
-            style: TextStyle(color: Colors.red, fontSize: 13.sp),
+            style: TextStyle(color: Colors.red, fontSize: isMobile ? 12.0 : 13.sp),
           ),
         ],
       ],
@@ -837,7 +839,8 @@ class StaffSelectionView extends GetView<AuthController> {
   }
 
   Widget _buildDialogTextField(
-    BuildContext context, {
+    BuildContext context,
+    bool isMobile, {
     required TextEditingController controller,
     required String hint,
     required IconData icon,
@@ -850,7 +853,7 @@ class StaffSelectionView extends GetView<AuthController> {
       decoration: BoxDecoration(
         color:
             isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(14.r),
+        borderRadius: BorderRadius.circular(isMobile ? 10.0 : 14.r),
         border: Border.all(color: AppTheme.borderColor(context)),
       ),
       child: TextField(
@@ -860,21 +863,21 @@ class StaffSelectionView extends GetView<AuthController> {
         maxLength: maxLength,
         style: TextStyle(
           fontFamily: AppTheme.fontMedium,
-          fontSize: 14.sp,
+          fontSize: isMobile ? 13.0 : 14.sp,
           color: AppTheme.textColor(context),
         ),
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(
             fontFamily: AppTheme.fontRegular,
-            fontSize: 14.sp,
+            fontSize: isMobile ? 13.0 : 14.sp,
             color: AppTheme.secondaryTextColor(context),
           ),
           prefixIcon: Icon(icon,
-              size: 18.sp, color: AppTheme.secondaryTextColor(context)),
+              size: isMobile ? 16.0 : 18.sp, color: AppTheme.secondaryTextColor(context)),
           border: InputBorder.none,
           counterText: '',
-          contentPadding: EdgeInsets.symmetric(vertical: 14.h),
+          contentPadding: EdgeInsets.symmetric(vertical: isMobile ? 12.0 : 14.h),
         ),
       ),
     );

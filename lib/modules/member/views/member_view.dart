@@ -30,6 +30,8 @@ class MemberScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBackgroundColor(context),
       body: SafeArea(
+        left: false,
+        right: false,
         child: Obx(() => controller.isFormView.value
             ? _buildFormView(context, controller)
             : _buildMemberList(context, controller)),
