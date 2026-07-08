@@ -612,6 +612,23 @@ class SettingScreen extends GetView<SettingController> {
                                               size: 20.sp),
                                         ),
                                       ),
+                                      Divider(
+                                          height: 1.h,
+                                          color: AppTheme.borderColor(context)),
+                                      InkWell(
+                                        onTap: () => controller.testZReport(),
+                                        child: _buildSettingTile(
+                                          context,
+                                          icon: CupertinoIcons.printer_fill,
+                                          title: 'Test Z Report',
+                                          subtitle:
+                                              'Print Z Report to debug console',
+                                          trailing: Icon(
+                                              CupertinoIcons.chevron_right,
+                                              color: Colors.grey.shade400,
+                                              size: 20.sp),
+                                        ),
+                                      ),
                                     ],
                                   ],
                                 );
