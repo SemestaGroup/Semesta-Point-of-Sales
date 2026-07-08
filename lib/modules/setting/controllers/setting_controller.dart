@@ -1204,6 +1204,11 @@ class SettingController extends GetxController {
     final int maxChars = is80mm ? 48 : 32;
     final String lineSep = '-' * maxChars;
 
+    // 3-col widths: Tipe / Tercatat / Selisih
+    final int tipW = is80mm ? 20 : 12;
+    final int catW = is80mm ? 16 : 12;
+    final int selW = is80mm ? 12 : 8;
+
     final generator = Generator(paperSize, profile);
     List<int> bytes = [];
 
@@ -1224,48 +1229,17 @@ class SettingController extends GetxController {
       return '${val < 0 ? "-" : ""}$res';
     }
 
-    String companyName = userService.getPrefString(Constants.posCompanyName);
-    if (companyName == 'Guest' || companyName.isEmpty) companyName = 'FLINKPOS';
-    String address = userService.getPrefString(Constants.posAddress);
-    if (address == 'Guest') address = '';
-    String phone = userService.getPrefString(Constants.posPhoneNumber);
-    if (phone == 'Guest') phone = '';
-
-    // 1. HEADER - normal size (no size2 to avoid wasted space)
-    bytes += generator.text(_formatCenter(companyName.toUpperCase(), maxChars),
-        styles: const PosStyles(align: PosAlign.left, bold: true));
-    if (address.isNotEmpty) {
-      bytes += generator.text(_formatCenter(address, maxChars),
-          styles: const PosStyles(align: PosAlign.left));
+    /// Build a 3-column row: left / center / right
+    String row3(String left, String center, String right) {
+      String l = left;
+      if (l.length > tipW) l = '${l.substring(0, tipW - 2)}..';
+      l = l.padRight(tipW);
+      String c = center.padLeft(catW);
+      String r = right.padLeft(selW);
+      return '$l$c$r';
     }
-    if (phone.isNotEmpty) {
-      bytes += generator.text(_formatCenter('Tel: $phone', maxChars),
-          styles: const PosStyles(align: PosAlign.left));
-    }
-    bytes +=
-        generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
-    bytes += generator.text(_formatCenter('Z-REPORT / SHIFT RECAP', maxChars),
-        styles: const PosStyles(align: PosAlign.left, bold: true));
-    bytes +=
-        generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
 
-    // 2. SHIFT INFO
-    bytes += generator.text(_formatRow('Shift', shift.shiftName, maxChars),
-        styles: const PosStyles(align: PosAlign.left));
-    bytes += generator.text(_formatRow('Staff', shift.userId, maxChars),
-        styles: const PosStyles(align: PosAlign.left));
-    final startStr = shift.startTime.toString().split('.')[0].substring(0, 16);
-    bytes += generator.text(_formatRow('Start', startStr, maxChars),
-        styles: const PosStyles(align: PosAlign.left));
-    if (shift.endTime != null) {
-      final endStr = shift.endTime.toString().split('.')[0].substring(0, 16);
-      bytes += generator.text(_formatRow('End', endStr, maxChars),
-          styles: const PosStyles(align: PosAlign.left));
-    }
-    bytes +=
-        generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
-
-    // Parse reconciliation data
+    // ─── Parse reconciliation data ────────────────────────────────────────
     List<dynamic>? txDataList;
     Map<String, dynamic>? txData;
     if (shift.reconciliationData != null &&
@@ -1280,169 +1254,245 @@ class SettingController extends GetxController {
       }
     }
 
+    String companyName = userService.getPrefString(Constants.posCompanyName);
+    if (companyName == 'Guest' || companyName.isEmpty) companyName = 'FLINKPOS';
+    String address = userService.getPrefString(Constants.posAddress);
+    if (address == 'Guest') address = '';
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SECTION 1 — HEADER (centred)
+    // ═══════════════════════════════════════════════════════════════════════
+    bytes += generator.text(
+        _formatCenter('REKAPAN - ${shift.shiftName.toUpperCase()}', maxChars),
+        styles: const PosStyles(align: PosAlign.left, bold: true));
+    bytes += generator.text(_formatCenter(companyName.toUpperCase(), maxChars),
+        styles: const PosStyles(align: PosAlign.left));
+    bytes += generator.text(
+        _formatCenter('Staff: ${shift.userId}', maxChars),
+        styles: const PosStyles(align: PosAlign.left));
+    bytes += generator.text('', styles: const PosStyles()); // blank line
+    if (shift.endTime != null) {
+      final endStr =
+          shift.endTime.toString().split('.')[0].substring(0, 19);
+      bytes += generator.text(_formatCenter(endStr, maxChars),
+          styles: const PosStyles(align: PosAlign.left));
+    }
+    bytes +=
+        generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SECTION 2 — RINGKASAN PEMBAYARAN (3-col table)
+    // ═══════════════════════════════════════════════════════════════════════
     if (txData != null) {
-      // 3. SALES SUMMARY
+      final modes = txData['payment_modes'] as List<dynamic>? ?? [];
+      final summary = txData['summary'] as Map<String, dynamic>? ?? {};
+      final diff =
+          (summary['difference'] as num?)?.toInt() ?? 0;
+
+      // Header 3 Kolom Rapi untuk seluruh jenis saldo/pembayaran
       bytes += generator.text(
-          _formatRow(
-              'Opening Balance', 'Rp.${f(shift.startingBalance)}', maxChars),
+          row3('TIPE', 'Tercatat', 'Selisih'),
           styles: const PosStyles(align: PosAlign.left, bold: true));
 
-      final modes = txData['payment_modes'] as List<dynamic>? ?? [];
-      int cashSales = 0;
-      int nonCashSales = 0;
-      for (var mode in modes) {
-        final name = (mode['name'] ?? '').toString().toLowerCase();
-        final amount = (mode['recorded'] ?? 0) as int;
-        if (name.contains('cash') ||
-            name.contains('tunai') ||
-            mode['id'] == '1') {
-          cashSales += (amount - shift.startingBalance);
-        } else {
-          nonCashSales += amount;
-        }
-      }
+      // 1. Opening Balance
       bytes += generator.text(
-          _formatRow('Cash Sales', 'Rp.${f(cashSales)}', maxChars),
-          styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text(
-          _formatRow('Non-Cash Sales', 'Rp.${f(nonCashSales)}', maxChars),
+          row3('Opening Balance', 'Rp.${f(shift.startingBalance)}', '0'),
           styles: const PosStyles(align: PosAlign.left));
 
-      // Payment modes detail
+      // 2. Cash Sales (recorded cash minus opening balance) & Non-Cash Modes
+      int totalRecorded = shift.startingBalance;
       for (var mode in modes) {
         final name = (mode['name'] ?? '').toString();
         final amount = (mode['recorded'] ?? 0) as int;
-        if (amount > 0) {
+        if (amount <= 0) continue;
+
+        bool isCash = name.toLowerCase().contains('cash') ||
+            name.toLowerCase().contains('tunai') ||
+            mode['id'] == '1';
+
+        if (isCash) {
+          final cashSales = amount - shift.startingBalance;
+          totalRecorded += cashSales;
+          final cashDiffStr =
+              diff == 0 ? '0' : (diff > 0 ? '+${f(diff)}' : f(diff));
           bytes += generator.text(
-              _formatRow('  $name', 'Rp.${f(amount)}', maxChars),
+              row3('Cash Sales', 'Rp.${f(cashSales)}', cashDiffStr),
+              styles: const PosStyles(align: PosAlign.left));
+        } else {
+          totalRecorded += amount;
+          bytes += generator.text(
+              row3(name, 'Rp.${f(amount)}', '0'),
               styles: const PosStyles(align: PosAlign.left));
         }
       }
-      bytes += generator.text(lineSep,
-          styles: const PosStyles(align: PosAlign.left));
 
-      // 4. PRODUCTS SOLD
-      final products = txData['products_sold'] as List<dynamic>? ?? [];
-      if (products.isNotEmpty) {
-        bytes += generator.text(_formatCenter('ITEM SALES', maxChars),
-            styles: const PosStyles(align: PosAlign.left, bold: true));
-        bytes += generator.text(lineSep,
-            styles: const PosStyles(align: PosAlign.left));
-        for (var product in products) {
-          final qty = product['qty'] ?? 0;
-          final name = product['name'] ?? 'Item';
-          final total = product['total'] ?? 0;
-          final price = product['price'] ?? 0;
-          // Name: truncate to fit with qty prefix
-          String lab = '${qty}x $name';
-          final maxName = maxChars - 10;
-          if (lab.length > maxName) lab = '${lab.substring(0, maxName - 2)}..';
-          bytes += generator.text(_formatRow(lab, f(total), maxChars),
-              styles: const PosStyles(align: PosAlign.left));
-          if (price > 0 && qty > 1) {
-            bytes += generator.text('   @ ${f(price)} /pcs',
-                styles: const PosStyles(align: PosAlign.left));
-          }
-        }
-        bytes += generator.text(lineSep,
-            styles: const PosStyles(align: PosAlign.left));
-      }
+      // TOTAL row
+      final totalDiffStr =
+          diff == 0 ? '0' : (diff > 0 ? '+${f(diff)}' : f(diff));
+      bytes += generator.text(
+          row3('TOTAL', 'Rp.${f(totalRecorded)}', totalDiffStr),
+          styles: const PosStyles(align: PosAlign.left, bold: true));
 
-      // 5. DISCOUNTS
+      bytes +=
+          generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+
+      // ═══════════════════════════════════════════════════════════════════
+      // SECTION 4 — RINGKASAN PENJUALAN
+      // ═══════════════════════════════════════════════════════════════════
       final discounts = txData['discounts'] ?? {};
       final prodDisc = (discounts['product'] ?? 0) as int;
       final transDisc = (discounts['transaction'] ?? 0) as int;
-      if (prodDisc > 0 || transDisc > 0) {
-        bytes += generator.text(_formatCenter('DISCOUNTS', maxChars),
-            styles: const PosStyles(align: PosAlign.left, bold: true));
-        if (prodDisc > 0) {
-          bytes += generator.text(
-              _formatRow('Product Discounts', '-${f(prodDisc)}', maxChars),
-              styles: const PosStyles(align: PosAlign.left));
+      final totalDisc = prodDisc + transDisc;
+      final grossAmount = totalRecorded;
+      final netAmount = grossAmount - totalDisc;
+
+      int totalTx = 0;
+      for (var mode in modes) {
+        totalTx += (mode['count'] ?? 0) as int;
+      }
+      if (totalTx == 0) {
+        try {
+          final startStr = shift.startTime.toIso8601String().replaceAll('T', ' ').split('.')[0];
+          final db = Get.find<DatabaseService>();
+          final countRow = await db.rawQuery('''
+            SELECT COUNT(*) as count FROM transactions
+            WHERE status IN (2, 3)
+              AND (
+                (tgl_bayar IS NOT NULL AND tgl_bayar != '' AND REPLACE(substr(tgl_bayar,1,19), 'T', ' ') >= ?)
+                OR (
+                  (tgl_bayar IS NULL OR tgl_bayar = '')
+                  AND REPLACE(substr(tgl_penjualan,1,19), 'T', ' ') >= ?
+                )
+              )
+          ''', [startStr, startStr]);
+          totalTx = (countRow.first['count'] as num?)?.toInt() ?? 0;
+        } catch (e) {
+          debugPrint('Failed to get transaction count: $e');
         }
-        if (transDisc > 0) {
-          bytes += generator.text(
-              _formatRow('Trans. Discounts', '-${f(transDisc)}', maxChars),
-              styles: const PosStyles(align: PosAlign.left));
-        }
-        bytes += generator.text(lineSep,
-            styles: const PosStyles(align: PosAlign.left));
       }
 
-      // 6. CREDIT NOTES (REFUNDS)
-      final creditNotes = txData['credit_notes'] ?? {};
-      final cnList = creditNotes['list'] as List<dynamic>? ?? [];
-      final cnTotal = (creditNotes['total'] ?? 0) as int;
-      if (cnList.isNotEmpty) {
-        bytes += generator.text(_formatCenter('REFUNDS', maxChars),
-            styles: const PosStyles(align: PosAlign.left, bold: true));
-        for (var cn in cnList) {
-          bytes += generator.text(
-              _formatRow(cn['number'] ?? 'CN',
-                  '-${f((cn['total'] as num?)?.toInt() ?? 0)}', maxChars),
-              styles: const PosStyles(align: PosAlign.left));
-        }
-        bytes += generator.text(
-            _formatRow('TOTAL REFUNDS', '-${f(cnTotal)}', maxChars),
-            styles: const PosStyles(align: PosAlign.left, bold: true));
-        bytes += generator.text(lineSep,
-            styles: const PosStyles(align: PosAlign.left));
-      }
-
-      // 7. FINAL RECONCILIATION
-      final summary = txData['summary'] ?? {};
-      final expectedTotal = (summary['expected_cash'] as num?)?.toInt() ?? 0;
       bytes += generator.text(
-          _formatRow('EXPECTED CASH', 'Rp.${f(expectedTotal)}', maxChars),
-          styles: const PosStyles(align: PosAlign.left, bold: true));
-      if (shift.status == 1) {
-        bytes += generator.text(
-            _formatRow(
-                'ACTUAL CASH', 'Rp.${f(shift.closingBalance)}', maxChars),
-            styles: const PosStyles(align: PosAlign.left, bold: true));
-        final diff = shift.closingBalance - expectedTotal;
-        bytes += generator.text(
-            _formatRow('DIFFERENCE', 'Rp.${f(diff)}', maxChars),
-            styles: PosStyles(align: PosAlign.left, bold: diff != 0));
-        if (shift.note.isNotEmpty) {
-          bytes += generator.text('Note: ${shift.note}',
-              styles: const PosStyles(align: PosAlign.left));
-        }
-      }
-    } else {
-      // Legacy fallback
-      bytes += generator.text(
-          _formatRow(
-              'Opening Balance', 'Rp.${f(shift.startingBalance)}', maxChars),
+          _formatRow('RINGKASAN PESANAN', 'Nominal', maxChars),
           styles: const PosStyles(align: PosAlign.left, bold: true));
       bytes += generator.text(
-          _formatRow('Cash Sales', 'Rp.${f(recap['cash'] ?? 0)}', maxChars),
+          _formatRow('Total Transaksi', '$totalTx', maxChars),
           styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text(
-          _formatRow(
-              'Non-Cash Sales', 'Rp.${f(recap['nonCash'] ?? 0)}', maxChars),
+          _formatRow('Penjualan Kotor', 'Rp.${f(grossAmount)}', maxChars),
+          styles: const PosStyles(align: PosAlign.left));
+      if (totalDisc > 0) {
+        bytes += generator.text(
+            _formatRow('Diskon', '-Rp.${f(totalDisc)}', maxChars),
+            styles: const PosStyles(align: PosAlign.left));
+      }
+      bytes += generator.text(
+          _formatRow('Penjualan Bersih', 'Rp.${f(netAmount)}', maxChars),
+          styles: const PosStyles(align: PosAlign.left));
+
+      // Info Refund / Credit Notes (jika ada)
+      final creditNotes = txData['credit_notes'] ?? {};
+      final cnTotal = (creditNotes['total'] ?? 0) as int;
+      if (cnTotal > 0) {
+        bytes += generator.text(
+            _formatRow('Refund', '-Rp.${f(cnTotal)}', maxChars),
+            styles: const PosStyles(align: PosAlign.left));
+      }
+
+      final finalTotal = netAmount - cnTotal;
+      bytes += generator.text(
+          _formatRow('Total Penjualan', 'Rp.${f(finalTotal)}', maxChars),
+          styles: const PosStyles(align: PosAlign.left, bold: true));
+
+      bytes +=
+          generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+
+      // ═══════════════════════════════════════════════════════════════════
+      // SECTION 5 — ITEM TERJUAL
+      // ═══════════════════════════════════════════════════════════════════
+      final products = txData['products_sold'] as List<dynamic>? ?? [];
+      int totalQty = 0;
+      for (var p in products) {
+        totalQty += (p['qty'] ?? 0) as int;
+      }
+
+      bytes += generator.text(
+          _formatRow('Item Terjual', '$totalQty', maxChars),
+          styles: const PosStyles(align: PosAlign.left, bold: true));
+
+      for (var product in products) {
+        final qty = (product['qty'] ?? 0) as int;
+        final name = product['name'] ?? 'Item';
+        // Name only, right side shows qty (no price)
+        String lab = name;
+        final maxName = maxChars - 4;
+        if (lab.length > maxName) lab = '${lab.substring(0, maxName - 2)}..';
+        bytes += generator.text(
+            _formatRow(lab, '$qty', maxChars),
+            styles: const PosStyles(align: PosAlign.left));
+      }
+
+      bytes +=
+          generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+    } else {
+      // ─── Legacy fallback (no reconciliation data) ─────────────────────
+      bytes += generator.text(
+          _formatCenter('REKAPAN - ${shift.shiftName.toUpperCase()}', maxChars),
+          styles: const PosStyles(align: PosAlign.left, bold: true));
+      bytes += generator.text(
+          _formatCenter(companyName.toUpperCase(), maxChars),
+          styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text(
+          _formatCenter('Staff: ${shift.userId}', maxChars),
+          styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text('', styles: const PosStyles());
+      if (shift.endTime != null) {
+        final endStr =
+            shift.endTime.toString().split('.')[0].substring(0, 19);
+        bytes += generator.text(_formatCenter(endStr, maxChars),
+            styles: const PosStyles(align: PosAlign.left));
+      }
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.left));
+
+      // Simple fallback: opening balance + cash/non-cash
+      bytes += generator.text(
+          _formatRow('Opening Balance',
+              'Rp.${f(shift.startingBalance)}', maxChars),
+          styles: const PosStyles(align: PosAlign.left, bold: true));
+      bytes += generator.text(
+          _formatRow('Cash Sales',
+              'Rp.${f(recap['cash'] ?? 0)}', maxChars),
+          styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text(
+          _formatRow('Non-Cash Sales',
+              'Rp.${f(recap['nonCash'] ?? 0)}', maxChars),
           styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text(lineSep,
           styles: const PosStyles(align: PosAlign.left));
-      final expectedTotal = shift.startingBalance + (recap['cash'] ?? 0);
+      final expectedTotal =
+          shift.startingBalance + (recap['cash'] ?? 0);
       bytes += generator.text(
-          _formatRow('EXPECTED CASH', 'Rp.${f(expectedTotal)}', maxChars),
+          _formatRow(
+              'EXPECTED CASH', 'Rp.${f(expectedTotal)}', maxChars),
           styles: const PosStyles(align: PosAlign.left, bold: true));
       if (shift.status == 1) {
         bytes += generator.text(
-            _formatRow(
-                'ACTUAL CASH', 'Rp.${f(shift.closingBalance)}', maxChars),
+            _formatRow('ACTUAL CASH',
+                'Rp.${f(shift.closingBalance)}', maxChars),
             styles: const PosStyles(align: PosAlign.left, bold: true));
-        final diff = shift.closingBalance - expectedTotal;
+        final d = shift.closingBalance - expectedTotal;
         bytes += generator.text(
-            _formatRow('DIFFERENCE', 'Rp.${f(diff)}', maxChars),
-            styles: PosStyles(align: PosAlign.left, bold: diff != 0));
+            _formatRow('DIFFERENCE', 'Rp.${f(d)}', maxChars),
+            styles: PosStyles(
+                align: PosAlign.left, bold: d != 0));
       }
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.left));
     }
 
+    // ═══════════════════════════════════════════════════════════════════
     // FOOTER
-    bytes +=
-        generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+    // ═══════════════════════════════════════════════════════════════════
     final now = DateTime.now();
     final printedStr =
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} '
@@ -2140,6 +2190,95 @@ class SettingController extends GetxController {
       downloadProgress.value = 0.0;
       Get.snackbar('Error', 'Gagal memulai proses download.');
     }
+  }
+
+  // Debug: Print Z Report to console for testing
+  Future<void> testZReport() async {
+    try {
+      final db = Get.find<DatabaseService>();
+      final shiftCtrl = Get.find<ShiftController>();
+      
+      // Get last closed shift
+      final rows = await db.rawQuery('''
+        SELECT * FROM shift_sessions 
+        WHERE reconciliation_data IS NOT NULL 
+        ORDER BY id_shift DESC LIMIT 1
+      ''');
+      
+      if (rows.isEmpty) {
+        debugPrint('=== TEST Z REPORT ===');
+        debugPrint('No closed shift found with reconciliation data.');
+        debugPrint('====================');
+        return;
+      }
+      
+      final shiftData = rows.first;
+      final shift = ShiftSessionModel(
+        idShift: shiftData['id_shift'] as int?,
+        shiftName: (shiftData['shift_name'] ?? 'Shift') as String,
+        userId: (shiftData['user_id'] ?? '') as String,
+        startTime: DateTime.parse((shiftData['start_time'] ?? DateTime.now().toIso8601String()) as String),
+        endTime: shiftData['end_time'] != null 
+            ? DateTime.parse(shiftData['end_time'] as String) 
+            : null,
+        startingBalance: (shiftData['starting_balance'] ?? 0) as int,
+        closingBalance: (shiftData['closing_balance'] ?? 0) as int,
+        totalCashExpected: (shiftData['total_cash_expected'] ?? 0) as int,
+        totalCashActual: (shiftData['total_cash_actual'] ?? 0) as int,
+        totalNonCash: (shiftData['total_non_cash'] ?? 0) as int,
+        status: (shiftData['status'] ?? 0) as int,
+        note: (shiftData['note'] ?? '')?.toString() ?? '',
+        reconciliationData: shiftData['reconciliation_data'] as String?,
+        isSynced: (shiftData['is_synced'] ?? 0) as int,
+        idRemote: shiftData['id_remote'] as int?,
+      );
+      
+      // Use a dummy printer (80mm)
+      final dummyPrinter = PrinterDevice(
+        id: 'DEBUG_ID',
+        name: 'DEBUG_PRINTER',
+        type: 'bluetooth',
+        address: 'DEBUG',
+        paperSize: 80,
+        isConnected: false,
+      );
+      
+      // Generate bytes
+      final bytes = await _buildZReportBytes(dummyPrinter, shift, {});
+      
+      // Decode to text for console output
+      final text = _bytesToText(bytes);
+      debugPrint('=== TEST Z REPORT ===');
+      debugPrint(text);
+      debugPrint('====================');
+      
+      Get.snackbar('Z Report Test', 'Check debug console for output',
+          duration: const Duration(seconds: 3));
+    } catch (e) {
+      debugPrint('=== TEST Z REPORT ERROR ===');
+      debugPrint('Error: $e');
+      debugPrint('==========================');
+      Get.snackbar('Error', 'Failed to generate test Z Report: $e');
+    }
+  }
+
+  // Helper: Convert ESC/POS bytes to readable text
+  String _bytesToText(List<int> bytes) {
+    final sb = StringBuffer();
+    for (final byte in bytes) {
+      if (byte >= 32 && byte <= 126) {
+        sb.writeCharCode(byte);
+      } else if (byte == 10) {
+        sb.write('\n');
+      } else if (byte == 13) {
+        // ignore carriage return
+      } else if (byte == 27) {
+        // ESC character - skip formatting for simplicity
+      } else if (byte == 9) {
+        sb.write('    '); // tab
+      }
+    }
+    return sb.toString();
   }
 
   String _truncateProductName(String text, int maxLength) {
