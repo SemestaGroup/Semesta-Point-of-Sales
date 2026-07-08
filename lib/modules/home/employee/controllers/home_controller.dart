@@ -263,6 +263,55 @@ class HomeController extends GetxController {
       <Map<String, dynamic>>[].obs;
   RxList<Map<String, dynamic>> allPaymentModes = <Map<String, dynamic>>[].obs;
 
+  // Filtered cashless payment modes based on the selected order type
+  List<Map<String, dynamic>> get filteredCashlessPaymentModes {
+    final currentOrderType = selectedOrderType.value;
+    
+    // Helper to normalize and check match dynamically
+    bool isMatch(String modeName, String orderType) {
+      final m = modeName.toLowerCase().replaceAll(' ', '');
+      final o = orderType.toLowerCase().replaceAll(' ', '');
+      return m == o || m.contains(o) || o.contains(m);
+    }
+
+    // Get all merchant order types from the database/API (excluding Dine In & Take Away)
+    final merchantOrderTypes = availableOrderTypes
+        .where((type) => type != "Dine In" && type != "Take Away")
+        .toList();
+
+    // Check if current order type is one of the merchant types
+    final currentIsMerchant = merchantOrderTypes.any((type) => type == currentOrderType);
+
+    if (currentIsMerchant) {
+      // Find the specific payment mode matching this merchant order type
+      final merchantMode = allPaymentModes.firstWhereOrNull((mode) {
+        final name = (mode['name'] ?? '').toString();
+        if (name.toLowerCase() == 'cash' || name.toLowerCase() == 'tunai') return false;
+        return isMatch(name, currentOrderType);
+      });
+      if (merchantMode != null) {
+        return [merchantMode];
+      }
+    }
+
+    // For Dine In / Take Away (or if merchant mode is not configured in payment_modes),
+    // show all standard cashless payment modes and hide all merchant-specific payment modes
+    return allPaymentModes.where((mode) {
+      final name = (mode['name'] ?? '').toString();
+      final lowerName = name.toLowerCase();
+      if (lowerName == 'cash' || lowerName == 'tunai') return false;
+      
+      final isMerchantMode = merchantOrderTypes.any((type) => isMatch(name, type));
+      return !isMerchantMode;
+    }).toList();
+  }
+
+  // Determine if cash payment section should be visible
+  // Ponytail: Always show Cash as a fallback option for manual/COD merchant orders.
+  bool get shouldShowCashPayment {
+    return true;
+  }
+
   String get customerName {
     if (customerLabel.value.isNotEmpty) return customerLabel.value;
     if (selectedMember.value != null) {

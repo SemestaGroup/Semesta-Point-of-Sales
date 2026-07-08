@@ -31,7 +31,12 @@ class PaymentScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<HomeController>();
-    final selectedPaymentMethod = formatRupiah(controller.totalTransaction.value).obs;
+    
+    // Compute initial payment method reactively
+    final initialMethod = controller.shouldShowCashPayment 
+        ? formatRupiah(controller.totalTransaction.value) 
+        : (controller.filteredCashlessPaymentModes.firstOrNull?['name']?.toString() ?? '');
+    final selectedPaymentMethod = initialMethod.obs;
     final isMobileLayout = _isMobile(context);
 
     // Left Column content (Review Order Summary)
@@ -222,7 +227,8 @@ class PaymentScreen extends StatelessWidget {
 
           // CASHLESS SECTION
           Obx(() {
-            if (controller.cashlessPaymentModes.isEmpty) {
+            final modes = controller.filteredCashlessPaymentModes;
+            if (modes.isEmpty) {
               return const SizedBox.shrink();
             }
             return Column(
@@ -233,7 +239,7 @@ class PaymentScreen extends StatelessWidget {
                 SizedBox(height: 8.h),
                 Builder(
                   builder: (context) {
-                    final items = controller.cashlessPaymentModes.map((mode) {
+                    final items = modes.map((mode) {
                       final name = mode['name']?.toString() ?? 'Unknown';
                       final lowerName = name.toLowerCase();
                       IconData icon = Icons.payment;
@@ -274,72 +280,82 @@ class PaymentScreen extends StatelessWidget {
           }),
 
           // CASH SECTION
-          SizedBox(height: 12.h),
-          Text("Cash",
-              style: AppTheme.labelMedium.copyWith(fontFamily: AppTheme.fontBold)),
-          SizedBox(height: 8.h),
-          Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                      child: _buildPaymentOption(
-                          formatRupiah(controller.totalTransaction.value),
-                          Icons.money,
-                          selectedPaymentMethod,
-                          context,
-                          isCash: true)),
-                  SizedBox(width: 12.w),
-                  Expanded(
-                      child: _buildPaymentOption(
-                          formatRupiah(50000),
-                          Icons.money,
-                          selectedPaymentMethod,
-                          context,
-                          isCash: true)),
-                ],
-              ),
-              SizedBox(height: 12.h),
-              Row(
-                children: [
-                  Expanded(
-                      child: _buildPaymentOption(
-                          formatRupiah(100000),
-                          Icons.money,
-                          selectedPaymentMethod,
-                          context,
-                          isCash: true)),
-                  SizedBox(width: 12.w),
-                  Expanded(
-                      child: Obx(() {
-                        final manualLabel = controller.manualCashAmount.value > 0 
-                            ? formatRupiah(controller.manualCashAmount.value) 
-                            : "Insert Manually";
-                        return _buildPaymentOption(
-                            manualLabel,
-                            CupertinoIcons.keyboard,
-                            selectedPaymentMethod,
-                            context,
-                            isCash: true,
-                            onTap: () async {
-                              selectedPaymentMethod.value = manualLabel;
-                              final result = await showDialog<int>(
-                                context: context,
-                                builder: (context) => CashKeypadDialog(
-                                  initialValue: controller.manualCashAmount.value,
-                                ),
+          Obx(() {
+            if (!controller.shouldShowCashPayment) {
+              return const SizedBox.shrink();
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(height: 12.h),
+                Text("Cash",
+                    style: AppTheme.labelMedium.copyWith(fontFamily: AppTheme.fontBold)),
+                SizedBox(height: 8.h),
+                Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                            child: _buildPaymentOption(
+                                formatRupiah(controller.totalTransaction.value),
+                                Icons.money,
+                                selectedPaymentMethod,
+                                context,
+                                isCash: true)),
+                        SizedBox(width: 12.w),
+                        Expanded(
+                            child: _buildPaymentOption(
+                                formatRupiah(50000),
+                                Icons.money,
+                                selectedPaymentMethod,
+                                context,
+                                isCash: true)),
+                      ],
+                    ),
+                    SizedBox(height: 12.h),
+                    Row(
+                      children: [
+                        Expanded(
+                            child: _buildPaymentOption(
+                                formatRupiah(100000),
+                                Icons.money,
+                                selectedPaymentMethod,
+                                context,
+                                isCash: true)),
+                        SizedBox(width: 12.w),
+                        Expanded(
+                            child: Obx(() {
+                              final manualLabel = controller.manualCashAmount.value > 0 
+                                  ? formatRupiah(controller.manualCashAmount.value) 
+                                  : "Insert Manually";
+                              return _buildPaymentOption(
+                                  manualLabel,
+                                  CupertinoIcons.keyboard,
+                                  selectedPaymentMethod,
+                                  context,
+                                  isCash: true,
+                                  onTap: () async {
+                                    selectedPaymentMethod.value = manualLabel;
+                                    final result = await showDialog<int>(
+                                      context: context,
+                                      builder: (context) => CashKeypadDialog(
+                                        initialValue: controller.manualCashAmount.value,
+                                      ),
+                                    );
+                                    if (result != null) {
+                                      controller.manualCashAmount.value = result;
+                                      selectedPaymentMethod.value = formatRupiah(result);
+                                    }
+                                  }
                               );
-                              if (result != null) {
-                                controller.manualCashAmount.value = result;
-                                selectedPaymentMethod.value = formatRupiah(result);
-                              }
-                            }
-                        );
-                      })),
-                ],
-              ),
-            ],
-          ),
+                            })),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            );
+          }),
           SizedBox(height: 24.h),
 
           // FIXED FOOTER: CONTINUE BUTTON
