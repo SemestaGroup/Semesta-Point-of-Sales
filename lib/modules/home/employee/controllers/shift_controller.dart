@@ -252,6 +252,7 @@ class ShiftController extends GetxController {
     ''', [startTime, startTime]);
 
     final Map<String, int> totals = {};
+    final Map<String, int> counts = {};
     for (var r in rows) {
       final int amount =
           double.tryParse(r['amount']?.toString() ?? '0')?.toInt() ?? 0;
@@ -292,6 +293,7 @@ class ShiftController extends GetxController {
               : (ppMethod == '1' ? 'Cash' : 'Other'));
 
       totals[key] = (totals[key] ?? 0) + amount;
+      counts[key] = (counts[key] ?? 0) + 1;
 
       // Ensure the mode is in the list with its name
       if (!paymentModesList.any((m) => m['id'] == key)) {
@@ -299,6 +301,7 @@ class ShiftController extends GetxController {
           'id': key,
           'name': name,
           'recorded': 0,
+          'count': 0,
         });
       }
     }
@@ -306,6 +309,7 @@ class ShiftController extends GetxController {
     // Update recorded amounts in the final list
     for (var m in paymentModesList) {
       m['recorded'] = totals[m['id']] ?? 0;
+      m['count'] = counts[m['id']] ?? 0;
     }
 
     // Add Opening Balance to Cash
