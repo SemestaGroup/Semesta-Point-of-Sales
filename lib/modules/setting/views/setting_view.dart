@@ -612,6 +612,7 @@ class SettingScreen extends GetView<SettingController> {
                                               size: 20.sp),
                                         ),
                                       ),
+                                      /*
                                       Divider(
                                           height: 1.h,
                                           color: AppTheme.borderColor(context)),
@@ -629,6 +630,7 @@ class SettingScreen extends GetView<SettingController> {
                                               size: 20.sp),
                                         ),
                                       ),
+                                      */
                                     ],
                                   ],
                                 );
