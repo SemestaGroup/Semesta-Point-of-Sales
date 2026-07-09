@@ -1094,21 +1094,26 @@ class SettingScreen extends GetView<SettingController> {
                       color: AppTheme.textColor(context))),
             ],
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _infoRow(context, 'Association', 'Flink POS'),
-              _infoRow(
-                context,
-                'App Version',
-                controller.displayInstalledAppVersion,
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _infoRow(context, 'Association', 'Flink POS'),
+                  _infoRow(
+                    context,
+                    'App Version',
+                    controller.displayInstalledAppVersion,
+                  ),
+                  _infoRow(context, 'POS Programmer', '@Rizumiya & Flinkaja Team'),
+                  _infoRow(context, 'Web Back Office Programmer',
+                      '@cikgupapazola & Flinkaja Team'),
+                  _infoRow(context, 'Support', 'support@flinkaja.com', isLast: true),
+                ],
               ),
-              _infoRow(context, 'POS Programmer', '@Rizumiya & Flinkaja Team'),
-              _infoRow(context, 'Web Back Office Programmer',
-                  '@cikgupapazola & Flinkaja Team'),
-              _infoRow(context, 'Support', 'support@flinkaja.com'),
-            ],
+            ),
           ),
           actions: [
             TextButton(
@@ -1124,9 +1129,9 @@ class SettingScreen extends GetView<SettingController> {
     );
   }
 
-  Widget _infoRow(BuildContext context, String label, String value) {
+  Widget _infoRow(BuildContext context, String label, String value, {bool isLast = false}) {
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: 6.h),
+      padding: EdgeInsets.symmetric(vertical: 4.h),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1141,7 +1146,7 @@ class SettingScreen extends GetView<SettingController> {
                   fontSize: 14.sp,
                   color: AppTheme.textColor(context),
                   fontFamily: AppTheme.fontBold)),
-          Divider(color: AppTheme.borderColor(context), height: 12.h),
+          if (!isLast) Divider(color: AppTheme.borderColor(context), height: 8.h),
         ],
       ),
     );

@@ -36,172 +36,196 @@ class _AuditKeypadDialogState extends State<AuditKeypadDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final double shortestSide = MediaQuery.of(context).size.shortestSide;
+    final bool isMobile = shortestSide < 600;
+
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: EdgeInsets.all(24.w),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 20.0 : 24.w,
+        vertical: isMobile ? 12.0 : 24.h,
+      ),
       child: Container(
-        constraints: BoxConstraints(maxWidth: 400.w),
+        constraints: BoxConstraints(
+          maxWidth: isMobile ? 320.0 : 400.w,
+        ),
         decoration: BoxDecoration(
           color: AppTheme.cardColor(context),
-          borderRadius: BorderRadius.circular(24.r),
+          borderRadius: BorderRadius.circular(isMobile ? 16.0 : 24.r),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Title Row
-            Padding(
-              padding: EdgeInsets.fromLTRB(28.w, 28.h, 28.w, 0),
-              child: Row(
-                children: [
-                  Container(
-                    padding: EdgeInsets.all(10.w),
-                    decoration: BoxDecoration(
-                      color: _iconColorForMode(widget.title).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10.r),
-                    ),
-                    child: Icon(_iconForMode(widget.title),
-                        size: 20.sp, color: _iconColorForMode(widget.title)),
-                  ),
-                  SizedBox(width: 14.w),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.title,
-                          style: TextStyle(
-                            fontFamily: AppTheme.fontBold,
-                            fontSize: 18.sp,
-                            color: AppTheme.textColor(context),
-                          ),
-                        ),
-                        Text(
-                          'Enter actual physical cash',
-                          style: TextStyle(
-                            fontFamily: AppTheme.fontMedium,
-                            fontSize: 13.sp,
-                            color: AppTheme.secondaryTextColor(context),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: 18.h),
-
-            // Display Area
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 28.w),
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-                decoration: BoxDecoration(
-                  color: AppTheme.scaffoldBackgroundColor(context),
-                  borderRadius: BorderRadius.circular(12.r),
-                  border: Border.all(color: AppTheme.borderColor(context)),
-                ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Title Row
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                    isMobile ? 16.0 : 28.w,
+                    isMobile ? 16.0 : 28.h,
+                    isMobile ? 16.0 : 28.w,
+                    0),
                 child: Row(
                   children: [
-                    Text(
-                      'Rp ',
-                      style: TextStyle(
-                        fontFamily: AppTheme.fontBold,
-                        fontSize: 20.sp,
-                        color: AppTheme.secondaryTextColor(context),
+                    Container(
+                      padding: EdgeInsets.all(isMobile ? 8.0 : 10.w),
+                      decoration: BoxDecoration(
+                        color: _iconColorForMode(widget.title).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8.r),
                       ),
+                      child: Icon(_iconForMode(widget.title),
+                          size: isMobile ? 18.0 : 20.sp,
+                          color: _iconColorForMode(widget.title)),
                     ),
+                    SizedBox(width: isMobile ? 10.0 : 14.w),
                     Expanded(
-                      child: Text(
-                        _textCtrl.text.isEmpty ? '0' : _textCtrl.text,
-                        style: TextStyle(
-                          fontFamily: AppTheme.fontBold,
-                          fontSize: 28.sp,
-                          color: _textCtrl.text.isEmpty
-                              ? AppTheme.borderColor(context)
-                              : AppTheme.primaryColor,
-                        ),
-                        textAlign: TextAlign.right,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.title,
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontBold,
+                              fontSize: isMobile ? 15.0 : 18.sp,
+                              color: AppTheme.textColor(context),
+                            ),
+                          ),
+                          Text(
+                            'Enter actual physical cash',
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontMedium,
+                              fontSize: isMobile ? 11.0 : 13.sp,
+                              color: AppTheme.secondaryTextColor(context),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-            SizedBox(height: 16.h),
+              SizedBox(height: isMobile ? 12.0 : 18.h),
 
-            // Numpad
-            _buildNumpad(),
-
-            SizedBox(height: 18.h),
-
-            // Action Buttons
-            Padding(
-              padding: EdgeInsets.fromLTRB(28.w, 0, 28.w, 24.h),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Get.back(),
-                      style: OutlinedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(vertical: 14.h),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12.r)),
-                        side: BorderSide(color: AppTheme.borderColor(context)),
-                      ),
-                      child: Text(
-                        'Batal',
+              // Display Area
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: isMobile ? 16.0 : 28.w),
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 12.0 : 16.w,
+                      vertical: isMobile ? 8.0 : 12.h),
+                  decoration: BoxDecoration(
+                    color: AppTheme.scaffoldBackgroundColor(context),
+                    borderRadius: BorderRadius.circular(10.r),
+                    border: Border.all(color: AppTheme.borderColor(context)),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Rp ',
                         style: TextStyle(
                           fontFamily: AppTheme.fontBold,
-                          color: AppTheme.textColor(context),
-                          fontSize: 14.sp,
+                          fontSize: isMobile ? 16.0 : 20.sp,
+                          color: AppTheme.secondaryTextColor(context),
                         ),
                       ),
-                    ),
-                  ),
-                  SizedBox(width: 14.w),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        final val = int.tryParse(_textCtrl.text) ?? 0;
-                        Get.back(result: val);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryColor,
-                        padding: EdgeInsets.symmetric(vertical: 14.h),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12.r)),
-                        elevation: 0,
-                      ),
-                      child: Text(
-                        'Simpan',
-                        style: TextStyle(
-                          fontFamily: AppTheme.fontBold,
-                          color: Colors.white,
-                          fontSize: 14.sp,
+                      Expanded(
+                        child: Text(
+                          _textCtrl.text.isEmpty ? '0' : _textCtrl.text,
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontBold,
+                            fontSize: isMobile ? 22.0 : 28.sp,
+                            color: _textCtrl.text.isEmpty
+                                ? AppTheme.borderColor(context)
+                                : AppTheme.primaryColor,
+                          ),
+                          textAlign: TextAlign.right,
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+              SizedBox(height: isMobile ? 12.0 : 16.h),
+
+              // Numpad
+              _buildNumpad(isMobile),
+
+              SizedBox(height: isMobile ? 12.0 : 18.h),
+
+              // Action Buttons
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                    isMobile ? 16.0 : 28.w,
+                    0,
+                    isMobile ? 16.0 : 28.w,
+                    isMobile ? 16.0 : 24.h),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Get.back(),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(
+                              vertical: isMobile ? 10.0 : 14.h),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10.r)),
+                          side: BorderSide(
+                              color: AppTheme.borderColor(context)),
+                        ),
+                        child: Text(
+                          'Batal',
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontBold,
+                            color: AppTheme.textColor(context),
+                            fontSize: isMobile ? 13.0 : 14.sp,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: isMobile ? 10.0 : 14.w),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          final val = int.tryParse(_textCtrl.text) ?? 0;
+                          Get.back(result: val);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          padding: EdgeInsets.symmetric(
+                              vertical: isMobile ? 10.0 : 14.h),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10.r)),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          'Simpan',
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontBold,
+                            color: Colors.white,
+                            fontSize: isMobile ? 13.0 : 14.sp,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildNumpad() {
+  Widget _buildNumpad(bool isMobile) {
     final keys = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '000', '0', '⌫'];
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 28.w),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 16.0 : 28.w),
       child: GridView.count(
         crossAxisCount: 3,
         shrinkWrap: true,
-        childAspectRatio: 2.8,
-        mainAxisSpacing: 8.h,
-        crossAxisSpacing: 8.w,
+        childAspectRatio: isMobile ? 2.2 : 2.8,
+        mainAxisSpacing: isMobile ? 6.0 : 8.h,
+        crossAxisSpacing: isMobile ? 6.0 : 8.w,
         physics: const NeverScrollableScrollPhysics(),
         children: keys.map((k) {
           return InkWell(
@@ -235,12 +259,12 @@ class _AuditKeypadDialogState extends State<AuditKeypadDialog> {
               alignment: Alignment.center,
               child: k == '⌫'
                   ? Icon(CupertinoIcons.delete_left_fill,
-                      size: 16.sp, color: Colors.red)
+                      size: isMobile ? 14.0 : 16.sp, color: Colors.red)
                   : Text(
                       k,
                       style: TextStyle(
                         fontFamily: AppTheme.fontBold,
-                        fontSize: 18.sp,
+                        fontSize: isMobile ? 16.0 : 18.sp,
                         color: AppTheme.textColor(context),
                       ),
                     ),

@@ -99,6 +99,7 @@ class _OrderScreenState extends State<OrderScreen> {
                           label: const Text("Create Order"),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.primaryColor,
+                            foregroundColor: Colors.white,
                             padding: EdgeInsets.symmetric(
                                 horizontal: 32.w, vertical: 16.h),
                             shape: RoundedRectangleBorder(

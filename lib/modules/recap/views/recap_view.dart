@@ -387,28 +387,26 @@ class RecapView extends StatelessWidget {
 
       if (isMobile) {
         return SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header Stats (scroll horizontal di mobile agar tidak overflow)
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                child: Row(
-                  children: statCards.map((card) => Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: SizedBox(width: 140, child: card),
-                  )).toList(),
-                ),
+              // Header Stats (3 columns side-by-side responsively on mobile, no horizontal scroll)
+              Row(
+                children: statCards.map((card) => Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: card,
+                  ),
+                )).toList(),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
               openingBalanceBanner,
 
               // Detailed Breakdown stacked vertically
               _buildPaymentModesSection(context, controller, isDark, true),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               _buildCashFlowSection(context, controller, isDark, true),
             ],
           ),
@@ -1140,30 +1138,38 @@ class RecapView extends StatelessWidget {
 
   Widget _buildStatCard(
       String label, String value, Color color, BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(12.r),
-          border: Border.all(color: color.withValues(alpha: 0.1)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label,
-                style: AppTheme.labelMedium.copyWith(
-                    color: color,
-                    fontFamily: AppTheme.fontBold,
-                    fontSize: 10.sp)),
-            SizedBox(height: 4.h),
-            Text(value,
-                style: AppTheme.titleLarge.copyWith(
-                    color: color,
-                    fontSize: 18.sp,
-                    fontFamily: AppTheme.fontBold)),
-          ],
-        ),
+    final double shortestSide = MediaQuery.of(context).size.shortestSide;
+    final bool isMobile = shortestSide < 600;
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 8.0 : 16.w,
+        vertical: isMobile ? 10.0 : 14.h,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(isMobile ? 8.0 : 12.r),
+        border: Border.all(color: color.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTheme.labelMedium.copyWith(
+                  color: color,
+                  fontFamily: AppTheme.fontBold,
+                  fontSize: isMobile ? 9.0 : 10.sp)),
+          const SizedBox(height: 4.0),
+          Text(value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTheme.titleLarge.copyWith(
+                  color: color,
+                  fontSize: isMobile ? 12.0 : 18.sp,
+                  fontFamily: AppTheme.fontBold)),
+        ],
       ),
     );
   }

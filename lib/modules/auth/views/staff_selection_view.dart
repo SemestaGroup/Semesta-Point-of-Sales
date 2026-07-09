@@ -233,7 +233,7 @@ class StaffSelectionView extends GetView<AuthController> {
 
             SizedBox(height: isMobile ? 24.0 : 40.h),
 
-            // Grid of Staff
+            // Grid of Staff (Tablet) or List of Staff (Mobile)
             Expanded(
               child: Obx(() {
                 if (controller.filteredStaff.isEmpty) {
@@ -254,6 +254,25 @@ class StaffSelectionView extends GetView<AuthController> {
                         ),
                       ],
                     ),
+                  );
+                }
+
+                if (isMobile) {
+                  final isOwner =
+                      controller.userService.getRole().toLowerCase() == 'owner';
+                  final itemsCount = controller.filteredStaff.length + (isOwner ? 1 : 0);
+
+                  return ListView.separated(
+                    padding: const EdgeInsets.only(bottom: 16.0, top: 10.0),
+                    itemCount: itemsCount,
+                    separatorBuilder: (context, index) => const SizedBox(height: 10.0),
+                    itemBuilder: (context, index) {
+                      if (isOwner && index == controller.filteredStaff.length) {
+                        return _buildAddStaffCard(context, isMobile);
+                      }
+                      final staff = controller.filteredStaff[index];
+                      return _buildStaffItem(context, staff, isMobile);
+                    },
                   );
                 }
 
@@ -355,6 +374,64 @@ class StaffSelectionView extends GetView<AuthController> {
 
     final Color avatarColor = colors[staff.fullName.hashCode % colors.length];
 
+    if (isMobile) {
+      return GestureDetector(
+        onTap: () => _showPinDialog(context, staff),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+          decoration: BoxDecoration(
+            color: AppTheme.cardColor(context),
+            borderRadius: BorderRadius.circular(12.0),
+            border: Border.all(color: AppTheme.borderColor(context)),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 24.0,
+                backgroundColor: avatarColor,
+                child: Text(
+                  staff.initials,
+                  style: const TextStyle(
+                    fontFamily: AppTheme.fontBold,
+                    fontSize: 16.0,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16.0),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      staff.fullName,
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontBold,
+                        fontSize: 15.0,
+                        color: AppTheme.textColor(context),
+                      ),
+                    ),
+                    const SizedBox(height: 2.0),
+                    Text(
+                      (staff.role ?? 'User').toUpperCase(),
+                      style: const TextStyle(
+                        fontFamily: AppTheme.fontMedium,
+                        fontSize: 11.0,
+                        color: AppTheme.primaryColor,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded,
+                  color: AppTheme.secondaryTextColor(context)),
+            ],
+          ),
+        ),
+      );
+    }
+
     return GestureDetector(
       onTap: () => _showPinDialog(context, staff),
       child: Container(
@@ -437,6 +514,62 @@ class StaffSelectionView extends GetView<AuthController> {
 
   Widget _buildAddStaffCard(BuildContext context, bool isMobile) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (isMobile) {
+      return GestureDetector(
+        onTap: () => _showAddStaffDialog(context, isMobile),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+          decoration: BoxDecoration(
+            color: AppTheme.cardColor(context),
+            borderRadius: BorderRadius.circular(12.0),
+            border: Border.all(
+              color: AppTheme.primaryColor.withValues(alpha: 0.3),
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 24.0,
+                backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.12),
+                child: const Icon(Icons.person_add_rounded,
+                    color: AppTheme.primaryColor, size: 24.0),
+              ),
+              const SizedBox(width: 16.0),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Add Staff',
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontBold,
+                        fontSize: 15.0,
+                        color: AppTheme.primaryColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2.0),
+                    Text(
+                      'OWNER ONLY',
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontBold,
+                        fontSize: 10.0,
+                        color: AppTheme.primaryColor.withValues(alpha: 0.8),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.add_circle_outline_rounded,
+                  color: AppTheme.primaryColor.withValues(alpha: 0.8)),
+            ],
+          ),
+        ),
+      );
+    }
+
     return GestureDetector(
       onTap: () => _showAddStaffDialog(context, isMobile),
       child: Container(

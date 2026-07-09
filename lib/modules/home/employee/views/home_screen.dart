@@ -2102,20 +2102,21 @@ class HomeScreen extends StatelessWidget {
                   ),
                 if (showName || showPrice || showStock)
                   Container(
-                    height: (showPrice || showStock)
-                        ? 72.h
-                        : (showName
-                            ? 44.h
-                            : 0), // Dynamic height based on visibility
+                    constraints: BoxConstraints(
+                      minHeight: (showPrice || showStock)
+                          ? 78.h
+                          : (showName
+                              ? 46.h
+                              : 0),
+                    ),
                     padding: EdgeInsets.symmetric(
                       horizontal: 8.w,
-                      vertical: (showPrice || showStock) ? 6.h : 4.h,
+                      vertical: 6.h,
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.center,
-                      mainAxisAlignment: (showPrice || showStock)
-                          ? MainAxisAlignment.spaceBetween
-                          : MainAxisAlignment.center, // Center when name only
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         if (showName)
                           Text(
@@ -2123,7 +2124,7 @@ class HomeScreen extends StatelessWidget {
                             textAlign: TextAlign.center,
                             style: AppTheme.bodyLarge.copyWith(
                                 height: 1.1,
-                                fontSize: 13.sp,
+                                fontSize: 12.sp,
                                 fontFamily: AppTheme.fontBold),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -2144,7 +2145,7 @@ class HomeScreen extends StatelessWidget {
                                       style: TextStyle(
                                         color: AppTheme.primaryColor,
                                         fontFamily: AppTheme.fontBold,
-                                        fontSize: 13.sp,
+                                        fontSize: 12.sp,
                                       ),
                                       textAlign: TextAlign.left,
                                     )),
