@@ -5,6 +5,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:semesta_pos/styles/app_theme.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
@@ -246,6 +248,8 @@ class HomeController extends GetxController {
 
   // Manual Promo State
   RxList<Map<String, dynamic>> appliedPromos = <Map<String, dynamic>>[].obs;
+  // Track dismissed bundling promos for auto-popup safety guard
+  final RxSet<String> dismissedPromoIds = <String>{}.obs;
   final RxInt bundlingDiscountAmount = 0.obs;
 
   final RxBool isRefundMode = false.obs;
@@ -343,8 +347,15 @@ class HomeController extends GetxController {
         }
       });
     }
-    // Reactive totals calculation
-    ever(penjualanDetailModelList, (_) => calculateTotals());
+    // Reactive totals calculation and promo auto-detect trigger
+    ever(penjualanDetailModelList, (_) {
+      calculateTotals();
+      if (penjualanDetailModelList.isEmpty) {
+        dismissedPromoIds.clear();
+      } else {
+        _checkQualifyingBundlingPromos();
+      }
+    });
     ever(appService.useDefaultDiscount, (_) => calculateTotals());
     ever(taxRate, (_) => calculateTotals());
 
@@ -1214,6 +1225,7 @@ class HomeController extends GetxController {
     manualDiscountValue.value = 0;
     manualDiscountIsPercent.value = false;
     appliedPromos.clear(); // Clear manually applied promos
+    dismissedPromoIds.clear(); // Reset offered promos for the new transaction
     bundlingDiscountAmount.value = 0;
     manualCashAmount.value = 0;
     currentIdPos = null;
@@ -3983,6 +3995,174 @@ class HomeController extends GetxController {
           duration: const Duration(seconds: 4));
     } finally {
       isSavingSettings.value = false;
+    }
+  }
+
+  void _checkQualifyingBundlingPromos() {
+    if (penjualanDetailModelList.isEmpty || !Get.isRegistered<PromoService>()) return;
+    
+    // Prevent showing multiple dialogs at once
+    if (Get.isDialogOpen == true) return;
+    
+    final promoService = Get.find<PromoService>();
+    final activeBundlings = promoService.activePromos
+        .where((p) => p['promo_type']?.toString() == 'bundling')
+        .toList();
+        
+    for (var promo in activeBundlings) {
+      final promoIdStr = promo['id']?.toString() ?? '';
+      
+      final bool isAlreadyApplied = appliedPromos.any((p) => p['id']?.toString() == promoIdStr);
+      if (isAlreadyApplied || dismissedPromoIds.contains(promoIdStr)) continue;
+      
+      int discount = promoService.calculateBundlingDiscount(penjualanDetailModelList, promo);
+      if (discount > 0) {
+        // Run after the current frame is finished rendering to ensure Navigator is stable
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final context = Get.context;
+          if (context == null) return;
+          
+          // Double check if dialog is already open or promo became applied during frame wait
+          if (Get.isDialogOpen == true || appliedPromos.any((p) => p['id']?.toString() == promoIdStr)) return;
+          
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          
+          Get.dialog(
+            AlertDialog(
+              backgroundColor: AppTheme.cardColor(context),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20.r),
+              ),
+              contentPadding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Icon badge
+                  Container(
+                    padding: EdgeInsets.all(16.r),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF482CD9).withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      CupertinoIcons.gift_fill,
+                      color: const Color(0xFF482CD9),
+                      size: 32.sp,
+                    ),
+                  ),
+                  SizedBox(height: 16.h),
+                  // Title
+                  Text(
+                    'Promo Bundling Terpenuhi',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: AppTheme.fontBold,
+                      fontSize: 18.sp,
+                      color: AppTheme.textColor(context),
+                    ),
+                  ),
+                  SizedBox(height: 12.h),
+                  // Decorative Promo Name Box
+                  Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF482CD9).withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12.r),
+                      border: Border.all(
+                        color: const Color(0xFF482CD9).withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        promo['name']?.toString().toUpperCase() ?? 'PROMO BUNDLING',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontBold,
+                          fontSize: 15.sp,
+                          color: const Color(0xFF482CD9),
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 14.h),
+                  // Description
+                  Text(
+                    'Transaksi ini telah memenuhi syarat promo di atas. Apakah Anda ingin menerapkannya sekarang?',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: AppTheme.fontRegular,
+                      fontSize: 13.sp,
+                      color: AppTheme.secondaryTextColor(context),
+                      height: 1.4,
+                    ),
+                  ),
+                  SizedBox(height: 24.h),
+                  // Action Buttons
+                  Row(
+                    children: [
+                      // Dismiss Button
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: EdgeInsets.symmetric(vertical: 12.h),
+                            side: BorderSide(color: isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10.r),
+                            ),
+                          ),
+                          onPressed: () {
+                            dismissedPromoIds.add(promoIdStr);
+                            Get.back();
+                          },
+                          child: Text(
+                            'Abaikan',
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontBold,
+                              fontSize: 13.sp,
+                              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 12.w),
+                      // Apply Button
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF482CD9),
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(vertical: 12.h),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10.r),
+                            ),
+                          ),
+                          onPressed: () {
+                            Get.back();
+                            applyPromo(promo);
+                          },
+                          child: Text(
+                            'Terapkan',
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontBold,
+                              fontSize: 13.sp,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            barrierDismissible: false,
+          );
+        });
+        break; // Process one qualifying promo dialog at a time
+      }
     }
   }
 
