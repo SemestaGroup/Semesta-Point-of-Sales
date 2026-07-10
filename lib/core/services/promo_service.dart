@@ -43,6 +43,12 @@ class PromoService extends GetxService {
   /// Load all active promos from SQLite that are within the valid date range
   Future<void> loadPromos() async {
     try {
+      final productRows = await _dbService.query('products', columns: ['id_produk']);
+      final Set<int> localProductIds = productRows
+          .map((r) => int.tryParse(r['id_produk']?.toString() ?? '') ?? 0)
+          .where((id) => id != 0)
+          .toSet();
+
       final rows = await _dbService.query('pos_promotions', where: "status = '1' OR status = 1");
       final now = DateTime.now();
       final List<Map<String, dynamic>> validPromos = [];
@@ -68,7 +74,42 @@ class PromoService extends GetxService {
             bool validEnd = isEndUnlimited || today.compareTo(endDate) <= 0;
             
             if (validStart && validEnd) {
-              validPromos.add(Map<String, dynamic>.from(row));
+              final promoMap = Map<String, dynamic>.from(row);
+              bool shouldAdd = true;
+              
+              if (promoMap['promo_type']?.toString() == 'bundling') {
+                shouldAdd = false;
+                final rawItems = promoMap['items']?.toString();
+                if (rawItems != null && rawItems.isNotEmpty) {
+                  try {
+                    dynamic decoded = jsonDecode(rawItems);
+                    if (decoded is String) decoded = jsonDecode(decoded);
+                    List rulesList = [];
+                    if (decoded is Map) {
+                      rulesList = decoded['detail'] ?? [];
+                    } else if (decoded is List) {
+                      rulesList = decoded;
+                    }
+                    for (var rule in rulesList) {
+                      final targetIds = rule['target_id'];
+                      if (targetIds is List) {
+                        for (var tId in targetIds) {
+                          final id = int.tryParse(tId.toString());
+                          if (id != null && localProductIds.contains(id)) {
+                            shouldAdd = true;
+                            break;
+                          }
+                        }
+                      }
+                      if (shouldAdd) break;
+                    }
+                  } catch (_) {}
+                }
+              }
+              
+              if (shouldAdd) {
+                validPromos.add(promoMap);
+              }
             }
           } catch (e) {
             debugPrint("PromoService: Error parsing dates for promo ${row['id']}");
