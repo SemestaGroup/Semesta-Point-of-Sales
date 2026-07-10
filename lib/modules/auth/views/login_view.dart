@@ -3,15 +3,20 @@ import 'package:get/get.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:semesta_pos/modules/auth/controllers/auth_controller.dart';
 import 'package:semesta_pos/styles/app_theme.dart';
+import 'package:semesta_pos/modules/auth/views/login_view_mobile.dart';
+import 'package:semesta_pos/modules/auth/views/login_view_tablet.dart';
 
 class LoginScreen extends GetView<AuthController> {
   const LoginScreen({super.key});
 
+  bool _isMobile(BuildContext context) {
+    return MediaQuery.of(context).size.shortestSide < 600;
+  }
+
   @override
   Widget build(BuildContext context) {
     final RxBool isObscured = true.obs;
-    final double shortestSide = MediaQuery.of(context).size.shortestSide;
-    final bool isMobile = shortestSide < 600;
+    final bool isMobile = _isMobile(context);
 
     // Helper widget for Login Form to keep build method clean
     Widget buildLoginForm() {
@@ -41,7 +46,7 @@ class LoginScreen extends GetView<AuthController> {
               color: AppTheme.textColor(context),
             ),
           ),
-          SizedBox(height: 6.0),
+          const SizedBox(height: 6.0),
           Text(
             'Login to your account to continue.',
             style: TextStyle(
@@ -61,7 +66,7 @@ class LoginScreen extends GetView<AuthController> {
               color: AppTheme.textColor(context),
             ),
           ),
-          SizedBox(height: 8.0),
+          const SizedBox(height: 8.0),
           TextFormField(
             controller: controller.emailController,
             keyboardType: TextInputType.emailAddress,
@@ -120,7 +125,7 @@ class LoginScreen extends GetView<AuthController> {
               color: AppTheme.textColor(context),
             ),
           ),
-          SizedBox(height: 8.0),
+          const SizedBox(height: 8.0),
           Obx(
             () => TextFormField(
               controller: controller.pwController,
@@ -236,140 +241,15 @@ class LoginScreen extends GetView<AuthController> {
       );
     }
 
-    return Scaffold(
-      backgroundColor: AppTheme.scaffoldBackgroundColor(context),
-      body: SafeArea(
-        child: isMobile
-            ? Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-                  child: buildLoginForm(),
-                ),
-              )
-            : Row(
-                children: [
-                  // ─── LEFT PANEL: Illustration ───────────────────────────────
-                  Expanded(
-                    flex: 5,
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Color(0xFF482CD9),
-                            Color(0xFF6A4FE8),
-                            Color(0xFF9B7FFF),
-                          ],
-                        ),
-                      ),
-                      child: Stack(
-                        children: [
-                          // Decorative circles
-                          Positioned(
-                            top: -60,
-                            left: -60,
-                            child: Container(
-                              width: 220.w,
-                              height: 220.w,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withValues(alpha: 0.07),
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            bottom: -80,
-                            right: -80,
-                            child: Container(
-                              width: 280.w,
-                              height: 280.w,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withValues(alpha: 0.06),
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            bottom: 100,
-                            left: -40,
-                            child: Container(
-                              width: 140.w,
-                              height: 140.w,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withValues(alpha: 0.05),
-                              ),
-                            ),
-                          ),
-                          // Content
-                          Center(
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 40.w),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  // Illustration
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(24.r),
-                                    child: Image.asset(
-                                      'assets/img/login_illustration.png',
-                                      width: 240.w,
-                                      height: 240.w,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => Icon(
-                                        Icons.store_rounded,
-                                        size: 120.sp,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(height: 32.h),
-                                  Text(
-                                    'Flink POS',
-                                    style: TextStyle(
-                                      fontFamily: AppTheme.fontBold,
-                                      fontSize: 28.sp,
-                                      color: Colors.white,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                  SizedBox(height: 10.h),
-                                  Text(
-                                    'Kelola bisnis Anda lebih efisien\ndengan sistem kasir modern.',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontFamily: AppTheme.fontRegular,
-                                      fontSize: 14.sp,
-                                      color: Colors.white.withValues(alpha: 0.80),
-                                      height: 1.6,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // ─── RIGHT PANEL: Login Form ─────────────────────────────────
-                  Expanded(
-                    flex: 4,
-                    child: Container(
-                      color: AppTheme.cardColor(context),
-                      child: Center(
-                        child: SingleChildScrollView(
-                          padding: EdgeInsets.symmetric(horizontal: 40.w, vertical: 24.h),
-                          child: buildLoginForm(),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-      ),
-    );
+    return isMobile
+        ? LoginScreenMobile(
+            controller: controller,
+            isObscured: isObscured,
+            buildLoginForm: buildLoginForm,
+          )
+        : LoginScreenTablet(
+            controller: controller,
+            buildLoginForm: buildLoginForm,
+          );
   }
 }
