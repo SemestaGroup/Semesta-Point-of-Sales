@@ -1771,6 +1771,7 @@ class HomeScreenTablet extends StatelessWidget {
         margin: EdgeInsets.only(bottom: 12.h),
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
+          padding: EdgeInsets.zero,
           itemCount: activeBundlings.length + 1,
           itemBuilder: (context, index) {
             final isAll = index == 0;
