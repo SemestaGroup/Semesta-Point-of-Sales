@@ -19,6 +19,8 @@ class PromoService extends GetxService {
   final RxList<Map<String, dynamic>> activePromos = <Map<String, dynamic>>[].obs;
   // Cache of product IDs that have an active promo for O(1) lookup in UI
   final RxSet<int> promoProductIds = <int>{}.obs;
+  // Cache of product IDs that have an active bundling promo
+  final RxSet<int> bundlingProductIds = <int>{}.obs;
 
   @override
   void onInit() {
@@ -65,6 +67,7 @@ class PromoService extends GetxService {
 
       // Extract all item_ids that have active promos
       Set<int> ids = {};
+      Set<int> bundlingIds = {};
       for (var promo in validPromos) {
         final rawItems = promo['items']?.toString();
         if (rawItems != null && rawItems.isNotEmpty) {
@@ -74,18 +77,43 @@ class PromoService extends GetxService {
             if (decoded is String) {
               decoded = jsonDecode(decoded);
             }
-            List itemsList = [];
-            if (decoded is List) {
-              itemsList = decoded;
-            } else if (decoded is Map) {
-              itemsList = decoded['detail'] ?? decoded['items'] ?? [];
-            }
-            for (var item in itemsList) {
+            
+            final isBundling = promo['promo_type']?.toString() == 'bundling';
+            
+            if (isBundling) {
+              // Bundling structure: { total_price: ..., detail: [ { target_id: [...], qty: ... } ] }
+              List rulesList = [];
+              if (decoded is Map) {
+                rulesList = decoded['detail'] ?? [];
+              } else if (decoded is List) {
+                rulesList = decoded;
+              }
+              for (var rule in rulesList) {
+                final targetIdsDynamic = rule['target_id'];
+                if (targetIdsDynamic is List) {
+                  for (var targetId in targetIdsDynamic) {
+                    final id = int.tryParse(targetId.toString());
+                    if (id != null) {
+                      bundlingIds.add(id);
+                    }
+                  }
+                }
+              }
+            } else {
+              // Regular promo structure: list of items with item_id
+              List itemsList = [];
+              if (decoded is List) {
+                itemsList = decoded;
+              } else if (decoded is Map) {
+                itemsList = decoded['items'] ?? [];
+              }
+              for (var item in itemsList) {
                 final idStr = item['item_id']?.toString();
                 if (idStr != null) {
                   final id = int.tryParse(idStr);
                   if (id != null) ids.add(id);
                 }
+              }
             }
           } catch (e) {
             debugPrint("PromoService: Error parsing promo items for ${promo['id']} - $e");
@@ -94,6 +122,9 @@ class PromoService extends GetxService {
       }
       promoProductIds.clear();
       promoProductIds.addAll(ids);
+      
+      bundlingProductIds.clear();
+      bundlingProductIds.addAll(bundlingIds);
 
       debugPrint("PromoService: Loaded ${activePromos.length} active promos.");
     } catch (e) {

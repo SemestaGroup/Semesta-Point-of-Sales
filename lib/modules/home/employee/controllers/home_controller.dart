@@ -409,13 +409,13 @@ class HomeController extends GetxController {
 
   RxList<Map<String, dynamic>> brandList = <Map<String, dynamic>>[].obs;
   RxList<Map<String, dynamic>> categoryList = <Map<String, dynamic>>[].obs;
-  RxInt selectedBrandId = 0.obs;
-  RxInt selectedCategoryId = 0.obs;
-  // Accordion state: which brand is currently expanded in the sidebar (-1 = none, 0 = "All" pseudo-brand)
+  final RxInt selectedBrandId = 0.obs;
+  final RxInt selectedCategoryId = 0.obs;
+  final RxInt selectedPromoFilterId = 0.obs; // 0 means no active promo filter
+  final RxnString currentParentId = RxnString(null);
   RxInt expandedBrandId = (-1).obs;
 
   RxString searchQuery = "".obs;
-  Rx<String?> currentParentId = Rx<String?>(null);
   final TextEditingController searchProductController = TextEditingController();
 
   Future<void> fetchPaymentModes() async {
@@ -504,7 +504,7 @@ class HomeController extends GetxController {
       isLoadingProduct.value = false;
 
       if (localProducts.isNotEmpty) {
-        final List<ProductModel> newProducts = localProducts.map((e) {
+        List<ProductModel> newProducts = localProducts.map((e) {
           return ProductModel.fromJson({
             'id': e['id_produk'],
             'category_id': e['id_kategori'],
@@ -524,6 +524,43 @@ class HomeController extends GetxController {
             'children': e['children'],
           });
         }).toList();
+
+        // Apply promo bundling filter if selected
+        if (selectedPromoFilterId.value != 0 && Get.isRegistered<PromoService>()) {
+          final promoService = Get.find<PromoService>();
+          final targetPromo = promoService.activePromos.firstWhereOrNull((p) =>
+              (int.tryParse(p['id']?.toString() ?? '') ?? 0) ==
+              selectedPromoFilterId.value);
+          if (targetPromo != null) {
+            final rawItems = targetPromo['items']?.toString();
+            if (rawItems != null && rawItems.isNotEmpty) {
+              try {
+                dynamic decoded = jsonDecode(rawItems);
+                if (decoded is String) decoded = jsonDecode(decoded);
+                List rulesList = [];
+                if (decoded is Map) {
+                  rulesList = decoded['detail'] ?? [];
+                } else if (decoded is List) {
+                  rulesList = decoded;
+                }
+                Set<int> allowedIds = {};
+                for (var rule in rulesList) {
+                  final targetIds = rule['target_id'];
+                  if (targetIds is List) {
+                    for (var tId in targetIds) {
+                      final id = int.tryParse(tId.toString());
+                      if (id != null) allowedIds.add(id);
+                    }
+                  }
+                }
+                newProducts = newProducts.where((p) => allowedIds.contains(p.idProduk)).toList();
+              } catch (e) {
+                debugPrint("HomeController: Error applying promo filter - $e");
+              }
+            }
+          }
+        }
+
         productModelList.value = newProducts;
         return;
       }
@@ -540,6 +577,7 @@ class HomeController extends GetxController {
 
   Future<void> filterByBrand(int brandId) async {
     searchFocusNode.unfocus();
+    selectedPromoFilterId.value = 0; // Reset promo filter
     if (selectedBrandId.value == brandId) {
       selectedBrandId.value = 0;
     } else {
@@ -556,6 +594,7 @@ class HomeController extends GetxController {
   /// Directly sets the brand filter without toggle logic (used by the accordion sidebar).
   Future<void> filterByBrandDirect(int brandId) async {
     searchFocusNode.unfocus();
+    selectedPromoFilterId.value = 0; // Reset promo filter
     selectedBrandId.value = brandId;
     selectedCategoryId.value = 0;
     currentParentId.value = null;
@@ -581,6 +620,7 @@ class HomeController extends GetxController {
 
   Future<void> filterByCategory(int categoryId) async {
     searchFocusNode.unfocus();
+    selectedPromoFilterId.value = 0; // Reset promo filter
     if (selectedCategoryId.value == categoryId) {
       selectedCategoryId.value = 0;
     } else {
