@@ -287,10 +287,10 @@ class HomeScreenTablet extends StatelessWidget {
                                         ),
                                       ),
                                     ),
-
                                   ],
                                 ),
                                 SizedBox(height: 12.h),
+                                _buildPromoFilterChips(context, controller),
                                 Expanded(
                                   // FIX: This Obx now only rebuilds the grid area,
                                   // not the sidebar or cart panel.
@@ -1756,6 +1756,65 @@ class HomeScreenTablet extends StatelessWidget {
     );
   }
 
+  Widget _buildPromoFilterChips(BuildContext context, HomeController controller) {
+    if (!Get.isRegistered<PromoService>()) return const SizedBox.shrink();
+    final promoService = Get.find<PromoService>();
+
+    return Obx(() {
+      final activeBundlings = promoService.activePromos
+          .where((p) => p['promo_type']?.toString() == 'bundling')
+          .toList();
+      if (activeBundlings.isEmpty) return const SizedBox.shrink();
+
+      return Container(
+        height: 38.h,
+        margin: EdgeInsets.only(bottom: 12.h),
+        child: ListView.builder(
+          scrollDirection: Axis.horizontal,
+          itemCount: activeBundlings.length + 1,
+          itemBuilder: (context, index) {
+            final isAll = index == 0;
+            final promo = isAll ? null : activeBundlings[index - 1];
+            final promoId = isAll ? 0 : (int.tryParse(promo?['id']?.toString() ?? '') ?? 0);
+            final promoName = isAll
+                ? 'All Products'
+                : (promo?['name']?.toString() ?? 'Bundle');
+            final isSelected = controller.selectedPromoFilterId.value == promoId;
+
+            return Container(
+              margin: EdgeInsets.only(right: 8.w),
+              child: FilterChip(
+                selected: isSelected,
+                showCheckmark: false,
+                label: Text(
+                  promoName,
+                  style: TextStyle(
+                    fontFamily:
+                        isSelected ? AppTheme.fontBold : AppTheme.fontMedium,
+                    fontSize: 12.sp,
+                    color: isSelected ? Colors.white : AppTheme.textColor(context),
+                  ),
+                ),
+                selectedColor: const Color(0xFF482CD9),
+                backgroundColor: AppTheme.cardColor(context),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20.r),
+                  side: BorderSide(
+                    color: isSelected ? const Color(0xFF482CD9) : AppTheme.borderColor(context),
+                  ),
+                ),
+                onSelected: (selected) {
+                  controller.selectedPromoFilterId.value = promoId;
+                  controller.getProductData();
+                },
+              ),
+            );
+          },
+        ),
+      );
+    });
+  }
+
   Widget _buildBrandSidebar(BuildContext context, HomeController controller) {
     return Container(
       width: 130.w,
@@ -2048,6 +2107,10 @@ class HomeScreenTablet extends StatelessWidget {
     final bool hasDiscount = hasProductDiscount;
     final String badgeLabel = 'DISC';
 
+    // Check if product has active bundling promo
+    final bool hasBundling = Get.isRegistered<PromoService>() &&
+        Get.find<PromoService>().bundlingProductIds.contains(productItem.idProduk);
+
     // Check if product has children
     final bool hasChildren = productItem.children != null && 
                              productItem.children != "[]" && 
@@ -2165,41 +2228,81 @@ class HomeScreenTablet extends StatelessWidget {
                   ),
               ],
             ),
-            // PROMO BADGE: shown when product has a discount
-            if (hasDiscount)
+            // BADGES SECTION: regular discount and/or bundling promo
+            if (hasDiscount || hasBundling)
               Positioned(
                 top: 8.h,
                 left: 8.w,
-                child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 3.h),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFF6B35),
-                    borderRadius: BorderRadius.circular(6.r),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(CupertinoIcons.tag_fill,
-                          size: 9.sp, color: Colors.white),
-                      SizedBox(width: 3.w),
-                      Text(
-                        badgeLabel,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontFamily: AppTheme.fontBold,
-                          fontSize: 9.sp,
-                          letterSpacing: 0.3,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (hasDiscount)
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 3.h),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF6B35),
+                          borderRadius: BorderRadius.circular(6.r),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.2),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(CupertinoIcons.tag_fill,
+                                size: 9.sp, color: Colors.white),
+                            SizedBox(width: 3.w),
+                            Text(
+                              badgeLabel,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontFamily: AppTheme.fontBold,
+                                fontSize: 9.sp,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
+                    if (hasDiscount && hasBundling)
+                      SizedBox(width: 4.w),
+                    if (hasBundling)
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 3.h),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF482CD9),
+                          borderRadius: BorderRadius.circular(6.r),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.2),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(CupertinoIcons.gift_fill,
+                                size: 9.sp, color: Colors.white),
+                            SizedBox(width: 3.w),
+                            Text(
+                              'BUNDLE',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontFamily: AppTheme.fontBold,
+                                fontSize: 9.sp,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
               ),
             // MENU BADGE: shown when product is a parent
