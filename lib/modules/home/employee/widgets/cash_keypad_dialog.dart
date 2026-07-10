@@ -54,11 +54,14 @@ class _CashKeypadDialogState extends State<CashKeypadDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final shortestSide = MediaQuery.of(context).size.shortestSide;
+    final isMobile = shortestSide < 600;
+    
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
       backgroundColor: AppTheme.cardColor(context),
       child: Container(
-        width: 300.w,
+        width: isMobile ? 300.w * (1024 / 360) : 300.w,
         padding: EdgeInsets.all(20.w),
         child: Column(
           mainAxisSize: MainAxisSize.min,
