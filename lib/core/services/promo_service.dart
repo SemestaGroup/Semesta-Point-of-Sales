@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:semesta_pos/core/services/local/database_service.dart';
 import 'package:semesta_pos/core/models/penjualan_detail/penjualan_detail_model.dart';
+import 'package:semesta_pos/core/services/sync_service.dart';
 
 class PromoDiscount {
   final int finalPrice;
@@ -26,6 +27,17 @@ class PromoService extends GetxService {
   void onInit() {
     super.onInit();
     loadPromos();
+
+    // Reactively reload promos if background/manual sync updates the database
+    if (Get.isRegistered<SyncService>()) {
+      ever(Get.find<SyncService>().syncStatus, (String status) {
+        if (status == "Sync Complete" ||
+            status.contains("Updated") ||
+            status == "Promotions Updated") {
+          loadPromos();
+        }
+      });
+    }
   }
 
   /// Load all active promos from SQLite that are within the valid date range
