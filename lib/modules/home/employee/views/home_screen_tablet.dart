@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -1761,8 +1762,37 @@ class HomeScreenTablet extends StatelessWidget {
     final promoService = Get.find<PromoService>();
 
     return Obx(() {
+      final selectedId = controller.selectedPromoFilterId.value;
+      final seenIds = <String>{};
       final activeBundlings = promoService.activePromos
           .where((p) => p['promo_type']?.toString() == 'bundling')
+          .where((p) {
+            final idStr = p['id']?.toString() ?? '';
+            if (seenIds.contains(idStr)) return false;
+            seenIds.add(idStr);
+            return true;
+          })
+          .where((p) {
+            final rawItems = p['items']?.toString();
+            if (rawItems == null || rawItems.isEmpty) return false;
+            try {
+              dynamic decoded = jsonDecode(rawItems);
+              if (decoded is String) decoded = jsonDecode(decoded);
+              List rulesList = [];
+              if (decoded is Map) {
+                rulesList = decoded['detail'] ?? [];
+              } else if (decoded is List) {
+                rulesList = decoded;
+              }
+              for (var rule in rulesList) {
+                final targetIds = rule['target_id'];
+                if (targetIds is List && targetIds.isNotEmpty) {
+                  return true;
+                }
+              }
+            } catch (_) {}
+            return false;
+          })
           .toList();
       if (activeBundlings.isEmpty) return const SizedBox.shrink();
 
@@ -1780,34 +1810,33 @@ class HomeScreenTablet extends StatelessWidget {
             final promoName = isAll
                 ? 'All Products'
                 : (promo?['name']?.toString() ?? 'Bundle');
-            final isSelected = controller.selectedPromoFilterId.value == promoId;
+            final isSelected = selectedId == promoId;
 
-            return Container(
-              margin: EdgeInsets.only(right: 8.w),
-              child: FilterChip(
-                selected: isSelected,
-                showCheckmark: false,
-                label: Text(
-                  promoName,
-                  style: TextStyle(
-                    fontFamily:
-                        isSelected ? AppTheme.fontBold : AppTheme.fontMedium,
-                    fontSize: 12.sp,
-                    color: isSelected ? Colors.white : AppTheme.textColor(context),
-                  ),
-                ),
-                selectedColor: const Color(0xFF482CD9),
-                backgroundColor: AppTheme.cardColor(context),
-                shape: RoundedRectangleBorder(
+            return GestureDetector(
+              onTap: () {
+                controller.selectedPromoFilterId.value = promoId;
+                controller.getProductData();
+              },
+              child: Container(
+                margin: EdgeInsets.only(right: 8.w),
+                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color(0xFF482CD9) : AppTheme.cardColor(context),
                   borderRadius: BorderRadius.circular(20.r),
-                  side: BorderSide(
+                  border: Border.all(
                     color: isSelected ? const Color(0xFF482CD9) : AppTheme.borderColor(context),
                   ),
                 ),
-                onSelected: (selected) {
-                  controller.selectedPromoFilterId.value = promoId;
-                  controller.getProductData();
-                },
+                child: Center(
+                  child: Text(
+                    promoName,
+                    style: TextStyle(
+                      fontFamily: isSelected ? AppTheme.fontBold : AppTheme.fontMedium,
+                      fontSize: 12.sp,
+                      color: isSelected ? Colors.white : AppTheme.textColor(context),
+                    ),
+                  ),
+                ),
               ),
             );
           },

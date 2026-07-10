@@ -458,6 +458,7 @@ class HomeController extends GetxController {
       String where = "status = 'active'";
       List<dynamic> whereArgs = [];
       String table = 'products';
+      final bool isPromoActive = selectedPromoFilterId.value != 0;
 
       if (searchQuery.value.isNotEmpty) {
         // Global search: Ignore brand, category, and parent filters
@@ -465,12 +466,12 @@ class HomeController extends GetxController {
         whereArgs.add('%${searchQuery.value}%');
         whereArgs.add('%${searchQuery.value}%');
       } else {
-        if (selectedBrandId.value != 0) {
+        if (selectedBrandId.value != 0 && !isPromoActive) {
           where += ' AND id_brand = ?';
           whereArgs.add(selectedBrandId.value);
         }
 
-        if (selectedCategoryId.value != 0) {
+        if (selectedCategoryId.value != 0 && !isPromoActive) {
           if (selectedBrandId.value == 0) {
             final cat = await _dbService.query('categories',
                 where: 'id_kategori = ?',
@@ -488,9 +489,9 @@ class HomeController extends GetxController {
           }
         }
 
-        if (currentParentId.value == null) {
+        if (currentParentId.value == null && !isPromoActive) {
           where += ' AND (parent IS NULL OR parent = "" OR parent = "null")';
-        } else {
+        } else if (currentParentId.value != null) {
           where += ' AND parent = ?';
           whereArgs.add(currentParentId.value);
         }
