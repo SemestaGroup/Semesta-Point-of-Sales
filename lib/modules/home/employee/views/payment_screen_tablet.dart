@@ -85,9 +85,29 @@ class PaymentScreenTablet extends StatelessWidget {
                                             fontFamily: AppTheme.fontBold,
                                             fontSize: 15.sp)),
                                     SizedBox(height: 4.h),
-                                    Text(
-                                        "${formatRupiah(item.hargaJual)} x ${item.jumlah}",
-                                        style: AppTheme.labelMedium.copyWith(fontSize: 12.sp)),
+                                    if (item.hargaAwal > 0 && item.hargaAwal > item.hargaJual)
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            formatRupiah(item.hargaAwal),
+                                            style: TextStyle(
+                                              color: Colors.grey,
+                                              fontSize: 11.sp,
+                                              decoration: TextDecoration.lineThrough,
+                                              height: 1.0,
+                                            ),
+                                          ),
+                                          Text(
+                                            "${formatRupiah(item.hargaJual)} x ${item.jumlah}",
+                                            style: AppTheme.labelMedium.copyWith(fontSize: 12.sp, height: 1.0),
+                                          ),
+                                        ],
+                                      )
+                                    else
+                                      Text(
+                                          "${formatRupiah(item.hargaJual)} x ${item.jumlah}",
+                                          style: AppTheme.labelMedium.copyWith(fontSize: 12.sp)),
                                     if (item.orderType.isNotEmpty)
                                       Padding(
                                         padding: EdgeInsets.only(top: 4.h),
@@ -102,7 +122,9 @@ class PaymentScreenTablet extends StatelessWidget {
                                         final base = item.hargaAwal > 0 ? item.hargaAwal : item.hargaJual;
                                         final nominalDiscount = item.discountType == 'percent'
                                             ? (base * item.discountTotal / 100).round()
-                                            : item.discountTotal;
+                                            : (item.discountType == 'final_price'
+                                                ? (base - item.discountTotal)
+                                                : item.discountTotal);
                                         final label = item.discountType == 'percent'
                                             ? 'Disc ${item.discountTotal}% = -${formatRupiah(nominalDiscount)}'
                                             : 'Disc -${formatRupiah(nominalDiscount)}';
@@ -159,29 +181,54 @@ class PaymentScreenTablet extends StatelessWidget {
                     final discVal = controller.manualDiscountValue.value;
                     final isPercent = controller.manualDiscountIsPercent.value;
                     final defaultDisc = controller.disscount.value;
+                    final bundleDisc = controller.bundlingDiscountAmount.value;
+
+                    final List<Widget> discountRows = [];
+
+                    if (bundleDisc > 0) {
+                      discountRows.add(
+                        Padding(
+                          padding: EdgeInsets.only(top: 6.h),
+                          child: _buildPriceRow(
+                              "Diskon Bundling", "-${formatRupiah(bundleDisc)}", context,
+                              color: const Color(0xFFFF6B35)),
+                        ),
+                      );
+                    }
 
                     if (discVal > 0) {
                       final String label = isPercent ? "Discount ($discVal%)" : "Discount";
                       final int amount = isPercent
                           ? (controller.subtotalRaw.value * discVal / 100).round()
                           : discVal;
-                      return Padding(
-                        padding: EdgeInsets.only(top: 6.h),
-                        child: _buildPriceRow(
-                            label, "-${formatRupiah(amount)}", context,
-                            color: const Color(0xFFFF6B35)),
+                      discountRows.add(
+                        Padding(
+                          padding: EdgeInsets.only(top: 6.h),
+                          child: _buildPriceRow(
+                              label, "-${formatRupiah(amount)}", context,
+                              color: const Color(0xFFFF6B35)),
+                        ),
                       );
                     } else if (defaultDisc > 0) {
-                      return Padding(
-                        padding: EdgeInsets.only(top: 6.h),
-                        child: _buildPriceRow(
-                            "Discount ($defaultDisc%)",
-                            "-${formatRupiah((controller.subtotalRaw.value * defaultDisc / 100).round())}",
-                            context,
-                            color: const Color(0xFFFF6B35)),
+                      discountRows.add(
+                        Padding(
+                          padding: EdgeInsets.only(top: 6.h),
+                          child: _buildPriceRow(
+                              "Discount ($defaultDisc%)",
+                              "-${formatRupiah((controller.subtotalRaw.value * defaultDisc / 100).round())}",
+                              context,
+                              color: const Color(0xFFFF6B35)),
+                        ),
                       );
                     }
-                    return const SizedBox.shrink();
+
+                    if (discountRows.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: discountRows,
+                    );
                   }),
                   SizedBox(height: 12.h),
                   Row(

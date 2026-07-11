@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:semesta_pos/core/services/sync_service.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
 import 'package:semesta_pos/routes/app_pages.dart';
 import 'package:semesta_pos/core/services/local/database_service.dart';
@@ -56,6 +58,26 @@ class DashboardEmployeeController extends GetxController {
   }
 
   Future logOut() async {
+    final syncService = Get.find<SyncService>();
+    final counts = await syncService.getUnsyncedDataCounts();
+    
+    if (counts['total']! > 0) {
+      Get.back(); // Tutup dialog konfirmasi logout biasa jika terbuka
+      syncService.showUnsyncedLogoutDialog(
+        onSuccessLogout: () async {
+          await _executeLogoutProcedure();
+        },
+        onForceLogout: () async {
+          await _executeLogoutProcedure();
+        },
+      );
+      return;
+    }
+
+    await _executeLogoutProcedure();
+  }
+
+  Future<void> _executeLogoutProcedure() async {
     // Tampilkan dialog loading
     Get.dialog(
       const PopScope(

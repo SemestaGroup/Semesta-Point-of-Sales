@@ -19,7 +19,9 @@ import 'package:semesta_pos/modules/member/controllers/member_controller.dart';
 import 'package:semesta_pos/modules/setting/controllers/setting_controller.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:semesta_pos/core/services/error_log_service.dart';
+import 'package:semesta_pos/styles/app_theme.dart';
 
 // Top-level function for background JSON parsing
 dynamic _parseJson(String text) => json.decode(text);
@@ -237,6 +239,9 @@ class SyncService extends GetxService {
 
       lastSuccessSyncTime.value = DateTime.now();
       _updateSyncIndicatorState();
+
+      // Trigger instant processing of the queue to handle newly queued shift logs immediately.
+      processQueue();
 
       // Removed intrusive success snackbar as requested
     } catch (e) {
@@ -1283,6 +1288,398 @@ class SyncService extends GetxService {
   final RxString syncIndicatorColor = 'yellow'.obs; // 'green', 'yellow', 'red'
   final RxString syncTimeLabel = 'Tersambung'.obs;
   final RxInt pendingSyncCount = 0.obs;
+
+  // Reactive state for logout check
+  final RxMap<String, int> unsyncedCounts = <String, int>{
+    'queue': 0,
+    'transactions': 0,
+    'payments': 0,
+    'members': 0,
+    'shifts': 0,
+    'total': 0,
+  }.obs;
+
+  /// Check if there are any local unsynced records or pending queue items.
+  /// Updates [unsyncedCounts] reactive map and returns the values.
+  Future<Map<String, int>> getUnsyncedDataCounts() async {
+    try {
+      final db = await _dbService.database;
+      
+      // 1. Count pending/failed queue items
+      final pendingCountResult = await db.rawQuery(
+          "SELECT COUNT(*) as count FROM sync_queue WHERE status IN ('pending', 'failed') AND retry_count < 5");
+      final int pendingQueue = Sqflite.firstIntValue(pendingCountResult) ?? 0;
+
+      // 2. Count unsynced local transactions
+      final txResult = await db.rawQuery(
+          "SELECT COUNT(*) as count FROM transactions WHERE is_synced = 0");
+      final int unsyncedTx = Sqflite.firstIntValue(txResult) ?? 0;
+
+      // 3. Count unsynced local payments
+      final pmResult = await db.rawQuery(
+          "SELECT COUNT(*) as count FROM pos_payments WHERE is_synced = 0");
+      final int unsyncedPm = Sqflite.firstIntValue(pmResult) ?? 0;
+
+      // 4. Count unsynced members
+      final memResult = await db.rawQuery(
+          "SELECT COUNT(*) as count FROM members WHERE is_synced = 0");
+      final int unsyncedMembers = Sqflite.firstIntValue(memResult) ?? 0;
+
+      // 5. Count unsynced shift sessions
+      final shiftResult = await db.rawQuery(
+          "SELECT COUNT(*) as count FROM shift_sessions WHERE is_synced = 0");
+      final int unsyncedShifts = Sqflite.firstIntValue(shiftResult) ?? 0;
+
+      // 6. Count unsynced cash flows (expenses)
+      final cashFlowResult = await db.rawQuery(
+          "SELECT COUNT(*) as count FROM cash_flow WHERE is_synced = 0");
+      final int unsyncedCashFlow = Sqflite.firstIntValue(cashFlowResult) ?? 0;
+
+      final updatedMap = {
+        'queue': pendingQueue,
+        'transactions': unsyncedTx,
+        'payments': unsyncedPm,
+        'members': unsyncedMembers,
+        'shifts': unsyncedShifts,
+        'cash_flow': unsyncedCashFlow,
+        'total': pendingQueue + unsyncedTx + unsyncedPm + unsyncedMembers + unsyncedShifts + unsyncedCashFlow,
+      };
+
+      unsyncedCounts.assignAll(updatedMap);
+      return updatedMap;
+    } catch (e) {
+      debugPrint("SyncService: Error checking unsynced data counts: $e");
+      final fallback = {'queue': 0, 'transactions': 0, 'payments': 0, 'members': 0, 'shifts': 0, 'total': 0};
+      unsyncedCounts.assignAll(fallback);
+      return fallback;
+    }
+  }
+
+  /// Show a professional unsynced data warning dialog before logging out.
+  /// If [onForceLogout] is provided, Owner/Supervisor can bypass and logout immediately.
+  /// If kasir attempts, they can only sync first. Once sync succeeds, [onSuccessLogout] is called.
+  void showUnsyncedLogoutDialog({
+    required VoidCallback onSuccessLogout,
+    VoidCallback? onForceLogout,
+  }) {
+    // Initial fetch to load the UI state
+    getUnsyncedDataCounts();
+
+    Get.dialog(
+      Obx(() {
+        final isSyncActive = isSyncing.value;
+        final counts = unsyncedCounts;
+        final totalUnsynced = counts['total'] ?? 0;
+
+        // Safe fallback: if somehow total count is 0, let them proceed out directly
+        if (totalUnsynced == 0 && !isSyncActive) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            // Check if dialog is actually open before trying to dismiss it
+            if (Get.isDialogOpen ?? false) {
+              Get.back();
+            }
+            onSuccessLogout();
+          });
+          return const SizedBox.shrink();
+        }
+
+        final role = _userService.getRole().toLowerCase();
+        final isOwnerOrManager = role == 'owner' || role == 'supervisor';
+
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+          backgroundColor: Colors.white,
+          child: Container(
+            padding: EdgeInsets.all(24.w),
+            width: 420.w,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(12.w),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.cloud_upload_outlined,
+                          color: Colors.amber.shade700, size: 28.sp),
+                    ),
+                    SizedBox(width: 16.w),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Sinkronisasi Diperlukan",
+                            style: TextStyle(
+                              fontSize: 18.sp,
+                              fontFamily: AppTheme.fontBold,
+                              color: Colors.black87,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 2.h),
+                          Text(
+                            "Ada data lokal belum terkirim ke server",
+                            style: TextStyle(
+                              fontSize: 12.sp,
+                              fontFamily: AppTheme.fontRegular,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 20.h),
+                
+                // List detail data unsynced
+                Container(
+                  padding: EdgeInsets.all(16.w),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(12.r),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Column(
+                    children: [
+                      if ((counts['transactions'] ?? 0) > 0)
+                        _buildUnsyncedRow("Transaksi Baru", counts['transactions']!),
+                      if ((counts['payments'] ?? 0) > 0)
+                        _buildUnsyncedRow("Pembayaran Penjualan", counts['payments']!),
+                      if ((counts['members'] ?? 0) > 0)
+                        _buildUnsyncedRow("Pelanggan Baru", counts['members']!),
+                      if ((counts['shifts'] ?? 0) > 0)
+                        _buildUnsyncedRow("Sesi Shift", counts['shifts']!),
+                      if ((counts['cash_flow'] ?? 0) > 0)
+                        _buildUnsyncedRow("Kas Masuk/Keluar", counts['cash_flow']!),
+                      if ((counts['queue'] ?? 0) > 0)
+                        _buildUnsyncedRow("Antrean Sinkronisasi", counts['queue']!),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 20.h),
+
+                // Progress Status Bar ketika proses sync berjalan
+                if (isSyncActive) ...[
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              syncStatus.value,
+                              style: TextStyle(
+                                fontSize: 12.sp,
+                                fontFamily: AppTheme.fontMedium,
+                                color: AppTheme.primaryColor,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            "${(syncProgress.value * 100).toInt()}%",
+                            style: TextStyle(
+                              fontSize: 12.sp,
+                              fontFamily: AppTheme.fontBold,
+                              color: AppTheme.primaryColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 8.h),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4.r),
+                        child: LinearProgressIndicator(
+                          value: syncProgress.value,
+                          backgroundColor: Colors.blue.shade50,
+                          valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+                          minHeight: 6.h,
+                        ),
+                      ),
+                      SizedBox(height: 12.h),
+                    ],
+                  ),
+                ] else ...[
+                  Text(
+                    "Semua data offline di atas akan dihapus permanen dari perangkat ini jika Anda keluar tanpa melakukan sinkronisasi.",
+                    style: TextStyle(
+                      fontSize: 12.sp,
+                      fontFamily: AppTheme.fontRegular,
+                      color: Colors.grey.shade600,
+                      height: 1.5,
+                    ),
+                  ),
+                  SizedBox(height: 20.h),
+                ],
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    // Batal button
+                    OutlinedButton(
+                      onPressed: isSyncActive ? null : () => Get.back(),
+                      style: OutlinedButton.styleFrom(
+                        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+                        side: BorderSide(color: Colors.grey.shade300),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.r)),
+                      ),
+                      child: Text(
+                        "Batal",
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontFamily: AppTheme.fontMedium,
+                          fontSize: 14.sp,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 12.w),
+
+                    // Sinkronkan Data button
+                    ElevatedButton.icon(
+                      onPressed: isSyncActive
+                          ? null
+                          : () async {
+                              // Run full sync sequence
+                              await syncFullData();
+                              
+                              // Re-check count
+                              final reCheck = await getUnsyncedDataCounts();
+                              if (reCheck['total'] == 0) {
+                                if (Get.isDialogOpen ?? false) {
+                                  Get.back();
+                                }
+                                onSuccessLogout();
+                              } else {
+                                Get.snackbar(
+                                  "Sinkronisasi Gagal",
+                                  "Beberapa data gagal dikirim. Silakan periksa jaringan internet Anda.",
+                                  backgroundColor: Colors.red.shade50,
+                                  colorText: Colors.red.shade700,
+                                );
+                              }
+                            },
+                      icon: isSyncActive
+                          ? SizedBox(
+                              width: 14.w,
+                              height: 14.w,
+                              child: const CircularProgressIndicator(
+                                strokeWidth: 1.5,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : Icon(Icons.sync, size: 16.sp),
+                      label: Text(
+                        isSyncActive ? "Menyelaraskan..." : "Sinkronkan & Keluar",
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontBold,
+                          fontSize: 14.sp,
+                          color: Colors.white,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.r)),
+                        elevation: 0,
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Bypass Force Logout for Owner / Manager (only visible when not active syncing)
+                if (isOwnerOrManager && onForceLogout != null && !isSyncActive) ...[
+                  SizedBox(height: 16.h),
+                  const Divider(),
+                  TextButton.icon(
+                    onPressed: () {
+                      if (Get.isDialogOpen ?? false) {
+                        Get.back();
+                      }
+                      // Confirmation dialog to bypass
+                      Get.dialog(
+                        AlertDialog(
+                          title: const Text("Konfirmasi Paksa Keluar"),
+                          content: const Text(
+                            "Tindakan ini akan menghapus semua data offline yang belum sinkron secara permanen. Apakah Anda yakin?",
+                          ),
+                          actions: [
+                            TextButton(onPressed: () => Get.back(), child: const Text("Batal")),
+                            ElevatedButton(
+                              onPressed: () {
+                                if (Get.isDialogOpen ?? false) {
+                                  Get.back();
+                                }
+                                onForceLogout();
+                              },
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                              child: const Text("Ya, Paksa Keluar", style: TextStyle(color: Colors.white)),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    icon: Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 16.sp),
+                    label: Text(
+                      "Owner Bypass: Tetap Keluar & Hapus Data",
+                      style: TextStyle(
+                        color: Colors.red.shade700,
+                        fontFamily: AppTheme.fontMedium,
+                        fontSize: 11.sp,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      }),
+      barrierDismissible: false,
+    );
+  }
+
+  Widget _buildUnsyncedRow(String title, int count) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4.h),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 13.sp,
+              fontFamily: AppTheme.fontRegular,
+              color: Colors.grey.shade800,
+            ),
+          ),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 2.h),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade100,
+              borderRadius: BorderRadius.circular(12.r),
+            ),
+            child: Text(
+              "$count data",
+              style: TextStyle(
+                fontSize: 11.sp,
+                fontFamily: AppTheme.fontBold,
+                color: Colors.amber.shade900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _updateSyncIndicatorState() async {
     try {

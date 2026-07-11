@@ -412,6 +412,21 @@ class AuthController extends GetxController {
       return;
     }
 
+    final syncService = Get.find<SyncService>();
+    final counts = await syncService.getUnsyncedDataCounts();
+
+    if (counts['total']! > 0) {
+      syncService.showUnsyncedLogoutDialog(
+        onSuccessLogout: () async {
+          await _executeLogoutLocationProcedure();
+        },
+        onForceLogout: () async {
+          await _executeLogoutLocationProcedure();
+        },
+      );
+      return;
+    }
+
     Get.dialog(
       AlertDialog(
         title: const Text('Keluar dari Lokasi'),
@@ -422,34 +437,7 @@ class AuthController extends GetxController {
           ElevatedButton(
             onPressed: () async {
               Get.back(); // Tutup dialog konfirmasi
-
-              // Tampilkan dialog loading yang tidak bisa ditutup
-              Get.dialog(
-                const PopScope(
-                  canPop: false,
-                  child: Center(
-                    child: CircularProgressIndicator(color: Colors.white),
-                  ),
-                ),
-                barrierDismissible: false,
-              );
-
-              try {
-                // Hapus seluruh session, cache, dan database SQLite
-                await userService.destroySession();
-                await _dbService.deleteDatabaseFile();
-
-                // Berikan jeda sebentar untuk memastikan pembersihan selesai
-                await Future.delayed(const Duration(milliseconds: 500));
-
-                // Kembali ke layar login
-                // Jika MainApp sudah re-build karena isLoggedIn berubah,
-                // pemanggilan ini akan memastikan kita berada di halaman login.
-                Get.offAllNamed(Routes.login);
-              } catch (e) {
-                debugPrint('Logout Error: $e');
-                Get.offAllNamed(Routes.login);
-              }
+              await _executeLogoutLocationProcedure();
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Keluar & Hapus Data',
@@ -458,5 +446,35 @@ class AuthController extends GetxController {
         ],
       ),
     );
+  }
+
+  Future<void> _executeLogoutLocationProcedure() async {
+    // Tampilkan dialog loading yang tidak bisa ditutup
+    Get.dialog(
+      const PopScope(
+        canPop: false,
+        child: Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        ),
+      ),
+      barrierDismissible: false,
+    );
+
+    try {
+      // Hapus seluruh session, cache, dan database SQLite
+      await userService.destroySession();
+      await _dbService.deleteDatabaseFile();
+
+      // Berikan jeda sebentar untuk memastikan pembersihan selesai
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Kembali ke layar login
+      // Jika MainApp sudah re-build karena isLoggedIn berubah,
+      // pemanggilan ini akan memastikan kita berada di halaman login.
+      Get.offAllNamed(Routes.login);
+    } catch (e) {
+      debugPrint('Logout Error: $e');
+      Get.offAllNamed(Routes.login);
+    }
   }
 }

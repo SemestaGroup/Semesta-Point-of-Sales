@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:semesta_pos/core/services/local/database_service.dart' as semesta_pos;
+import 'package:semesta_pos/core/services/local/database_service.dart';
+import 'package:semesta_pos/core/services/sync_service.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
 import 'package:semesta_pos/modules/home/employee/controllers/shift_controller.dart';
 import 'package:semesta_pos/routes/app_pages.dart';
@@ -33,7 +35,7 @@ class DashboardAdminController extends GetxController {
 
   Future<void> updateActiveOrderCount() async {
     try {
-      final dbService = Get.find<semesta_pos.DatabaseService>();
+      final dbService = Get.find<DatabaseService>();
       final result = await dbService.rawQuery(
         "SELECT COUNT(*) as count FROM transactions WHERE (status IS NULL OR (status != 5 AND status != 2)) "
         "AND substr(REPLACE(tgl_penjualan, 'T', ' '), 1, 7) = strftime('%Y-%m', 'now', 'localtime') "
@@ -48,6 +50,26 @@ class DashboardAdminController extends GetxController {
   }
 
   Future logOut() async {
+    final syncService = Get.find<SyncService>();
+    final counts = await syncService.getUnsyncedDataCounts();
+
+    if (counts['total']! > 0) {
+      Get.back(); // Close standard confirmation dialog if open
+      syncService.showUnsyncedLogoutDialog(
+        onSuccessLogout: () async {
+          await _executeLogoutProcedure();
+        },
+        onForceLogout: () async {
+          await _executeLogoutProcedure();
+        },
+      );
+      return;
+    }
+
+    await _executeLogoutProcedure();
+  }
+
+  Future<void> _executeLogoutProcedure() async {
     // Show loading
     Get.dialog(
       const PopScope(
@@ -74,7 +96,7 @@ class DashboardAdminController extends GetxController {
     } catch (_) {}
 
     // Delete the entire SQLite database (clears all local data cleanly)
-    final dbService = Get.find<semesta_pos.DatabaseService>();
+    final dbService = Get.find<DatabaseService>();
     await dbService.deleteDatabaseFile();
 
     // Clear non-permanent controllers, but KEEP core services
