@@ -791,61 +791,73 @@ class PaymentScreenTablet extends StatelessWidget {
                 ),
                 SizedBox(height: 32.h),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    OutlinedButton(
-                      onPressed: () async {
-                        final items =
-                            controller.penjualanDetailModelList.toList();
-                        await controller.printLabels(items);
-                      },
-                      style: OutlinedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),
-                        side: BorderSide(color: AppTheme.borderColor(context)),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12.r)),
-                      ),
-                      child: Text("Cetak Label",
-                          style: TextStyle(
-                              color: AppTheme.primaryColor,
-                              fontFamily: AppTheme.fontMedium,
-                              fontSize: 16.sp)),
+                    // Tombol-tombol cetak di sebelah kiri
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final items =
+                                controller.penjualanDetailModelList.toList();
+                            await controller.printLabels(items);
+                          },
+                          icon: Icon(Icons.label_outline_rounded,
+                              color: AppTheme.primaryColor, size: 18.sp),
+                          label: Text("Cetak Label",
+                              style: TextStyle(
+                                  color: AppTheme.primaryColor,
+                                  fontFamily: AppTheme.fontMedium,
+                                  fontSize: 15.sp)),
+                          style: OutlinedButton.styleFrom(
+                            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+                            side: BorderSide(color: AppTheme.borderColor(context)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12.r)),
+                          ),
+                        ),
+                        SizedBox(width: 12.w),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            controller.printReceipt(
+                                paymentMethod: paymentMethod,
+                                total: totalAmount,
+                                diterima: receivedAmount,
+                                kembalian: kembalian);
+                          },
+                          icon: Icon(Icons.print_outlined,
+                              color: AppTheme.primaryColor, size: 18.sp),
+                          label: Text("Cetak Ulang Struk",
+                              style: TextStyle(
+                                  color: AppTheme.primaryColor,
+                                  fontFamily: AppTheme.fontMedium,
+                                  fontSize: 15.sp)),
+                          style: OutlinedButton.styleFrom(
+                            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+                            side: BorderSide(color: AppTheme.borderColor(context)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12.r)),
+                          ),
+                        ),
+                      ],
                     ),
-                    SizedBox(width: 16.w),
-                    OutlinedButton(
-                      onPressed: () {
-                        controller.printReceipt(
-                            paymentMethod: paymentMethod,
-                            total: totalAmount,
-                            diterima: receivedAmount,
-                            kembalian: kembalian);
-                      },
-                      style: OutlinedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),
-                        side: BorderSide(color: AppTheme.borderColor(context)),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12.r)),
-                      ),
-                      child: Text("Cetak Ulang Struk",
-                          style: TextStyle(
-                              color: AppTheme.primaryColor,
-                              fontFamily: AppTheme.fontMedium,
-                              fontSize: 16.sp)),
-                    ),
-                    SizedBox(width: 16.w),
-                    ElevatedButton(
+                    // Tombol selesai di sebelah kanan
+                    ElevatedButton.icon(
                       onPressed: doFinish,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryColor,
-                        padding: EdgeInsets.symmetric(horizontal: 32.w, vertical: 16.h),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12.r)),
-                      ),
-                      child: Text("Selesai",
+                      icon: Text("Selesai",
                           style: TextStyle(
                               color: Colors.white,
                               fontFamily: AppTheme.fontBold,
                               fontSize: 16.sp)),
+                      label: Icon(Icons.check_circle_outline_rounded,
+                          color: Colors.white, size: 18.sp),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        padding: EdgeInsets.symmetric(horizontal: 28.w, vertical: 16.h),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12.r)),
+                      ),
                     ),
                   ],
                 ),

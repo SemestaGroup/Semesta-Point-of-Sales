@@ -32,6 +32,7 @@ class SyncService extends GetxService {
   RxBool isProcessingQueue = false.obs;
   RxBool isSyncing = false.obs;
   Timer? _backgroundSyncTimer;
+  Timer? _syncIndicatorTimer;
 
   @override
   void onInit() {
@@ -61,11 +62,15 @@ class SyncService extends GetxService {
       debugPrint("SyncService: [Background] Periodic queue flush triggered.");
       processQueue();
     });
+
+    // Real-time Sync Indicator update loop (runs every 5s)
+    _syncIndicatorTimer = Timer.periodic(const Duration(seconds: 5), (_) => _updateSyncIndicatorState());
   }
 
   @override
   void onClose() {
     _backgroundSyncTimer?.cancel();
+    _syncIndicatorTimer?.cancel();
     super.onClose();
   }
 
@@ -148,6 +153,8 @@ class SyncService extends GetxService {
       syncProgress.value = 1.0;
 
       syncStatus.value = "Sync Complete";
+      lastSuccessSyncTime.value = DateTime.now();
+      _updateSyncIndicatorState();
 
       // Flush any pending queue items from previous offline sessions
       debugPrint("SyncService: Post-login sync done — flushing pending queue.");
@@ -227,6 +234,9 @@ class SyncService extends GetxService {
       await _cleanupOldOrders();
 
       if (Get.isSnackbarOpen) Get.closeCurrentSnackbar();
+
+      lastSuccessSyncTime.value = DateTime.now();
+      _updateSyncIndicatorState();
 
       // Removed intrusive success snackbar as requested
     } catch (e) {
@@ -645,6 +655,8 @@ class SyncService extends GetxService {
       'local_id': localId?.toString(),
     });
 
+    _updateSyncIndicatorState();
+
     // DO NOT call processQueue() here — it will run on the background 30s timer
     // or when internet reconnects. This keeps all POS operations instant (SQLite-only).
     debugPrint("SyncService: Queued [$method] $endpoint for background sync.");
@@ -700,6 +712,8 @@ class SyncService extends GetxService {
       debugPrint(
           "SyncService: Inserted new sync command for $endpoint ($localId).");
     }
+    
+    _updateSyncIndicatorState();
   }
 
   Future<void> processQueue() async {
@@ -849,6 +863,10 @@ class SyncService extends GetxService {
         await Future.delayed(const Duration(seconds: 2));
         debugPrint("SyncService: Restarting loop...");
       }
+      
+      // Update sync indicator when queue is processed successfully
+      lastSuccessSyncTime.value = DateTime.now();
+      _updateSyncIndicatorState();
     } catch (e) {
       debugPrint('Error: $e');
     } finally {
@@ -1259,6 +1277,59 @@ class SyncService extends GetxService {
 
   RxString syncStatus = "Idle".obs;
   RxDouble syncProgress = 0.0.obs;
+
+  // Real-time Sync Indicator state
+  final Rx<DateTime?> lastSuccessSyncTime = Rx<DateTime?>(null);
+  final RxString syncIndicatorColor = 'yellow'.obs; // 'green', 'yellow', 'red'
+  final RxString syncTimeLabel = 'Tersambung'.obs;
+  final RxInt pendingSyncCount = 0.obs;
+
+  Future<void> _updateSyncIndicatorState() async {
+    try {
+      final hasInternet = await InternetConnectionChecker().hasConnection;
+      if (!hasInternet) {
+        syncIndicatorColor.value = 'red';
+        syncTimeLabel.value = 'Offline';
+        pendingSyncCount.value = 0;
+        return;
+      }
+
+      // Check database for pending or failed queue items
+      final db = await _dbService.database;
+      final pendingCountResult = await db.rawQuery(
+          "SELECT COUNT(*) as count FROM sync_queue WHERE status IN ('pending', 'failed') AND retry_count < 5");
+      final int pendingCount = Sqflite.firstIntValue(pendingCountResult) ?? 0;
+      pendingSyncCount.value = pendingCount;
+
+      if (pendingCount > 0) {
+        syncIndicatorColor.value = 'yellow';
+        syncTimeLabel.value = 'Menyelaraskan...';
+        return;
+      }
+
+      if (lastSuccessSyncTime.value == null) {
+        syncIndicatorColor.value = 'yellow';
+        syncTimeLabel.value = 'Tersambung';
+        return;
+      }
+
+      final diff = DateTime.now().difference(lastSuccessSyncTime.value!);
+      if (diff.inSeconds <= 30) {
+        syncIndicatorColor.value = 'green';
+        syncTimeLabel.value = 'Tersinkronisasi';
+      } else {
+        syncIndicatorColor.value = 'yellow';
+        if (diff.inMinutes > 0) {
+          syncTimeLabel.value = 'Sync ${diff.inMinutes}m ago';
+        } else {
+          syncTimeLabel.value = 'Sync ${diff.inSeconds}s ago';
+        }
+      }
+    } catch (_) {
+      syncIndicatorColor.value = 'red';
+      syncTimeLabel.value = 'Error';
+    }
+  }
 
   // --- Methods used by Batch Tasks ---
 
