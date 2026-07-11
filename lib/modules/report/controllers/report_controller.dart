@@ -264,6 +264,12 @@ class ReportController extends GetxController {
         DateTime dateB =
             DateTime.tryParse(b['tgl_penjualan']?.toString() ?? '') ??
                 DateTime(2000);
+        
+        if (dateA.isAtSameMomentAs(dateB)) {
+          final idA = int.tryParse(a['id_penjualan']?.toString() ?? '0') ?? 0;
+          final idB = int.tryParse(b['id_penjualan']?.toString() ?? '0') ?? 0;
+          return idB.compareTo(idA);
+        }
         return dateB.compareTo(dateA);
       });
 

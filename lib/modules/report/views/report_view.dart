@@ -11,6 +11,30 @@ import 'package:semesta_pos/core/services/sync_service.dart';
 class ReportScreen extends StatelessWidget {
   const ReportScreen({super.key});
 
+  String _formatDateTime(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return "-";
+    try {
+      final cleanStr = dateStr.replaceAll('T', ' ');
+      final parsedDate = DateTime.tryParse(cleanStr);
+      if (parsedDate != null) {
+        return DateFormat('dd MMM yyyy, HH:mm').format(parsedDate.toLocal());
+      }
+    } catch (_) {}
+    return dateStr;
+  }
+
+  String _formatDateTimeShort(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return "-";
+    try {
+      final cleanStr = dateStr.replaceAll('T', ' ');
+      final parsedDate = DateTime.tryParse(cleanStr);
+      if (parsedDate != null) {
+        return DateFormat('dd/MM/yyyy HH:mm').format(parsedDate.toLocal());
+      }
+    } catch (_) {}
+    return dateStr;
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = Get.put(ReportController());
@@ -569,7 +593,7 @@ class ReportScreen extends StatelessWidget {
           children: [
             Expanded(
                 flex: 2,
-                child: Text(order['tgl_penjualan']?.split('T')[0] ?? "-",
+                child: Text(_formatDateTimeShort(order['tgl_penjualan']?.toString()),
                     style: TextStyle(
                         fontSize: AppTheme.fontSizeLabelMedium,
                         fontFamily: AppTheme.fontMedium,
@@ -788,7 +812,7 @@ class ReportScreen extends StatelessWidget {
                             ),
                             SizedBox(height: 4.h),
                             Text(
-                              order['tgl_penjualan']?.toString().split('.')[0] ?? "-",
+                              _formatDateTime(order['tgl_penjualan']?.toString()),
                               style: TextStyle(
                                 fontSize: AppTheme.fontSizeLabelSmall,
                                 color: isDark ? Colors.grey.shade100 : Colors.grey.shade900,
