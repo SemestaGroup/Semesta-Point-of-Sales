@@ -725,9 +725,45 @@ class ReportScreen extends StatelessWidget {
                   ],
                 ),
                 if (item['note'] != null && item['note'].toString().isNotEmpty && !item['note'].toString().startsWith('REMOTE_ITEM:'))
-                  Text(
-                    item['note'],
-                    style: TextStyle(fontSize: 11.sp, color: const Color.fromARGB(255, 158, 158, 158)),
+                  Padding(
+                    padding: EdgeInsets.only(top: 6.h),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? const Color(0xFF1E2025)
+                            : const Color(0xFFF3F4F6),
+                        borderRadius: BorderRadius.only(
+                          topRight: Radius.circular(6.r),
+                          bottomRight: Radius.circular(6.r),
+                        ),
+                        border: Border(
+                          left: BorderSide(
+                            color: AppTheme.primaryColor,
+                            width: 3.w,
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            CupertinoIcons.chat_bubble_text,
+                            size: 11.sp,
+                            color: AppTheme.secondaryTextColor(context),
+                          ),
+                          SizedBox(width: 6.w),
+                          Text(
+                            item['note'],
+                            style: TextStyle(
+                              color: AppTheme.textColor(context).withValues(alpha: 0.8),
+                              fontSize: 11.sp,
+                              fontFamily: AppTheme.fontMedium,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
               ],
             ),

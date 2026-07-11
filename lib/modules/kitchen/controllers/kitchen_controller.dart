@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:semesta_pos/core/services/local/database_service.dart';
@@ -5,20 +6,39 @@ import 'package:semesta_pos/core/services/sync_service.dart';
 
 class KitchenController extends GetxController {
   final _dbService = Get.find<DatabaseService>();
+  final _syncService = Get.find<SyncService>();
 
   RxList<Map<String, dynamic>> activeOrders = <Map<String, dynamic>>[].obs;
   RxList<Map<String, dynamic>> doneOrders = <Map<String, dynamic>>[].obs;
   RxBool isLoading = false.obs;
+  
+  StreamSubscription? _syncStatusSubscription;
 
   @override
   void onInit() {
     super.onInit();
     fetchKitchenOrders();
+    _listenToSyncEvents();
   }
 
-  Future<void> fetchKitchenOrders() async {
+  @override
+  void onClose() {
+    _syncStatusSubscription?.cancel();
+    super.onClose();
+  }
+
+  void _listenToSyncEvents() {
+    // Listen to reactive SyncStatus updates. If orders are updated, reload kitchen instantly.
+    _syncStatusSubscription = _syncService.syncStatus.listen((status) {
+      if (status == 'Orders Updated' || status == 'success_state') {
+        fetchKitchenOrders(silent: true);
+      }
+    });
+  }
+
+  Future<void> fetchKitchenOrders({bool silent = false}) async {
     try {
-      isLoading.value = true;
+      if (!silent) isLoading.value = true;
       
       // Fetch Active (0)
       final active = await _dbService.rawQuery('''
@@ -61,9 +81,9 @@ class KitchenController extends GetxController {
 
       activeOrders.value = _groupByTransaction(active);
       doneOrders.value = _groupByTransaction(done);
-      isLoading.value = false;
+      if (!silent) isLoading.value = false;
     } catch (e) {
-      isLoading.value = false;
+      if (!silent) isLoading.value = false;
       debugPrint("KitchenController Error: $e");
     }
   }

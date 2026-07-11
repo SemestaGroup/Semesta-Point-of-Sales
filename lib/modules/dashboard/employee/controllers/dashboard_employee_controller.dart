@@ -5,6 +5,7 @@ import 'package:semesta_pos/core/services/sync_service.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
 import 'package:semesta_pos/routes/app_pages.dart';
 import 'package:semesta_pos/core/services/local/database_service.dart';
+import 'package:semesta_pos/modules/kitchen/controllers/kitchen_controller.dart';
 import 'package:semesta_pos/modules/auth/controllers/auth_controller.dart';
 import 'package:semesta_pos/modules/order/controllers/order_controller.dart';
 
@@ -36,6 +37,10 @@ class DashboardEmployeeController extends GetxController {
       } else if (index == 2) { // 2 is Orders Tab
         if (Get.isRegistered<OrderController>()) {
           Get.find<OrderController>().getOrders(forceRemote: false);
+        }
+      } else if (index == 8) { // 8 is Kitchen Tab
+        if (Get.isRegistered<KitchenController>()) {
+          Get.find<KitchenController>().fetchKitchenOrders(silent: false);
         }
       }
     });

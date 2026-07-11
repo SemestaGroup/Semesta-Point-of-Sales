@@ -60,6 +60,14 @@ class OrderController extends GetxController {
     super.onInit();
     // Initially load from local DB to avoid blinking
     getOrders(forceRemote: false);
+    // Auto-refresh order list when background sync pulls new data
+    if (Get.isRegistered<SyncService>()) {
+      ever(Get.find<SyncService>().syncStatus, (String status) {
+        if (status == 'Orders Updated' || status == 'Sync Complete') {
+          getOrders(forceRemote: false);
+        }
+      });
+    }
   }
 
   Future<void> _autoCancelExpiredOrders() async {

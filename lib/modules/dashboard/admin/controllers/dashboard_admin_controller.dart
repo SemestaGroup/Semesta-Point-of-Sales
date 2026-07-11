@@ -6,6 +6,7 @@ import 'package:semesta_pos/core/services/sync_service.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
 import 'package:semesta_pos/modules/home/employee/controllers/shift_controller.dart';
 import 'package:semesta_pos/routes/app_pages.dart';
+import 'package:semesta_pos/modules/kitchen/controllers/kitchen_controller.dart';
 import 'package:semesta_pos/modules/auth/controllers/auth_controller.dart';
 
 class DashboardAdminController extends GetxController {
@@ -29,6 +30,10 @@ class DashboardAdminController extends GetxController {
     ever(stateSelectedIndex, (int index) {
       if (index == 1) {
         isSidebarCollapsed.value = true;
+      } else if (index == 8) { // 8 is Kitchen Tab
+        if (Get.isRegistered<KitchenController>()) {
+          Get.find<KitchenController>().fetchKitchenOrders(silent: false);
+        }
       }
     });
   }

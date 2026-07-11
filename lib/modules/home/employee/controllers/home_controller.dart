@@ -29,6 +29,7 @@ import 'package:semesta_pos/core/services/sync_service.dart';
 import 'package:semesta_pos/core/services/transaction_webhook_service.dart';
 import 'package:semesta_pos/core/services/promo_service.dart';
 import 'package:semesta_pos/modules/order/controllers/order_controller.dart';
+import 'package:semesta_pos/modules/kitchen/controllers/kitchen_controller.dart';
 import 'package:semesta_pos/routes/app_pages.dart';
 import 'package:semesta_pos/modules/setting/controllers/setting_controller.dart';
 import 'package:semesta_pos/modules/dashboard/employee/controllers/dashboard_employee_controller.dart';
@@ -755,11 +756,14 @@ class HomeController extends GetxController {
     }
   }
 
-  Future<void> addProduct(ProductModel productModel) async {
-    var index = penjualanDetailModelList
-        .indexWhere((element) => element.idProduk == productModel.idProduk);
-
+  Future<void> addProduct(ProductModel productModel, {String note = ""}) async {
     String currentItemType = selectedOrderType.value;
+    
+    // Match based on idProduk, orderType, AND note to keep items with different notes separate
+    var index = penjualanDetailModelList.indexWhere((element) => 
+        element.idProduk == productModel.idProduk && 
+        element.orderType == currentItemType && 
+        (element.note ?? "") == note);
 
     // Determine the active price according to order type
     final dynamicPrice = getDynamicPrice(
@@ -812,7 +816,7 @@ class HomeController extends GetxController {
       subtotal: finalPrice,
       orderType: currentItemType,
       orderTypesJson: productModel.orderTypes ?? "",
-      note: "",
+      note: note,
       discountTotal: promoDiscount.discountTotal,
       discountType: promoDiscount.discountType,
     );
@@ -1137,6 +1141,51 @@ class HomeController extends GetxController {
     }
     // --- End Refund Logic ---
 
+    int targetQty = qty ?? item.jumlah;
+    String targetNote = note ?? item.note;
+    String targetOrderType = orderType ?? item.orderType;
+
+    // Split logic if updating note or type on a grouped item (qty > 1)
+    if (item.jumlah > 1 && (note != null && note != item.note)) {
+      // Deduct 1 from the original grouped item
+      int remainingQty = item.jumlah - 1;
+      penjualanDetailModelList[index] = item.copyWith(
+        jumlah: remainingQty,
+        subtotal: item.hargaJual * remainingQty,
+      );
+
+      // Add/merge the split item with the new note (qty = 1)
+      final splitItem = item.copyWith(
+        jumlah: 1,
+        note: targetNote,
+        orderType: targetOrderType,
+        subtotal: item.hargaJual,
+      );
+
+      // Check if an item with the exact same id, type, and note already exists elsewhere
+      int existingIdx = penjualanDetailModelList.indexWhere((element) => 
+          element.idProduk == item.idProduk && 
+          element.orderType == targetOrderType && 
+          (element.note ?? "") == targetNote &&
+          element.isRefund == item.isRefund);
+
+      if (existingIdx != -1) {
+        // Merge into existing row
+        var existing = penjualanDetailModelList[existingIdx];
+        penjualanDetailModelList[existingIdx] = existing.copyWith(
+          jumlah: existing.jumlah + 1,
+          subtotal: existing.hargaJual * (existing.jumlah + 1),
+        );
+      } else {
+        // Insert as a new row next to the original item
+        penjualanDetailModelList.insert(index + 1, splitItem);
+      }
+      
+      penjualanDetailModelList.refresh();
+      calculateTotals();
+      return;
+    }
+
     int dynamicPrice = item.hargaAwal > 0 ? item.hargaAwal : item.hargaJual;
     int finalPrice = item.hargaJual;
     int currentDiscountTotal = item.discountTotal;
@@ -1161,16 +1210,17 @@ class HomeController extends GetxController {
       currentDiscountType = promoDiscount.discountType;
     }
 
+    // Normal update (no split needed or item only had qty = 1)
     penjualanDetailModelList[index] = item.copyWith(
-      jumlah: qty ?? item.jumlah,
-      note: note ?? item.note,
-      orderType: orderType ?? item.orderType,
+      jumlah: targetQty,
+      note: targetNote,
+      orderType: targetOrderType,
       hargaAwal: dynamicPrice,
       hargaJual: finalPrice, // UPDATE HARGA
       discountTotal: currentDiscountTotal,
       discountType: currentDiscountType,
       subtotal:
-          (qty ?? item.jumlah) * finalPrice, // RECALC SUBTOTAL WITH NEW PRICE
+          targetQty * finalPrice, // RECALC SUBTOTAL WITH NEW PRICE
     );
     penjualanDetailModelList.refresh();
     calculateTotals();
@@ -1774,6 +1824,10 @@ class HomeController extends GetxController {
       );
 
       isLoadingTransaction.value = false;
+      // Trigger kitchen display to reload if it's active
+      if (Get.isRegistered<KitchenController>()) {
+        Get.find<KitchenController>().fetchKitchenOrders(silent: true);
+      }
       await resetState(idPenjualanLocal, isSaveOnly: isSaveOnly);
     } catch (e) {
       isLoadingTransaction.value = false;

@@ -4,6 +4,7 @@ import 'package:semesta_pos/core/models/dashboard/dashboard_model.dart';
 import 'package:semesta_pos/core/models/shared_user_model.dart';
 import 'package:semesta_pos/core/services/local/database_service.dart';
 import 'package:semesta_pos/core/services/remote/api_service.dart';
+import 'package:semesta_pos/core/services/sync_service.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
 
 
@@ -34,6 +35,19 @@ class HomeAdminController extends GetxController {
   RxString userName = "".obs;
   RxString userEmail = "".obs;
 
+  @override
+  void onInit() {
+    super.onInit();
+    // Auto-refresh dashboard data when background sync completes
+    if (Get.isRegistered<SyncService>()) {
+      ever(Get.find<SyncService>().syncStatus, (String status) {
+        if (status == "Sync Complete" || status.contains("Updated")) {
+          getDashboardData(silent: true);
+        }
+      });
+    }
+  }
+
   String _capitalizeName(String name) {
     if (name.isEmpty) return "";
     return name.split(' ').map((word) {
@@ -55,9 +69,9 @@ class HomeAdminController extends GetxController {
     }
   }
 
-  Future<void> getDashboardData() async {
+  Future<void> getDashboardData({bool silent = false}) async {
     try {
-      isLoading.value = true;
+      if (!silent) isLoading.value = true;
       
       final now = DateTime.now();
       final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
@@ -124,9 +138,9 @@ class HomeAdminController extends GetxController {
       ''');
       recentTransactions.value = recent;
 
-      isLoading.value = false;
+      if (!silent) isLoading.value = false;
     } catch (e) {
-      isLoading.value = false;
+      if (!silent) isLoading.value = false;
       debugPrint("HomeAdminController Error: $e");
     }
   }
