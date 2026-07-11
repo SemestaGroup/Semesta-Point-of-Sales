@@ -607,8 +607,8 @@ class ApiService extends GetxService {
 
   Future<ResponseApiModel> getPosOrders() async {
     try {
-      final responseApi = await http.get(_getUri(EndPoint.posOrder),
-          headers: _getAuthHeaders());
+      final uri = _getUri(EndPoint.posOrder, queryParameters: {'limit': '200'});
+      final responseApi = await http.get(uri, headers: _getAuthHeaders());
 
       if (responseApi.statusCode == 200 || responseApi.statusCode == 201) {
         dynamic dataResponse;

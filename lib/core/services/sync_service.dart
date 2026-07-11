@@ -49,7 +49,7 @@ class SyncService extends GetxService {
     });
 
     // Background periodic sync — runs every 30s silently without blocking any UI
-    _backgroundSyncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    _backgroundSyncTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
       // Avoid starting background sync if the user is currently busy in the POS (checkout, payment, or loading)
       if (Get.isRegistered<HomeController>()) {
         final homeController = Get.find<HomeController>();
@@ -62,7 +62,14 @@ class SyncService extends GetxService {
         }
       }
       debugPrint("SyncService: [Background] Periodic queue flush triggered.");
-      processQueue();
+      await processQueue();
+      
+      // Pull remote orders periodically so transactions made on other devices appear automatically
+      try {
+        await pullRemoteOrders();
+      } catch (e) {
+        debugPrint("SyncService: [Background] Failed to pull remote orders: $e");
+      }
     });
 
     // Real-time Sync Indicator update loop (runs every 5s)
@@ -300,7 +307,9 @@ class SyncService extends GetxService {
             [idPos, remoteId]);
 
         int? localIdPenjualan;
-        if (localCheck.isNotEmpty) {
+        bool isNewOrder = localCheck.isEmpty;
+
+        if (!isNewOrder) {
           final localOrder = localCheck.first;
           localIdPenjualan = localOrder['id_penjualan'];
 
@@ -350,18 +359,18 @@ class SyncService extends GetxService {
           }
         } else {
           // It's a completely new order (not in local DB)
-          // If it is a paid order (status 2) and we've already fetched MAX_HISTORY paid orders, skip it.
+          // Limit fetching older paid orders to MAX_HISTORY to optimize speed
           final int remoteStatus = _toInt(orderJson['status']);
           if (remoteStatus == 2 || remoteStatus == 5) {
-            // 2: Paid, 5: Cancelled/Refunded
             if (newlyFetchedPaidOrders >= MAX_HISTORY) {
-              continue;
+              continue; // Skip older history once limit is reached
             }
             newlyFetchedPaidOrders++;
           }
         }
 
-        final tglPenjualanStr = orderJson['datecreated']?.toString() ??
+        final tglPenjualanStr = orderJson['daterecorded']?.toString() ??
+            orderJson['datecreated']?.toString() ??
             orderJson['date']?.toString() ??
             DateTime.now().toString();
         final dt = DateTime.tryParse(tglPenjualanStr);
@@ -386,7 +395,8 @@ class SyncService extends GetxService {
           fullOrderData = orderJson as Map<String, dynamic>;
         }
 
-        final tglPenjualan = fullOrderData['datecreated'] ??
+        final tglPenjualan = fullOrderData['daterecorded'] ??
+            fullOrderData['datecreated'] ??
             fullOrderData['date'] ??
             DateTime.now().toString();
         final totalHarga =
@@ -405,7 +415,7 @@ class SyncService extends GetxService {
           final headerMap = {
             'id_member': fullOrderData['clientid'] ?? 1,
             'id_user': fullOrderData['addedfrom'] ?? 1,
-            'tgl_penjualan': tglPenjualan.toString(),
+            'tgl_penjualan': tglPenjualan.toString().replaceAll('T', ' '),
             'total_item': (fullOrderData['items'] as List?)?.length ?? 0,
             'total_harga': totalHarga.toInt(),
             'diskon': diskon.toInt(),

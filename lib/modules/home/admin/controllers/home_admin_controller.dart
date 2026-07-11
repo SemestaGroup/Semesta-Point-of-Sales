@@ -134,7 +134,7 @@ class HomeAdminController extends GetxController {
         FROM transactions t 
         LEFT JOIN members m ON t.id_member = m.id_member
         WHERE t.status != 5
-        ORDER BY t.id_penjualan DESC LIMIT 8
+        ORDER BY t.tgl_penjualan DESC, t.id_penjualan DESC LIMIT 8
       ''');
       recentTransactions.value = recent;
 
