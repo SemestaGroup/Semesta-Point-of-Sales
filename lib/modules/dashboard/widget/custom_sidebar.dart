@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import 'package:semesta_pos/core/services/sync_service.dart';
 import 'package:semesta_pos/modules/auth/controllers/auth_controller.dart';
 import 'package:semesta_pos/styles/app_theme.dart';
 
@@ -63,50 +64,200 @@ class CustomSidebar extends StatelessWidget {
               // Logo Header
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 24.h),
-                child: Row(
-                  mainAxisAlignment: isCollapsed
-                      ? MainAxisAlignment.center
-                      : MainAxisAlignment.start,
-                  children: [
-                    Icon(
-                      CupertinoIcons.checkmark_seal_fill,
-                      color: activeTextColor,
-                      size: 24.sp,
-                    ),
-                    if (showText) ...[
-                  SizedBox(width: 8.w),
-                  Expanded(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Row(
+                child: Obx(() {
+                  final syncService = Get.isRegistered<SyncService>() ? Get.find<SyncService>() : null;
+                  
+                  final colorMap = {
+                    'green': const Color(0xFF10B981),
+                    'yellow': const Color(0xFFFBBF24),
+                    'red': const Color(0xFFEF4444),
+                  };
+                  final statusColor = syncService != null 
+                      ? (colorMap[syncService.syncIndicatorColor.value] ?? const Color(0xFF10B981))
+                      : const Color(0xFF10B981);
+                  final labelText = syncService != null ? syncService.syncTimeLabel.value : 'Sync OK';
+                  final isSyncing = syncService != null && syncService.isSyncing.value;
+
+                  return Column(
+                    crossAxisAlignment: isCollapsed ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisAlignment: isCollapsed
+                            ? MainAxisAlignment.center
+                            : MainAxisAlignment.start,
                         children: [
-                          Text(
-                            'Flink',
-                            style: TextStyle(
-                              fontFamily: AppTheme.fontBold,
-                              fontSize: 21.sp,
-                              color: AppTheme.textColor(context),
-                              fontWeight: FontWeight.bold,
+                          // Logo Icon (with overlay dot in collapsed mode)
+                          GestureDetector(
+                            onTap: () {
+                              if (isCollapsed && syncService != null && !isSyncing) {
+                                syncService.syncFullData();
+                              }
+                            },
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                Icon(
+                                  CupertinoIcons.checkmark_seal_fill,
+                                  color: activeTextColor,
+                                  size: 24.sp,
+                                ),
+                                // In collapsed mode, display status indicator as an overlay badge on the logo icon
+                                if (isCollapsed && syncService != null)
+                                  Positioned(
+                                    right: -4.w,
+                                    top: -4.h,
+                                    child: isSyncing
+                                        ? SizedBox(
+                                            width: 11.w,
+                                            height: 11.w,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 1.8,
+                                              valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                                            ),
+                                          )
+                                        : Container(
+                                            width: 10.w,
+                                            height: 10.w,
+                                            decoration: BoxDecoration(
+                                              color: statusColor,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(color: AppTheme.sidebarColor(context), width: 1.5),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: statusColor.withValues(alpha: 0.3),
+                                                  blurRadius: 3,
+                                                  spreadRadius: 0.5,
+                                                )
+                                              ],
+                                            ),
+                                          ),
+                                  ),
+                              ],
                             ),
                           ),
-                          Text(
-                            'POS',
-                            style: TextStyle(
-                              fontFamily: AppTheme.fontBold,
-                              fontSize: 21.sp,
-                              color: activeTextColor,
-                              fontWeight: FontWeight.bold,
+                          if (showText) ...[
+                            SizedBox(width: 8.w),
+                            Text(
+                              'Flink',
+                              style: TextStyle(
+                                fontFamily: AppTheme.fontBold,
+                                fontSize: 20.sp,
+                                color: AppTheme.textColor(context),
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
+                            Text(
+                              'POS',
+                              style: TextStyle(
+                                fontFamily: AppTheme.fontBold,
+                                fontSize: 20.sp,
+                                color: activeTextColor,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
-                    ),
-                  ),
-                ]
-              ],
-            ),
-          ),
+                      // Expanded Sync Banner (di bawah logo)
+                      if (showText && syncService != null) ...[
+                        SizedBox(height: 14.h),
+                        GestureDetector(
+                          onTap: () {
+                            if (!isSyncing) {
+                              syncService.syncFullData();
+                            }
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            width: double.infinity,
+                            padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 8.h),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(10.r),
+                              border: Border.all(color: statusColor.withValues(alpha: 0.15), width: 1),
+                            ),
+                            child: Row(
+                              children: [
+                                // Glowing indicator dot
+                                isSyncing
+                                    ? SizedBox(
+                                        width: 8.w,
+                                        height: 8.w,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 1.2,
+                                          valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                                        ),
+                                      )
+                                    : Container(
+                                        width: 7.w,
+                                        height: 7.w,
+                                        decoration: BoxDecoration(
+                                          color: statusColor,
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: statusColor.withValues(alpha: 0.3),
+                                              blurRadius: 3,
+                                              spreadRadius: 0.5,
+                                            )
+                                          ],
+                                        ),
+                                      ),
+                                SizedBox(width: 8.w),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        labelText,
+                                        style: TextStyle(
+                                          fontFamily: AppTheme.fontBold,
+                                          fontSize: 10.sp,
+                                          color: statusColor,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      SizedBox(height: 2.h),
+                                      Text(
+                                        () {
+                                          if (labelText == "Offline") {
+                                            return "Data disimpan lokal";
+                                          } else if (labelText == "Menyelaraskan...") {
+                                            final count = syncService.pendingSyncCount.value;
+                                            return "$count data mengantre • otomatis";
+                                          } else {
+                                            return isSyncing ? "Sedang menyelaraskan..." : "Ketuk untuk sync manual";
+                                          }
+                                        }(),
+                                        style: TextStyle(
+                                          fontFamily: AppTheme.fontRegular,
+                                          fontSize: 8.sp,
+                                          color: statusColor.withValues(alpha: 0.6),
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                SizedBox(width: 4.w),
+                                Icon(
+                                  isSyncing ? CupertinoIcons.arrow_2_circlepath : CupertinoIcons.refresh_thin,
+                                  size: 11.sp,
+                                  color: statusColor,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  );
+                }),
+              ),
           Divider(color: AppTheme.borderColor(context), height: 1),
 
           Expanded(
