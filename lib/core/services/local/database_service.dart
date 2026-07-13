@@ -1011,4 +1011,22 @@ class DatabaseService {
       [id],
     );
   }
+
+  /// SQL helper block to resolve the correct payment mode name/method from pos_payments
+  /// with casting fallbacks for remote orders, and fallback to transaction's order_type/Cash.
+  static const String paymentMethodSubquery = '''
+    COALESCE(
+      (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) 
+       FROM pos_payments pp 
+       LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id 
+       WHERE (pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL AND pp.id_pos != '') 
+          OR (pp.invoiceid = CAST(t.id_penjualan_remote AS TEXT) AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '') 
+       LIMIT 1),
+      NULLIF(t.payment_method, ''),
+      CASE 
+        WHEN t.order_type NOT IN ('Dine In', 'Take Away', 'dine_in', 'take_away', '') THEN t.order_type 
+        ELSE 'Cash' 
+      END
+    )
+  ''';
 }

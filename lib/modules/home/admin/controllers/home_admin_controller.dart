@@ -127,19 +127,7 @@ class HomeAdminController extends GetxController {
       // ── Recent Transactions: show all except deleted(5); cancelled shown with their status
       final recent = await _dbService.rawQuery('''
         SELECT t.*, m.nama as member_name,
-               COALESCE(
-                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) 
-                  FROM pos_payments pp 
-                  LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id 
-                  WHERE (pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL AND pp.id_pos != '') 
-                     OR (pp.invoiceid = CAST(t.id_penjualan_remote AS TEXT) AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '') 
-                  LIMIT 1),
-                 NULLIF(t.payment_method, ''),
-                 CASE 
-                   WHEN t.order_type NOT IN ('Dine In', 'Take Away', 'dine_in', 'take_away', '') THEN t.order_type 
-                   ELSE 'Cash' 
-                 END
-               ) as payment_method
+               ${DatabaseService.paymentMethodSubquery} as payment_method
         FROM transactions t 
         LEFT JOIN members m ON t.id_member = m.id_member
         WHERE t.status != 5
@@ -158,15 +146,7 @@ class HomeAdminController extends GetxController {
     try {
       // Deduplicate: one payment row per transaction, then group by method
       final todayBreakdown = await _dbService.rawQuery('''
-        SELECT COALESCE(
-                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL AND pp.id_pos != '' LIMIT 1),
-                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.invoiceid = CAST(t.id_penjualan_remote AS TEXT) AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '' LIMIT 1),
-                 NULLIF(t.payment_method, ''),
-                 CASE 
-                   WHEN t.order_type NOT IN ('Dine In', 'Take Away', 'dine_in', 'take_away', '') THEN t.order_type 
-                   ELSE 'Cash' 
-                 END
-               ) as method, 
+        SELECT ${DatabaseService.paymentMethodSubquery} as method, 
                SUM(t.bayar) as total, 
                COUNT(*) as cnt
         FROM transactions t
@@ -183,15 +163,7 @@ class HomeAdminController extends GetxController {
 
       // Same dedup for month
       final monthBreakdown = await _dbService.rawQuery('''
-        SELECT COALESCE(
-                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL AND pp.id_pos != '' LIMIT 1),
-                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.invoiceid = CAST(t.id_penjualan_remote AS TEXT) AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '' LIMIT 1),
-                 NULLIF(t.payment_method, ''),
-                 CASE 
-                   WHEN t.order_type NOT IN ('Dine In', 'Take Away', 'dine_in', 'take_away', '') THEN t.order_type 
-                   ELSE 'Cash' 
-                 END
-               ) as method, 
+        SELECT ${DatabaseService.paymentMethodSubquery} as method, 
                SUM(t.bayar) as total, 
                COUNT(*) as cnt
         FROM transactions t
