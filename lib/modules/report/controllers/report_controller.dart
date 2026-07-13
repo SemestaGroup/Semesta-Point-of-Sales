@@ -190,8 +190,12 @@ class ReportController extends GetxController {
         SELECT t.*,
                COALESCE(
                  (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL AND pp.id_pos != '' LIMIT 1),
-                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.invoiceid = t.id_penjualan_remote AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '' LIMIT 1),
-                 NULLIF(t.payment_method, ''), 'Cash'
+                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.invoiceid = CAST(t.id_penjualan_remote AS TEXT) AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '' LIMIT 1),
+                 NULLIF(t.payment_method, ''),
+                 CASE 
+                   WHEN t.order_type NOT IN ('Dine In', 'Take Away', 'dine_in', 'take_away', '') THEN t.order_type 
+                   ELSE 'Cash' 
+                 END
                ) as payment_method,
                (SELECT COUNT(*) FROM transaction_details td WHERE td.id_penjualan = t.id_penjualan AND td.is_refund = 1) as refund_count
         FROM transactions t
@@ -209,8 +213,12 @@ class ReportController extends GetxController {
       if (filterMethod.isNotEmpty && filterMethod != 'All') {
         sql += ''' AND LOWER(COALESCE(
                  (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL AND pp.id_pos != '' LIMIT 1),
-                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.invoiceid = t.id_penjualan_remote AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '' LIMIT 1),
-                 NULLIF(t.payment_method, ''), 'Cash'
+                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.invoiceid = CAST(t.id_penjualan_remote AS TEXT) AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '' LIMIT 1),
+                 NULLIF(t.payment_method, ''),
+                 CASE 
+                   WHEN t.order_type NOT IN ('Dine In', 'Take Away', 'dine_in', 'take_away', '') THEN t.order_type 
+                   ELSE 'Cash' 
+                 END
                )) = LOWER(?)''';
         args.add(filterMethod);
       }

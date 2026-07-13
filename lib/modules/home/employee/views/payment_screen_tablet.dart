@@ -32,9 +32,15 @@ class PaymentScreenTablet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final initialMethod = controller.shouldShowCashPayment 
-        ? formatRupiah(controller.totalTransaction.value) 
-        : (controller.filteredCashlessPaymentModes.firstOrNull?['name']?.toString() ?? '');
+    final bool currentIsMerchant = controller.availableOrderTypes
+            .where((type) => type != "Dine In" && type != "Take Away")
+            .any((type) => type == controller.selectedOrderType.value);
+            
+    final initialMethod = currentIsMerchant && controller.filteredCashlessPaymentModes.isNotEmpty
+        ? (controller.filteredCashlessPaymentModes.firstOrNull?['name']?.toString() ?? '')
+        : (controller.shouldShowCashPayment 
+            ? formatRupiah(controller.totalTransaction.value) 
+            : (controller.filteredCashlessPaymentModes.firstOrNull?['name']?.toString() ?? ''));
     final selectedPaymentMethod = initialMethod.obs;
 
     return Scaffold(

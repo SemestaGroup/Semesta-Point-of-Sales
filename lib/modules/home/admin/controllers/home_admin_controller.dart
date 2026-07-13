@@ -128,8 +128,17 @@ class HomeAdminController extends GetxController {
       final recent = await _dbService.rawQuery('''
         SELECT t.*, m.nama as member_name,
                COALESCE(
-                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE (pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL AND pp.id_pos != '') OR (pp.invoiceid = t.remote_number AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '') LIMIT 1),
-                 NULLIF(t.payment_method, ''), 'Cash'
+                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) 
+                  FROM pos_payments pp 
+                  LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id 
+                  WHERE (pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL AND pp.id_pos != '') 
+                     OR (pp.invoiceid = CAST(t.id_penjualan_remote AS TEXT) AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '') 
+                  LIMIT 1),
+                 NULLIF(t.payment_method, ''),
+                 CASE 
+                   WHEN t.order_type NOT IN ('Dine In', 'Take Away', 'dine_in', 'take_away', '') THEN t.order_type 
+                   ELSE 'Cash' 
+                 END
                ) as payment_method
         FROM transactions t 
         LEFT JOIN members m ON t.id_member = m.id_member
@@ -151,8 +160,12 @@ class HomeAdminController extends GetxController {
       final todayBreakdown = await _dbService.rawQuery('''
         SELECT COALESCE(
                  (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL AND pp.id_pos != '' LIMIT 1),
-                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.invoiceid = t.id_penjualan_remote AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '' LIMIT 1),
-                 NULLIF(t.payment_method, ''), 'Cash'
+                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.invoiceid = CAST(t.id_penjualan_remote AS TEXT) AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '' LIMIT 1),
+                 NULLIF(t.payment_method, ''),
+                 CASE 
+                   WHEN t.order_type NOT IN ('Dine In', 'Take Away', 'dine_in', 'take_away', '') THEN t.order_type 
+                   ELSE 'Cash' 
+                 END
                ) as method, 
                SUM(t.bayar) as total, 
                COUNT(*) as cnt
@@ -172,13 +185,17 @@ class HomeAdminController extends GetxController {
       final monthBreakdown = await _dbService.rawQuery('''
         SELECT COALESCE(
                  (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.id_pos = t.id_pos AND pp.id_pos IS NOT NULL AND pp.id_pos != '' LIMIT 1),
-                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.invoiceid = t.id_penjualan_remote AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '' LIMIT 1),
-                 NULLIF(t.payment_method, ''), 'Cash'
+                 (SELECT COALESCE(NULLIF(pm.name, ''), NULLIF(pp.paymentmethod, '')) FROM pos_payments pp LEFT JOIN payment_modes pm ON pp.paymentmode = pm.id WHERE pp.invoiceid = CAST(t.id_penjualan_remote AS TEXT) AND pp.invoiceid IS NOT NULL AND pp.invoiceid != '' LIMIT 1),
+                 NULLIF(t.payment_method, ''),
+                 CASE 
+                   WHEN t.order_type NOT IN ('Dine In', 'Take Away', 'dine_in', 'take_away', '') THEN t.order_type 
+                   ELSE 'Cash' 
+                 END
                ) as method, 
                SUM(t.bayar) as total, 
                COUNT(*) as cnt
         FROM transactions t
-        WHERE t.tgl_penjualan LIKE ? AND t.status = 2
+        WHERE tgl_penjualan LIKE ? AND t.status = 2
         GROUP BY method
         ORDER BY total DESC
       ''', [monthStr]);
