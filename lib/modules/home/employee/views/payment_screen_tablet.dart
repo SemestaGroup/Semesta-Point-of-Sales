@@ -880,54 +880,63 @@ class PaymentScreenTablet extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     // Tombol-tombol cetak di sebelah kiri
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: () async {
-                            final items =
-                                controller.penjualanDetailModelList.toList();
-                            await controller.printLabels(items);
-                          },
-                          icon: Icon(Icons.label_outline_rounded,
-                              color: AppTheme.primaryColor, size: 18.sp),
-                          label: Text("Cetak Label",
-                              style: TextStyle(
-                                  color: AppTheme.primaryColor,
-                                  fontFamily: AppTheme.fontMedium,
-                                  fontSize: 15.sp)),
-                          style: OutlinedButton.styleFrom(
-                            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
-                            side: BorderSide(color: AppTheme.borderColor(context)),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12.r)),
+                    Expanded(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                final items =
+                                    controller.penjualanDetailModelList.toList();
+                                await controller.printLabels(items);
+                              },
+                              icon: Icon(Icons.label_outline_rounded,
+                                  color: AppTheme.primaryColor, size: 18.sp),
+                              label: Text("Cetak Label",
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      color: AppTheme.primaryColor,
+                                      fontFamily: AppTheme.fontMedium,
+                                      fontSize: 15.sp)),
+                              style: OutlinedButton.styleFrom(
+                                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+                                side: BorderSide(color: AppTheme.borderColor(context)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12.r)),
+                              ),
+                            ),
                           ),
-                        ),
-                        SizedBox(width: 12.w),
-                        OutlinedButton.icon(
-                          onPressed: () {
-                            controller.printReceipt(
-                                paymentMethod: paymentMethod,
-                                total: totalAmount,
-                                diterima: receivedAmount,
-                                kembalian: kembalian);
-                          },
-                          icon: Icon(Icons.print_outlined,
-                              color: AppTheme.primaryColor, size: 18.sp),
-                          label: Text("Cetak Ulang Struk",
-                              style: TextStyle(
-                                  color: AppTheme.primaryColor,
-                                  fontFamily: AppTheme.fontMedium,
-                                  fontSize: 15.sp)),
-                          style: OutlinedButton.styleFrom(
-                            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
-                            side: BorderSide(color: AppTheme.borderColor(context)),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12.r)),
+                          SizedBox(width: 12.w),
+                          Flexible(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                controller.printReceipt(
+                                    paymentMethod: paymentMethod,
+                                    total: totalAmount,
+                                    diterima: receivedAmount,
+                                    kembalian: kembalian);
+                              },
+                              icon: Icon(Icons.print_outlined,
+                                  color: AppTheme.primaryColor, size: 18.sp),
+                              label: Text("Cetak Ulang",
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      color: AppTheme.primaryColor,
+                                      fontFamily: AppTheme.fontMedium,
+                                      fontSize: 15.sp)),
+                              style: OutlinedButton.styleFrom(
+                                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+                                side: BorderSide(color: AppTheme.borderColor(context)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12.r)),
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
+                    SizedBox(width: 16.w),
                     // Tombol selesai di sebelah kanan
                     ElevatedButton.icon(
                       onPressed: doFinish,
