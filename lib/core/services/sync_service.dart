@@ -1801,16 +1801,22 @@ class SyncService extends GetxService {
                   if (key == 'pos_active_session' &&
                       Get.isRegistered<ShiftController>()) {
                     final shiftCtrl = Get.find<ShiftController>();
-                    if (shiftCtrl.activeShift.value == null) {
-                      batch.insert(
-                          'pos_options',
-                          {
-                            'option_name': key,
-                            'option_value': serverVal,
-                          },
-                          conflictAlgorithm: ConflictAlgorithm.replace);
-                      shiftCtrl.activeShift.value =
-                          ShiftSessionModel.fromJson(decoded);
+                    final session = ShiftSessionModel.fromJson(decoded);
+                    
+                    // ponytail: ignore stale remote shift (>24h old) to prevent local device from joining outdated server sessions.
+                    if (DateTime.now().difference(session.startTime).inHours <= 24) {
+                      if (shiftCtrl.activeShift.value == null) {
+                        batch.insert(
+                            'pos_options',
+                            {
+                              'option_name': key,
+                              'option_value': serverVal,
+                            },
+                            conflictAlgorithm: ConflictAlgorithm.replace);
+                        shiftCtrl.activeShift.value = session;
+                      }
+                    } else {
+                      debugPrint('SyncService: Stale remote shift session (>24h) ignored: ${session.shiftName} starting at ${session.startTime}');
                     }
                   } else if (key == 'pos_active_staff') {
                     batch.insert(

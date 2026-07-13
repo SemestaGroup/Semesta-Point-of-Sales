@@ -56,6 +56,9 @@ class RecapController extends GetxController {
   Future<void> initRecap() async {
     isLoading.value = true;
     try {
+      if (Get.isRegistered<ShiftController>()) {
+        await Get.find<ShiftController>().loadShiftData();
+      }
       await fetchPaymentModes();
       await calculateShiftTotals();
 

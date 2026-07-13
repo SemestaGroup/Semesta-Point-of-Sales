@@ -57,18 +57,32 @@ class ShiftController extends GetxController {
         if (rawSession.isNotEmpty && rawSession != 'null') {
           try {
             final decoded = jsonDecode(rawSession);
-            activeShift.value = ShiftSessionModel.fromJson(decoded);
-            debugPrint('[ShiftController] loadShiftData: Loaded activeShift='
-                '${activeShift.value?.shiftName}, '
-                'startTime=${activeShift.value?.startTime.toIso8601String()}, '
-                'startingBalance=${activeShift.value?.startingBalance}');
+            final session = ShiftSessionModel.fromJson(decoded);
+            
+            // ponytail: shift session has 24h ceiling. If it is older than 24h, automatically clear it to avoid stale shift usage.
+            if (DateTime.now().difference(session.startTime).inHours > 24) {
+              debugPrint('[ShiftController] loadShiftData: Stale active shift (>24h) detected, clearing local session.');
+              await _dbService.rawQuery(
+                  "DELETE FROM pos_options WHERE option_name = 'pos_active_session'");
+              activeShift.value = null;
+            } else {
+              activeShift.value = session;
+              debugPrint('[ShiftController] loadShiftData: Loaded activeShift='
+                  '${activeShift.value?.shiftName}, '
+                  'startTime=${activeShift.value?.startTime.toIso8601String()}, '
+                  'startingBalance=${activeShift.value?.startingBalance}');
+            }
           } catch (e) {
             debugPrint(
                 "ShiftController: FormatException on pos_active_session, clearing invalid data. $e");
             await _dbService.rawQuery(
                 "DELETE FROM pos_options WHERE option_name = 'pos_active_session'");
           }
+        } else {
+          activeShift.value = null;
         }
+      } else {
+        activeShift.value = null;
       }
     } catch (e) {
       debugPrint("ShiftController Error: $e");

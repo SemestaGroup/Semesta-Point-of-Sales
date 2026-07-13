@@ -53,6 +53,7 @@ class ShiftAuditController extends GetxController {
   Future<void> _initialize() async {
     isLoading.value = true;
     try {
+      await _shiftController.loadShiftData();
       await _loadPaymentModes();
       await _loadRecordedAmounts();
     } finally {
