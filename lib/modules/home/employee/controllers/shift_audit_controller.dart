@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:semesta_pos/core/models/payment/payment_mode_model.dart';
 import 'package:semesta_pos/core/services/local/database_service.dart';
 import 'package:semesta_pos/core/services/remote/api_service.dart';
+import 'package:semesta_pos/core/util/constans.dart';
 import 'package:semesta_pos/modules/dashboard/employee/controllers/dashboard_employee_controller.dart';
 import 'package:semesta_pos/modules/home/employee/controllers/shift_controller.dart';
 import 'package:semesta_pos/modules/setting/controllers/setting_controller.dart';
@@ -172,7 +173,7 @@ class ShiftAuditController extends GetxController {
       final cashMode = paymentModes.firstWhereOrNull(
         (m) => m.name.toLowerCase().contains('cash') ||
                m.name.toLowerCase().contains('tunai') ||
-               m.id == '1',
+               Constants.cashPaymentModeIds.contains(m.id),
       );
       if (cashMode != null && shift.startingBalance > 0) {
         final cashKey = cashMode.id;

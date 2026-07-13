@@ -8,6 +8,7 @@ import 'package:semesta_pos/core/services/transaction_webhook_service.dart';
 import 'package:semesta_pos/modules/dashboard/admin/controllers/dashboard_admin_controller.dart';
 import 'package:semesta_pos/modules/dashboard/employee/controllers/dashboard_employee_controller.dart';
 import 'package:semesta_pos/modules/home/employee/controllers/home_controller.dart';
+import 'package:semesta_pos/core/util/constans.dart';
 import 'package:semesta_pos/routes/app_pages.dart';
 
 class OrderController extends GetxController {
@@ -240,7 +241,7 @@ class OrderController extends GetxController {
       'currency': '3',
       'status': newStatus,
       'billing_street': '-',
-      'allowed_payment_modes': ['7'],
+      'allowed_payment_modes': [Constants.defaultCashPaymentModeId],
       'items': itemsArray,
       'subtotal':
           (order['total_harga'] as num? ?? 0).toDouble().toStringAsFixed(2),

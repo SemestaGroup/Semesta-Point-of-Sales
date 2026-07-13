@@ -1164,7 +1164,7 @@ class SettingController extends GetxController {
     for (var pm in paymentModes) {
       final String name = (pm['name']?.toString() ?? '').toLowerCase();
       final String id = pm['id']?.toString() ?? '';
-      if (id == '1' || id == '7' || name.contains('cash')) {
+      if (Constants.cashPaymentModeIds.contains(id) || name.contains('cash')) {
         expectedCash += (pm['recorded'] as num?)?.toInt() ?? 0;
       }
     }

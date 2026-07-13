@@ -198,9 +198,9 @@ class RecapController extends GetxController {
           (m) =>
               m.name.toLowerCase().contains('cash') ||
               m.name.toLowerCase().contains('tunai') ||
-              m.id == '1',
+              Constants.cashPaymentModeIds.contains(m.id),
         );
-        final cashKey = cashMode?.id ?? '1';
+        final cashKey = cashMode?.id ?? Constants.defaultCashPaymentModeId;
         recordedTotals[cashKey] =
             (recordedTotals[cashKey] ?? 0) + shift.startingBalance;
       }
@@ -282,8 +282,7 @@ class RecapController extends GetxController {
       (m) =>
           m.name.toLowerCase().contains('cash') ||
           m.name.toLowerCase().contains('tunai') ||
-          m.id == '1' ||
-          m.id == '7',
+          Constants.cashPaymentModeIds.contains(m.id),
     );
     return cashMode?.id;
   }

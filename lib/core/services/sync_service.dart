@@ -2138,7 +2138,7 @@ class SyncService extends GetxService {
                   'taxname': [],
                 })
             .toList(),
-        'allowed_payment_modes': ["7"],
+        'allowed_payment_modes': [Constants.defaultCashPaymentModeId],
         'billing_street': finalBillingStreet,
         'subtotal': subtotal,
         'total': total,
@@ -2199,8 +2199,8 @@ class SyncService extends GetxService {
         'id_pos': row['id_pos'],
         'invoiceid': invoiceIdStr,
         'amount': row['amount']?.toString() ?? '0',
-        'paymentmode': row['paymentmode']?.toString().toLowerCase() ?? '7',
-        'paymentmethod': row['paymentmethod'] ?? row['paymentmode'] ?? '7',
+        'paymentmode': row['paymentmode']?.toString().toLowerCase() ?? Constants.defaultCashPaymentModeId,
+        'paymentmethod': row['paymentmethod'] ?? row['paymentmode'] ?? Constants.defaultCashPaymentModeId,
         'date': row['date']?.toString() ??
             DateTime.now().toIso8601String().split('T')[0],
         'daterecorded':

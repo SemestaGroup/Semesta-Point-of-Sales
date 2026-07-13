@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:semesta_pos/core/services/local/database_service.dart';
 import 'package:semesta_pos/core/services/sync_service.dart';
+import 'package:semesta_pos/core/util/constans.dart';
 
 class KitchenController extends GetxController {
   final _dbService = Get.find<DatabaseService>();
@@ -223,7 +224,7 @@ class KitchenController extends GetxController {
         'currency': '3',
         'number': remoteNumber,
         'billing_street': billingStreet,
-        'allowed_payment_modes': ['7'], 
+        'allowed_payment_modes': [Constants.defaultCashPaymentModeId], 
         'items': itemsArray,
         'subtotal': subtotalVal.toStringAsFixed(2),
         'total': totalVal.toStringAsFixed(2),

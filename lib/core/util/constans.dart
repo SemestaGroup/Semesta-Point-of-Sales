@@ -40,4 +40,9 @@ class Constants {
     'tiktok': 'TikTok Shop',
     'takeaway': 'Take Away',
   };
+
+  // Payment mode IDs that represent Cash across all tenants.
+  // '1' = standard Perfex Cash ID, '7' = Semesta POS custom Cash ID.
+  static const List<String> cashPaymentModeIds = ['1', '7'];
+  static const String defaultCashPaymentModeId = '7';
 }

@@ -6,6 +6,7 @@ import 'package:semesta_pos/core/services/local/database_service.dart';
 import 'package:semesta_pos/core/services/remote/api_service.dart';
 import 'package:semesta_pos/core/services/sync_service.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
+import 'package:semesta_pos/core/util/constans.dart';
 
 class ShiftController extends GetxController {
   DatabaseService get _dbService => Get.find<DatabaseService>();
@@ -290,7 +291,7 @@ class ShiftController extends GetxController {
       final String name = matchedName ??
           (localMethod.isNotEmpty
               ? r['local_method']
-              : (ppMethod == '1' ? 'Cash' : 'Other'));
+              : (Constants.cashPaymentModeIds.contains(ppMethod) ? 'Cash' : 'Other'));
 
       totals[key] = (totals[key] ?? 0) + amount;
       counts[key] = (counts[key] ?? 0) + 1;
@@ -610,7 +611,7 @@ class ShiftController extends GetxController {
       for (var pm in pms) {
         final String name = (pm['name']?.toString() ?? '').toLowerCase();
         final String id = pm['id']?.toString() ?? '';
-        if (id == '1' || id == '7' || name.contains('cash')) {
+        if (Constants.cashPaymentModeIds.contains(id) || name.contains('cash')) {
           expectedCash += (pm['recorded'] as num?)?.toInt() ?? 0;
         }
       }
@@ -751,7 +752,7 @@ class ShiftController extends GetxController {
       final name = matchedName ??
           (localMethod.isNotEmpty
               ? r['local_method']
-              : (ppMethod == '1' ? 'Cash' : 'Other'));
+              : (Constants.cashPaymentModeIds.contains(ppMethod) ? 'Cash' : 'Other'));
       totals[key] = (totals[key] ?? 0) + amount;
       if (!paymentModesList.any((m) => m['id'] == key))
         paymentModesList.add({'id': key, 'name': name, 'recorded': 0});
@@ -1015,12 +1016,10 @@ class ShiftController extends GetxController {
             modeName.contains('tunai') ||
             ppMethod.contains('cash') ||
             ppMethod.contains('tunai') ||
-            ppMethod == '1' || // Standard Cash ID
-            ppMethod == '7' || // Custom Cash ID
+            Constants.cashPaymentModeIds.contains(ppMethod) ||
             localMethod.contains('cash') ||
             localMethod.contains('tunai') ||
-            localMethod == '1' ||
-            localMethod == '7';
+            Constants.cashPaymentModeIds.contains(localMethod);
 
         if (isCash) {
           cash += amount;

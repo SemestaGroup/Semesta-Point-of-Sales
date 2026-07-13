@@ -1520,7 +1520,7 @@ class HomeController extends GetxController {
               'billing_street': memberAddress,
               'allowed_payment_modes': allPaymentModes.isNotEmpty
                   ? allPaymentModes.map((e) => e['id'].toString()).toList()
-                  : ['7'],
+                  : [Constants.defaultCashPaymentModeId],
               'items': itemsArray,
               'subtotal':
                   (map['total_harga'] as num).toDouble().toStringAsFixed(2),
@@ -1948,7 +1948,7 @@ class HomeController extends GetxController {
           'newitems': newitemsArray,
           'allowed_payment_modes': allPaymentModes.isNotEmpty
               ? allPaymentModes.map((e) => e['id'].toString()).toList()
-              : ['7'],
+              : [Constants.defaultCashPaymentModeId],
           'billing_street': billingStreet,
           'subtotal': subtotalVal.toStringAsFixed(2),
           'total': (map['bayar'] as num).toDouble().toStringAsFixed(2),
@@ -2093,7 +2093,7 @@ class HomeController extends GetxController {
           'billing_street': billingStreet,
           'allowed_payment_modes': allPaymentModes.isNotEmpty
               ? allPaymentModes.map((e) => e['id'].toString()).toList()
-              : ['7'],
+              : [Constants.defaultCashPaymentModeId],
           'items': itemsArray,
           'subtotal': subtotalVal.toStringAsFixed(2),
           'total': (map['bayar'] as num).toDouble().toStringAsFixed(2),
@@ -2192,7 +2192,7 @@ class HomeController extends GetxController {
       }
 
       // Map the paymentMode string to its dynamic ID from the database
-      String paymentModeId = '7'; // fallback
+      String paymentModeId = Constants.defaultCashPaymentModeId; // fallback
       final modeMatch = allPaymentModes.firstWhere(
         (m) {
           final n = (m['name'] ?? '').toString().toLowerCase();
