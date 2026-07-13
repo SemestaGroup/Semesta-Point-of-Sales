@@ -64,11 +64,12 @@ class SyncService extends GetxService {
       debugPrint("SyncService: [Background] Periodic queue flush triggered.");
       await processQueue();
       
-      // Pull remote orders periodically so transactions made on other devices appear automatically
+      // Pull remote orders and payments periodically so transactions made on other devices appear automatically
       try {
         await pullRemoteOrders();
+        await pullRemotePayments();
       } catch (e) {
-        debugPrint("SyncService: [Background] Failed to pull remote orders: $e");
+        debugPrint("SyncService: [Background] Failed to pull remote orders/payments: $e");
       }
     });
 
