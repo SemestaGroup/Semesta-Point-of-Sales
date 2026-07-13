@@ -2125,7 +2125,7 @@ class SyncService extends GetxService {
 
       final map = {
         'clientid': row['id_member'],
-        'date': row['tgl_penjualan'].toString().split('T')[0], // YYYY-MM-DD
+        'date': row['tgl_penjualan'].toString().split('T')[0].split(' ')[0], // YYYY-MM-DD
         'datecreated': row['tgl_penjualan'].toString(),
         'prefix': 'POS-',
         'id_pos': row['id_pos'] ?? "",
