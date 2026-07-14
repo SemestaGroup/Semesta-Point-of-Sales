@@ -13,6 +13,18 @@ class PromoDiscount {
   PromoDiscount(this.finalPrice, this.discountTotal, this.discountType);
 }
 
+/// Internal helper to hold a promo discount result for a single product.
+class _PromoItemDiscount {
+  final int finalPrice;
+  final int discountTotal;
+  final String discountType;
+  _PromoItemDiscount({
+    required this.finalPrice,
+    required this.discountTotal,
+    required this.discountType,
+  });
+}
+
 class PromoService extends GetxService {
   final DatabaseService _dbService = Get.find<DatabaseService>();
   
@@ -186,10 +198,12 @@ class PromoService extends GetxService {
   }
 
   /// Calculates the best price taking into account product discounts and the manually selected promotion.
-  /// Does NOT auto-apply all active promos. Returns the discount configuration that gives the lowest price.
+  /// Processing rules:
+  ///   - Non-stackable promos (is_stackable != '1'): compete against each other, only the best one applies
+  ///   - Stackable promos (is_stackable == '1'): chain on top of whatever best price is available
   PromoDiscount calculateBestPrice({
     required int productId,
-    required String? productBrandIdStr, // Since ProductModel does not have idBrand directly in the file, we can pass it or ignore if not available
+    String? productBrandIdStr,
     required int dynamicPrice,
     required String orderType,
     required int productDiscountTotal,
@@ -207,91 +221,98 @@ class PromoService extends GetxService {
       return PromoDiscount(bestFinalPrice, bestDiscountTotal, bestDiscountType);
     }
 
-    for (var selectedPromo in selectedPromos) {
-      // 3. Check if the selected promo applies to this item
-      // Check Order Type
-      bool matchOrderType = false;
-      final rawOrderTypes = selectedPromo['order_types']?.toString();
-      if (rawOrderTypes != null && rawOrderTypes.isNotEmpty) {
-        try {
-          dynamic decoded = jsonDecode(rawOrderTypes);
-          if (decoded is String) {
-            decoded = jsonDecode(decoded);
-          }
-          if (decoded is List) {
-            final List types = decoded;
-            final normalizedInput = orderType.replaceAll(' ', '').toLowerCase();
-            for (var type in types) {
-              final normalizedType = type.toString().replaceAll(' ', '').toLowerCase();
-              if (normalizedType == normalizedInput) {
-                matchOrderType = true;
-                break;
-              }
-            }
-          }
-        } catch (e) {
-          debugPrint("PromoService: Error parsing order_types - $e");
-        }
+    // 3. Separate stackable and non-stackable promos
+    final List<Map<String, dynamic>> nonStackablePromos = [];
+    final List<Map<String, dynamic>> stackablePromos = [];
+    for (var p in selectedPromos) {
+      if (p['is_stackable']?.toString() == '1') {
+        stackablePromos.add(p);
+      } else {
+        nonStackablePromos.add(p);
       }
-      
-      // If the promo specifies order types and ours doesn't match, skip
-      if (rawOrderTypes != null && rawOrderTypes.isNotEmpty && !matchOrderType) {
-        continue;
+    }
+
+    // Phase A: Non-stackable promos — they compete, only the best one applies
+    for (var selectedPromo in nonStackablePromos) {
+      if (!_promoMatchesOrderType(selectedPromo, orderType)) continue;
+      final result = _getDiscountForProduct(selectedPromo, productId, dynamicPrice);
+      if (result != null && result.finalPrice < bestFinalPrice) {
+        bestFinalPrice = result.finalPrice;
+        bestDiscountTotal = result.discountTotal;
+        bestDiscountType = result.discountType;
       }
+    }
 
-      // Check Items
-      final rawItems = selectedPromo['items']?.toString();
-      if (rawItems != null && rawItems.isNotEmpty) {
-        try {
-          dynamic decoded = jsonDecode(rawItems);
-          if (decoded is String) {
-            decoded = jsonDecode(decoded);
-          }
-          List itemsList = [];
-          if (decoded is List) {
-            itemsList = decoded;
-          } else if (decoded is Map) {
-            itemsList = decoded['detail'] ?? decoded['items'] ?? [];
-          }
-          for (var item in itemsList) {
-              if (item['item_id']?.toString() == productId.toString()) {
-                final promoDiscountType = item['discount_type']?.toString() ?? 'fixed';
-                final promoDiscountTotal = int.tryParse(item['discount']?.toString() ?? '0') ?? 0;
-                final promoDiscountValue = int.tryParse(item['discount_value']?.toString() ?? '0') ?? 0;
-
-                // For final_price, we use discount_value. For percent, discount is the %.
-                int discountAmt = (promoDiscountType == 'final_price') 
-                    ? promoDiscountValue 
-                    : promoDiscountTotal;
-
-                final isStackable = selectedPromo['is_stackable']?.toString() == '1';
-                // If stackable, apply on top of current bestFinalPrice. Else, apply to base dynamicPrice.
-                final baseForPromo = isStackable ? bestFinalPrice : dynamicPrice;
-                
-                int promoFinalPrice = _applyDiscount(baseForPromo, promoDiscountType, discountAmt);
-                
-                if (isStackable) {
-                  if (promoFinalPrice < bestFinalPrice) {
-                    bestFinalPrice = promoFinalPrice;
-                    bestDiscountTotal = dynamicPrice - bestFinalPrice;
-                    bestDiscountType = 'fixed';
-                  }
-                } else {
-                  if (promoFinalPrice < bestFinalPrice) {
-                    bestFinalPrice = promoFinalPrice;
-                    bestDiscountTotal = discountAmt;
-                    bestDiscountType = promoDiscountType;
-                  }
-                }
-              }
-          }
-        } catch (e) {
-          debugPrint("PromoService: Error parsing promo items in calculateBestPrice - $e");
-        }
+    // Phase B: Stackable promos — chain on top of the current best price
+    for (var selectedPromo in stackablePromos) {
+      if (!_promoMatchesOrderType(selectedPromo, orderType)) continue;
+      final result = _getDiscountForProduct(selectedPromo, productId, bestFinalPrice);
+      if (result != null && result.finalPrice < bestFinalPrice) {
+        bestFinalPrice = result.finalPrice;
+        bestDiscountTotal = dynamicPrice - bestFinalPrice;
+        bestDiscountType = 'fixed';
       }
     }
 
     return PromoDiscount(bestFinalPrice, bestDiscountTotal, bestDiscountType);
+  }
+
+  /// Check whether a promo's order_types constraint matches the given order type.
+  /// Returns true if the promo has no order_types filter, or if the input matches.
+  bool _promoMatchesOrderType(Map<String, dynamic> promo, String orderType) {
+    final rawOrderTypes = promo['order_types']?.toString();
+    if (rawOrderTypes == null || rawOrderTypes.isEmpty) return true;
+    try {
+      dynamic decoded = jsonDecode(rawOrderTypes);
+      if (decoded is String) decoded = jsonDecode(decoded);
+      if (decoded is List) {
+        final normalizedInput = orderType.replaceAll(' ', '').toLowerCase();
+        for (var type in decoded) {
+          if (type.toString().replaceAll(' ', '').toLowerCase() == normalizedInput) return true;
+        }
+      }
+    } catch (e) {
+      debugPrint("PromoService: Error parsing order_types - $e");
+    }
+    return false;
+  }
+
+  /// Extract the discount from a promo for a specific product, applied to [basePrice].
+  /// Returns null if the promo doesn't apply to this product.
+  _PromoItemDiscount? _getDiscountForProduct(
+      Map<String, dynamic> promo, int productId, int basePrice) {
+    final rawItems = promo['items']?.toString();
+    if (rawItems == null || rawItems.isEmpty) return null;
+    try {
+      dynamic decoded = jsonDecode(rawItems);
+      if (decoded is String) decoded = jsonDecode(decoded);
+      List itemsList = [];
+      if (decoded is List) {
+        itemsList = decoded;
+      } else if (decoded is Map) {
+        itemsList = decoded['detail'] ?? decoded['items'] ?? [];
+      }
+      for (var item in itemsList) {
+        if (item['item_id']?.toString() == productId.toString()) {
+          final promoDiscountType = item['discount_type']?.toString() ?? 'fixed';
+          final promoDiscountTotal = int.tryParse(item['discount']?.toString() ?? '0') ?? 0;
+          final promoDiscountValue = int.tryParse(item['discount_value']?.toString() ?? '0') ?? 0;
+
+          final discountAmt = (promoDiscountType == 'final_price')
+              ? promoDiscountValue
+              : promoDiscountTotal;
+          final finalPrice = _applyDiscount(basePrice, promoDiscountType, discountAmt);
+          return _PromoItemDiscount(
+            finalPrice: finalPrice,
+            discountTotal: discountAmt,
+            discountType: promoDiscountType,
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("PromoService: Error parsing promo items - $e");
+    }
+    return null;
   }
 
   int _applyDiscount(int basePrice, String type, int discountValue) {

@@ -208,7 +208,6 @@ class HomeController extends GetxController {
 
     return promoService.calculateBestPrice(
       productId: idProduk,
-      productBrandIdStr: null,
       dynamicPrice: dynamicPrice,
       orderType: orderType,
       productDiscountTotal: productDiscountTotal,
@@ -1297,10 +1296,11 @@ class HomeController extends GetxController {
   }
 
   void applyPromo(Map<String, dynamic> promo) {
-    bool isAlreadyApplied = appliedPromos.any((p) => p['id'] == promo['id']);
+    final String promoIdStr = promo['id']?.toString() ?? '';
+    bool isAlreadyApplied = appliedPromos.any((p) => p['id']?.toString() == promoIdStr);
 
     if (isAlreadyApplied) {
-      appliedPromos.removeWhere((p) => p['id'] == promo['id']);
+      appliedPromos.removeWhere((p) => p['id']?.toString() == promoIdStr);
     } else {
       if (promo['promo_type'] == 'bundling') {
         int discount = promoService.calculateBundlingDiscount(penjualanDetailModelList, promo);
@@ -1316,6 +1316,13 @@ class HomeController extends GetxController {
           return; // Tolak pemasangan promo
         }
       }
+
+      // If the new promo is non-stackable, remove all other non-stackable promos
+      // so only one non-stackable promo is active at a time
+      if (promo['is_stackable']?.toString() != '1') {
+        appliedPromos.removeWhere((p) => p['is_stackable']?.toString() != '1');
+      }
+
       appliedPromos.add(promo);
     }
     // Recalculate prices for all items currently in cart
@@ -4063,158 +4070,156 @@ class HomeController extends GetxController {
         .where((p) => p['promo_type']?.toString() == 'bundling')
         .toList();
         
+    final bool hasActiveNonStackable = appliedPromos.any((p) => p['is_stackable']?.toString() != '1');
+        
     for (var promo in activeBundlings) {
       final promoIdStr = promo['id']?.toString() ?? '';
       
       final bool isAlreadyApplied = appliedPromos.any((p) => p['id']?.toString() == promoIdStr);
       if (isAlreadyApplied || dismissedPromoIds.contains(promoIdStr)) continue;
       
+      final isPromoStackable = promo['is_stackable']?.toString() == '1';
+      // If the candidate promo is non-stackable and we already have a non-stackable active promo,
+      // skip auto-offering it to avoid infinite competition loops.
+      if (!isPromoStackable && hasActiveNonStackable) continue;
+      
       int discount = promoService.calculateBundlingDiscount(penjualanDetailModelList, promo);
       if (discount > 0) {
-        // Run after the current frame is finished rendering to ensure Navigator is stable
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          final context = Get.context;
-          if (context == null) return;
-          
-          // Double check if dialog is already open or promo became applied during frame wait
-          if (Get.isDialogOpen == true || appliedPromos.any((p) => p['id']?.toString() == promoIdStr)) return;
-          
-          final isDark = Theme.of(context).brightness == Brightness.dark;
-          
-          Get.dialog(
-            AlertDialog(
-              backgroundColor: AppTheme.cardColor(context),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20.r),
-              ),
-              contentPadding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Icon badge
-                  Container(
-                    padding: EdgeInsets.all(16.r),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF482CD9).withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      CupertinoIcons.gift_fill,
-                      color: const Color(0xFF482CD9),
-                      size: 32.sp,
-                    ),
-                  ),
-                  SizedBox(height: 16.h),
-                  // Title
-                  Text(
-                    'Promo Bundling Terpenuhi',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontFamily: AppTheme.fontBold,
-                      fontSize: 18.sp,
-                      color: AppTheme.textColor(context),
-                    ),
-                  ),
-                  SizedBox(height: 12.h),
-                  // Decorative Promo Name Box
-                  Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF482CD9).withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(12.r),
-                      border: Border.all(
-                        color: const Color(0xFF482CD9).withOpacity(0.3),
-                        width: 1,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        promo['name']?.toString().toUpperCase() ?? 'PROMO BUNDLING',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontFamily: AppTheme.fontBold,
-                          fontSize: 15.sp,
-                          color: const Color(0xFF482CD9),
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 14.h),
-                  // Description
-                  Text(
-                    'Transaksi ini telah memenuhi syarat promo di atas. Apakah Anda ingin menerapkannya sekarang?',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontFamily: AppTheme.fontRegular,
-                      fontSize: 13.sp,
-                      color: AppTheme.secondaryTextColor(context),
-                      height: 1.4,
-                    ),
-                  ),
-                  SizedBox(height: 24.h),
-                  // Action Buttons
-                  Row(
-                    children: [
-                      // Dismiss Button
-                      Expanded(
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            padding: EdgeInsets.symmetric(vertical: 12.h),
-                            side: BorderSide(color: isDark ? Colors.grey.shade700 : Colors.grey.shade300),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10.r),
-                            ),
-                          ),
-                          onPressed: () {
-                            dismissedPromoIds.add(promoIdStr);
-                            Get.back();
-                          },
-                          child: Text(
-                            'Abaikan',
-                            style: TextStyle(
-                              fontFamily: AppTheme.fontBold,
-                              fontSize: 13.sp,
-                              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                            ),
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 12.w),
-                      // Apply Button
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF482CD9),
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(vertical: 12.h),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10.r),
-                            ),
-                          ),
-                          onPressed: () {
-                            Get.back();
-                            applyPromo(promo);
-                          },
-                          child: Text(
-                            'Terapkan',
-                            style: TextStyle(
-                              fontFamily: AppTheme.fontBold,
-                              fontSize: 13.sp,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+        final isDark = Get.isDarkMode;
+        
+        Get.dialog(
+          AlertDialog(
+            backgroundColor: AppTheme.cardColor(Get.context ?? Get.overlayContext!),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20.r),
             ),
-            barrierDismissible: false,
-          );
-        });
+            contentPadding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Icon badge
+                Container(
+                  padding: EdgeInsets.all(16.r),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF482CD9).withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    CupertinoIcons.gift_fill,
+                    color: const Color(0xFF482CD9),
+                    size: 32.sp,
+                  ),
+                ),
+                SizedBox(height: 16.h),
+                // Title
+                Text(
+                  'Promo Bundling Terpenuhi',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontBold,
+                    fontSize: 18.sp,
+                    color: AppTheme.textColor(Get.context ?? Get.overlayContext!),
+                  ),
+                ),
+                SizedBox(height: 12.h),
+                // Decorative Promo Name Box
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF482CD9).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12.r),
+                    border: Border.all(
+                      color: const Color(0xFF482CD9).withValues(alpha: 0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      promo['name']?.toString().toUpperCase() ?? 'PROMO BUNDLING',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontBold,
+                        fontSize: 15.sp,
+                        color: const Color(0xFF482CD9),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 14.h),
+                // Description
+                Text(
+                  'Transaksi ini telah memenuhi syarat promo di atas. Apakah Anda ingin menerapkannya sekarang?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontRegular,
+                    fontSize: 13.sp,
+                    color: AppTheme.secondaryTextColor(Get.context ?? Get.overlayContext!),
+                    height: 1.4,
+                  ),
+                ),
+                SizedBox(height: 24.h),
+                // Action Buttons
+                Row(
+                  children: [
+                    // Dismiss Button
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(vertical: 12.h),
+                          side: BorderSide(color: isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10.r),
+                          ),
+                        ),
+                        onPressed: () {
+                          dismissedPromoIds.add(promoIdStr);
+                          Get.back();
+                        },
+                        child: Text(
+                          'Abaikan',
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontBold,
+                            fontSize: 13.sp,
+                            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 12.w),
+                    // Apply Button
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF482CD9),
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(vertical: 12.h),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10.r),
+                          ),
+                        ),
+                        onPressed: () {
+                          Get.back();
+                          applyPromo(promo);
+                        },
+                        child: Text(
+                          'Terapkan',
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontBold,
+                            fontSize: 13.sp,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          barrierDismissible: false,
+        );
         break; // Process one qualifying promo dialog at a time
       }
     }

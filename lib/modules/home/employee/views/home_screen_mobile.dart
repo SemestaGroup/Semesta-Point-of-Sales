@@ -1174,6 +1174,38 @@ class HomeScreenMobile extends StatelessWidget {
                                                   ? AppTheme.primaryColor
                                                   : AppTheme.textColor(context),
                                             )),
+                                        if (promo['is_stackable']?.toString() == '1')
+                                          Padding(
+                                            padding: EdgeInsets.only(top: 4.h),
+                                            child: Container(
+                                              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 2.h),
+                                              decoration: BoxDecoration(
+                                                color: Colors.green.withValues(alpha: 0.15),
+                                                borderRadius: BorderRadius.circular(4.r),
+                                              ),
+                                              child: Text('Stackable',
+                                                  style: TextStyle(
+                                                      fontSize: 10.sp,
+                                                      color: Colors.green,
+                                                      fontFamily: AppTheme.fontMedium)),
+                                            ),
+                                          )
+                                        else
+                                          Padding(
+                                            padding: EdgeInsets.only(top: 4.h),
+                                            child: Container(
+                                              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 2.h),
+                                              decoration: BoxDecoration(
+                                                color: Colors.orange.withValues(alpha: 0.15),
+                                                borderRadius: BorderRadius.circular(4.r),
+                                              ),
+                                              child: Text('Only 1',
+                                                  style: TextStyle(
+                                                      fontSize: 10.sp,
+                                                      color: Colors.orange.shade800,
+                                                      fontFamily: AppTheme.fontMedium)),
+                                            ),
+                                          ),
                                         if (promo['description'] != null && promo['description'].toString().isNotEmpty)
                                           Text(promo['description'].toString(),
                                               style: AppTheme.labelMedium.copyWith(
