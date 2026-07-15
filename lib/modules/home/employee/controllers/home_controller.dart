@@ -15,6 +15,7 @@ import 'package:semesta_pos/modules/member/controllers/member_controller.dart';
 import 'package:semesta_pos/core/models/category/kategori_model.dart';
 import 'package:uuid/uuid.dart';
 import 'package:semesta_pos/core/util/constans.dart';
+import 'package:semesta_pos/core/util/note_parser.dart';
 import 'package:semesta_pos/core/models/member/member_model.dart';
 import 'package:semesta_pos/core/models/penjualan/penjualan_model.dart';
 import 'package:semesta_pos/core/models/penjualan_detail/penjualan_detail_model.dart';
@@ -1681,34 +1682,25 @@ class HomeController extends GetxController {
 
   // Builds a merged clientnote string that embeds per-item notes into the
   // order's main note field (since the API doesn't have per-item note fields).
+  // Delegates to NoteParser to keep the output canonical and free of duplicate
+  // `---ITEM NOTES---` markers.
   String _buildMergedClientNote(
       List<PenjualanDetailModel> items, String mainNote) {
-    // 1. Clean the main note of any existing merged markers to prevent duplication
-    String cleanedNote = mainNote;
-    if (cleanedNote.contains('---ITEM NOTES---')) {
-      cleanedNote = cleanedNote.split('---ITEM NOTES---')[0].trim();
-    }
-
-    final itemLines = items.where((i) {
-      final diffType = i.orderType.isNotEmpty &&
-          i.orderType != "Dine In"; // Always show if not default
+    final itemNotes = <MapEntry<String, String>>[];
+    for (final i in items) {
+      final type = i.orderType.isNotEmpty ? i.orderType : 'Dine In';
       final hasNote = i.note.isNotEmpty;
-      return diffType || hasNote;
-    }).map((i) {
-      final type = i.orderType.isNotEmpty ? i.orderType : "Dine In";
-      final note = i.note.isNotEmpty ? ' - ${i.note}' : '';
-      return '${i.productName ?? 'Item'} | $type$note';
-    }).toList();
-
-    if (itemLines.isEmpty) return cleanedNote;
-
-    final buffer = StringBuffer();
-    if (cleanedNote.isNotEmpty) {
-      buffer.writeln(cleanedNote);
+      final isDiffType = i.orderType.isNotEmpty && i.orderType != 'Dine In';
+      if (!hasNote && !isDiffType) continue;
+      final name = i.productName ?? 'Item';
+      // Keep the existing wire format: "Name | Type - Note"
+      final value = hasNote ? '$type - ${i.note}' : type;
+      itemNotes.add(MapEntry(name, value));
     }
-    buffer.writeln('---ITEM NOTES---');
-    buffer.writeAll(itemLines, '\n');
-    return buffer.toString().trim();
+    return NoteParser.buildCanonicalNote(
+      orderNote: mainNote,
+      itemNotes: itemNotes,
+    );
   }
 
   Future<void> storeTransaction(Map<String, dynamic> map,
@@ -3779,9 +3771,7 @@ class HomeController extends GetxController {
       String rawNote = order['order_note']?.toString() ?? "";
 
       // Cleanup: Strip out ITEM NOTES if they exist in the DB (for old/migrated records)
-      if (rawNote.contains('---ITEM NOTES---')) {
-        rawNote = rawNote.split('---ITEM NOTES---')[0].trim();
-      }
+      rawNote = NoteParser.extractOrderNote(rawNote);
 
       orderNote.value = rawNote;
       customerLabel.value = (order['label'] as String?) ?? '';

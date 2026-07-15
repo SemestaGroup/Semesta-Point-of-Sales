@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:semesta_pos/core/util/note_parser.dart';
 import 'package:semesta_pos/modules/kitchen/controllers/kitchen_controller.dart';
 import 'package:semesta_pos/styles/app_theme.dart';
 
@@ -120,14 +121,13 @@ class KitchenView extends StatelessWidget {
         : (idPos.length >= 6 ? idPos.substring(idPos.length - 6).toUpperCase() : "---");
     final String orderType = group['order_type'] ?? "Regular";
     final List items = group['items'] as List? ?? [];
-    String mainOrderNote = group['order_note']?.toString() ?? "";
-    
-    // Clean up note: only show main part before ITEM NOTES
-    if (mainOrderNote.contains('---ITEM NOTES---')) {
-      mainOrderNote = mainOrderNote.split('---ITEM NOTES---').first.trim();
-    }
-    // Remove any trailing <br /> or newlines
-    mainOrderNote = mainOrderNote.replaceAll('<br />', '').replaceAll('\n', ' ').trim();
+    final String rawNote = group['order_note']?.toString() ?? "";
+
+    // Use central parser to split order-level vs item-level notes (robust to
+    // accidental duplicate markers and HTML line breaks). The order-level
+    // note is shown in the header; per-row item notes are read directly
+    // from transaction_details.note in the item builder below.
+    final String mainOrderNote = NoteParser.extractOrderNote(rawNote);
 
     return Container(
       decoration: BoxDecoration(
@@ -213,6 +213,19 @@ class KitchenView extends StatelessWidget {
               separatorBuilder: (context, index) => Divider(height: 16.h, color: Colors.grey.withValues(alpha: 0.1)),
               itemBuilder: (context, index) {
                 final item = items[index];
+                // Read the per-row note only. Do NOT fall back to a
+                // name-based map: that would mis-attach another row's note
+                // to a row that intentionally has none, especially when the
+                // same product name appears multiple times with different
+                // notes.
+                final String rawNote = (item['note'] != null &&
+                        item['note'].toString().isNotEmpty)
+                    ? item['note'].toString()
+                    : '';
+                // Strip any legacy "Type - Note" or "Name | Type - Note"
+                // concatenation so the user only sees the actual note.
+                final String itemNote = NoteParser.sanitizeLegacyItemNote(rawNote);
+                final bool hasItemNote = itemNote.isNotEmpty && !itemNote.startsWith('REMOTE_ITEM:');
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -241,12 +254,12 @@ class KitchenView extends StatelessWidget {
                         ),
                       ],
                     ),
-                    if (item['note'] != null && item['note'].toString().isNotEmpty) ...[
+                    if (hasItemNote) ...[
                       SizedBox(height: 4.h),
                       Padding(
                         padding: EdgeInsets.only(left: 32.w),
                         child: Text(
-                          "* ${item['note']}",
+                          "* $itemNote",
                           style: TextStyle(color: Colors.orange[800], fontSize: 11.sp, fontStyle: FontStyle.italic),
                         ),
                       ),

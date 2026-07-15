@@ -7,6 +7,7 @@ import 'package:semesta_pos/modules/report/controllers/report_controller.dart';
 import 'package:semesta_pos/styles/app_theme.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:semesta_pos/core/services/sync_service.dart';
+import 'package:semesta_pos/core/util/note_parser.dart';
 
 class ReportScreen extends StatelessWidget {
   const ReportScreen({super.key});
@@ -683,6 +684,10 @@ class ReportScreen extends StatelessWidget {
   }
 
   Widget _buildOrderItemRow(BuildContext context, Map<String, dynamic> item, {bool isRefund = false}) {
+    // Sanitize the per-row note so any legacy "Type - Note" or
+    // "Name | Type - Note" concatenation is reduced to the note part only.
+    final String rawItemNote = item['note']?.toString() ?? '';
+    final String cleanItemNote = NoteParser.sanitizeLegacyItemNote(rawItemNote);
     return Padding(
       padding: EdgeInsets.only(bottom: 12.h),
       child: Row(
@@ -724,7 +729,8 @@ class ReportScreen extends StatelessWidget {
                     )
                   ],
                 ),
-                if (item['note'] != null && item['note'].toString().isNotEmpty && !item['note'].toString().startsWith('REMOTE_ITEM:'))
+                if (cleanItemNote.isNotEmpty &&
+                    !cleanItemNote.startsWith('REMOTE_ITEM:'))
                   Padding(
                     padding: EdgeInsets.only(top: 6.h),
                     child: Container(
@@ -754,7 +760,7 @@ class ReportScreen extends StatelessWidget {
                           ),
                           SizedBox(width: 6.w),
                           Text(
-                            item['note'],
+                            cleanItemNote,
                             style: TextStyle(
                               color: AppTheme.textColor(context).withValues(alpha: 0.8),
                               fontSize: 11.sp,

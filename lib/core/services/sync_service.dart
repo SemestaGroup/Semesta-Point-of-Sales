@@ -450,41 +450,91 @@ class SyncService extends GetxService {
           }
 
           // SMART NOTE UNMERGING: Parse consolidated note to restore item-specific notes and types
-          Map<String, String> itemNotesMap = {};
-          Map<String, String> itemTypesMap = {};
+          // Supports legacy single-delimiter and double-delimiter (which happens when the
+          // server echoes back a previously-merged string). We keep a *queue* of parsed
+          // items (type and note) per product name so that multiple rows of the same product
+          // get their specific attributes consumed in order.
+          // Map structure: { productNameLower: [ { type: "Gofood", note: "test" } ] }
+          final Map<String, List<Map<String, String>>> itemAttrQueue = {};
           final String remoteNote =
               fullOrderData['clientnote']?.toString() ?? '';
           if (remoteNote.contains('---ITEM NOTES---')) {
-            final parts = remoteNote.split('---ITEM NOTES---');
-            if (parts.length > 1) {
-              final notesSection = parts[1].trim();
-              // Remove HTML-encoded newlines from server response
-              final cleanSection = notesSection
-                  .replaceAll('<br />', '\n')
-                  .replaceAll('<br>', '\n');
-              final lines = cleanSection.split('\n');
-              for (var rawLine in lines) {
-                final line = rawLine.trim();
-                if (line.isEmpty) continue;
-                if (line.contains(' | ')) {
-                  // Format: 'Name | Type - Note'  OR  'Name | Type'
-                  final pipeIdx = line.indexOf(' | ');
-                  final namePart = line.substring(0, pipeIdx).trim();
-                  final rest = line.substring(pipeIdx + 3).trim();
-                  if (rest.contains(' - ')) {
-                    // Has both type and note
-                    final dashIdx = rest.indexOf(' - ');
-                    itemTypesMap[namePart] = rest.substring(0, dashIdx).trim();
-                    itemNotesMap[namePart] = rest.substring(dashIdx + 3).trim();
-                  } else {
-                    // Type only, no note
-                    itemTypesMap[namePart] = rest;
+            // Split on every occurrence to handle accidental double delimiters, then
+            // only keep the LAST block (most recent / server-side authoritative).
+            final marker = '---ITEM NOTES---';
+            final lastIdx = remoteNote.lastIndexOf(marker);
+            String notesSection = '';
+            if (lastIdx >= 0) {
+              notesSection =
+                  remoteNote.substring(lastIdx + marker.length).trim();
+            } else {
+              notesSection = remoteNote.trim();
+            }
+            // Remove HTML-encoded newlines from server response
+            final cleanSection = notesSection
+                .replaceAll('<br />', '\n')
+                .replaceAll('<br>', '\n');
+            final parsedLines = cleanSection.split('\n');
+            final knownTypes = {
+              'dine in',
+              'take away',
+              'gofood',
+              'grabfood',
+              'shopeefood',
+              'delivery',
+              'other',
+              'regular'
+            };
+            for (var rawLine in parsedLines) {
+              final line = rawLine.trim();
+              if (line.isEmpty) continue;
+              if (line.contains(' | ')) {
+                // Format: 'Name | Type - Note'  OR  'Name | Type'
+                final pipeIdx = line.indexOf(' | ');
+                final namePart = line.substring(0, pipeIdx).trim();
+                final rest = line.substring(pipeIdx + 3).trim();
+                final key = namePart.toLowerCase();
+                if (rest.contains(' - ')) {
+                  // Has both type and note. NOTE: only the first ' - ' is
+                  // the separator; anything after that is the actual note
+                  // text (e.g. 'Mango Sundae' note 'less sugar - extra').
+                  final dashIdx = rest.indexOf(' - ');
+                  final type = rest.substring(0, dashIdx).trim();
+                  final note = rest.substring(dashIdx + 3).trim();
+                  (itemAttrQueue[key] ??= <Map<String, String>>[]).add({
+                    'type': type,
+                    'note': note,
+                  });
+                } else if (rest.isNotEmpty) {
+                  // Type only, no note
+                  (itemAttrQueue[key] ??= <Map<String, String>>[]).add({
+                    'type': rest,
+                    'note': '',
+                  });
+                }
+              } else if (line.contains(' - ')) {
+                // Format without a pipe. We can't reliably know whether the
+                // left side is a product name or a type. Default to treating
+                // everything-after-the-first-dash as the note, and use the
+                // first token as the name key. This matches legacy notes
+                // written as 'ProductName - Note'.
+                // Exception: if the right side is a known type, treat it as type.
+                final dashIdx = line.indexOf(' - ');
+                final namePart = line.substring(0, dashIdx).trim();
+                final noteOrType = line.substring(dashIdx + 3).trim();
+                final key = namePart.toLowerCase();
+                if (knownTypes.contains(noteOrType.toLowerCase())) {
+                  (itemAttrQueue[key] ??= <Map<String, String>>[]).add({
+                    'type': noteOrType,
+                    'note': '',
+                  });
+                } else {
+                  if (noteOrType.isNotEmpty) {
+                    (itemAttrQueue[key] ??= <Map<String, String>>[]).add({
+                      'type': '',
+                      'note': noteOrType,
+                    });
                   }
-                } else if (line.contains(' - ')) {
-                  // Format: 'Name - Note' (no custom order type)
-                  final dashIdx = line.indexOf(' - ');
-                  final namePart = line.substring(0, dashIdx).trim();
-                  itemNotesMap[namePart] = line.substring(dashIdx + 3).trim();
                 }
               }
             }
@@ -516,10 +566,18 @@ class SyncService extends GetxService {
               prodDescription = prodHit.first['description']?.toString();
             }
 
-            final String itemNote = itemNotesMap[desc] ?? '';
-            final String itemOrderType = itemTypesMap[desc] ??
-                headerMap['order_type']?.toString() ??
-                'Dine In';
+            // Pop the next queued note/type for this product name. Using
+            // removeAt(0) ensures each row consumes a unique note — we never
+            // re-attach another row's note.
+            final key = desc.toLowerCase();
+            final attrList = itemAttrQueue[key];
+            final Map<String, String>? attr = (attrList != null && attrList.isNotEmpty)
+                ? attrList.removeAt(0)
+                : null;
+            final String itemNote = attr?['note'] ?? '';
+            final String itemOrderType = attr?['type']?.isNotEmpty == true
+                ? attr!['type']!
+                : (headerMap['order_type']?.toString() ?? 'Dine In');
             final remoteItemId = item['id']; // Perfex item row ID
 
             await txn.insert('transaction_details', {

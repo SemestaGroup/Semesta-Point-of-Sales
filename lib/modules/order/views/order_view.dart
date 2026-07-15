@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:semesta_pos/core/util/note_parser.dart';
 import 'package:semesta_pos/modules/order/controllers/order_controller.dart';
 import 'package:semesta_pos/modules/report/controllers/report_controller.dart';
 import 'package:semesta_pos/core/services/user_service.dart';
@@ -363,7 +364,7 @@ class _OrderScreenState extends State<OrderScreen> {
         : (order['nama'] as String?)?.isNotEmpty == true
             ? order['nama'] as String
             : 'Walk-in Customer';
-    final note = (order['order_note'] as String?) ?? '';
+    final String note = NoteParser.extractOrderNote((order['order_note'] as String?) ?? '');
     final orderType = (order['order_type'] as String?)?.isNotEmpty == true
         ? order['order_type'] as String
         : 'Dine In';
@@ -579,7 +580,7 @@ class _OrderScreenState extends State<OrderScreen> {
                   if (note.isNotEmpty) ...[
                     SizedBox(height: 8.h),
                     Text(
-                      note.split('---ITEM NOTES---')[0].trim(),
+                      note,
                       style: TextStyle(
                         fontSize: AppTheme.fontSizeLabelMedium,
                         color: isDark ? Colors.grey.shade100 : Colors.grey.shade900,
