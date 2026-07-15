@@ -589,30 +589,60 @@ class SyncService extends GetxService {
         final localCheck = await _dbService.query('shift_sessions',
             where: 'id_remote = ?', whereArgs: [remoteId]);
 
-        if (localCheck.isEmpty) {
-          // Parse summary
-          double expected = 0;
-          double actual = 0;
-          try {
-            final transactions = logJson['transactions'];
-            if (transactions != null &&
-                transactions is List &&
-                transactions.isNotEmpty) {
-              final summary = transactions[0]['summary'];
-              if (summary != null) {
-                expected = double.tryParse(
-                        summary['expected_cash']?.toString() ??
-                            summary['total_system_cash']?.toString() ??
-                            '0') ??
-                    0;
-                actual = double.tryParse(summary['actual_cash']?.toString() ??
-                        summary['total_actual_cash']?.toString() ??
-                        '0') ??
-                    0;
-              }
-            }
-          } catch (_) {}
+        double expected = 0;
+        double actual = 0;
+        double startingBal = 0;
+        double closingBal = 0;
+        try {
+          final transactions = logJson['transactions'];
+          if (transactions != null &&
+              transactions is List &&
+              transactions.isNotEmpty) {
+            final summary = transactions[0]['summary'];
+            if (summary != null) {
+              expected = double.tryParse(
+                      summary['expected_cash']?.toString() ??
+                          summary['total_system_cash']?.toString() ??
+                          '0') ??
+                  0;
+              actual = double.tryParse(summary['actual_cash']?.toString() ??
+                      summary['total_actual_cash']?.toString() ??
+                      '0') ??
+                  0;
 
+              startingBal = double.tryParse(
+                      summary['starting_balance']?.toString() ??
+                          summary['opening_cash']?.toString() ??
+                          summary['opening_balance']?.toString() ??
+                          '0') ??
+                  0;
+              closingBal = double.tryParse(
+                      summary['closing_balance']?.toString() ??
+                          summary['closing_cash']?.toString() ??
+                          '0') ??
+                  0;
+            }
+          }
+        } catch (_) {}
+
+        // Fallback to top-level if still zero
+        if (startingBal == 0) {
+          startingBal = double.tryParse(
+                  logJson['starting_balance']?.toString() ??
+                      logJson['opening_cash']?.toString() ??
+                      logJson['opening_balance']?.toString() ??
+                      '0') ??
+              0;
+        }
+        if (closingBal == 0) {
+          closingBal = double.tryParse(
+                  logJson['closing_balance']?.toString() ??
+                      logJson['closing_cash']?.toString() ??
+                      '0') ??
+              0;
+        }
+
+        if (localCheck.isEmpty) {
           await _dbService.insert('shift_sessions', {
             'shift_name': logJson['shift']?.toString() ?? 'Shift',
             'user_id': logJson['name']?.toString() ?? '',
@@ -620,12 +650,70 @@ class SyncService extends GetxService {
                 logJson['date']?.toString() ??
                 DateTime.now().toString(),
             'end_time': logJson['logout_at']?.toString(),
+            'starting_balance': startingBal,
+            'closing_balance': closingBal,
             'total_cash_expected': expected,
             'total_cash_actual': actual,
             'reconciliation_data': jsonEncode(logJson['transactions'] ?? []),
             'is_synced': 1,
             'id_remote': remoteId,
           });
+        } else {
+          // Back-fill starting_balance and total_cash_actual if they are currently 0 in the local DB
+          // and we have non-zero data (EOD shifts_summary or direct shift properties)
+          final localShift = localCheck.first;
+          final localStarting = (localShift['starting_balance'] as num?)?.toInt() ?? 0;
+          if (localStarting == 0 && startingBal > 0) {
+            await _dbService.update(
+              'shift_sessions',
+              {
+                'starting_balance': startingBal,
+                'closing_balance': closingBal,
+              },
+              'id_shift = ?',
+              [localShift['id_shift']],
+            );
+          }
+        }
+
+        // SMART NOTE BACK-FILL FROM EOD SHIFTS SUMMARY:
+        // EOD contains the shifts_summary array with opening_balance for remote shifts.
+        try {
+          final transactions = logJson['transactions'];
+          if (transactions != null &&
+              transactions is List &&
+              transactions.isNotEmpty) {
+            final shiftsSummary = transactions[0]['shifts_summary'];
+            if (shiftsSummary is List) {
+              for (final s in shiftsSummary) {
+                final linkedRemoteId = int.tryParse(s['id_shift']?.toString() ?? '');
+                final openingBalance = (s['opening_balance'] as num?)?.toInt() ?? 0;
+                final actualCash = (s['actual_cash'] as num?)?.toInt() ?? 0;
+                if (linkedRemoteId != null && linkedRemoteId > 0) {
+                  // Find if we have this remote shift locally with starting_balance = 0
+                  final matchCheck = await _dbService.query(
+                    'shift_sessions',
+                    where: 'id_remote = ? AND starting_balance = 0',
+                    whereArgs: [linkedRemoteId],
+                  );
+                  if (matchCheck.isNotEmpty) {
+                    await _dbService.update(
+                      'shift_sessions',
+                      {
+                        'starting_balance': openingBalance,
+                        'total_cash_actual': actualCash,
+                      },
+                      'id_remote = ?',
+                      [linkedRemoteId],
+                    );
+                    debugPrint('SyncService: Back-filled starting_balance=$openingBalance for remote shift $linkedRemoteId');
+                  }
+                }
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('SyncService: Error in shifts_summary backfill: $e');
         }
       }
       debugPrint("SyncService: Pulled ${remoteLogs.length} Remote Shift Logs.");
@@ -748,6 +836,37 @@ class SyncService extends GetxService {
 
     isProcessingQueue.value = true;
     try {
+      // Clean up any failed or pending pos_shift_logs commands in sync_queue containing 'starting_balance'
+      // to unblock the queue from pre-patch failed payload crashes.
+      try {
+        final corruptRows = await _dbService.query('sync_queue',
+            where: "endpoint LIKE ? AND status IN ('pending', 'failed')",
+            whereArgs: ['%pos_shift_logs%']);
+        bool cleanedAny = false;
+        for (var row in corruptRows) {
+          final body = row['body']?.toString() ?? '';
+          if (body.contains('starting_balance')) {
+            await _dbService.delete('sync_queue', 'id = ?', [row['id']]);
+            debugPrint("SyncService: Cleaned up corrupted shift log sync queue item: ${row['id']}");
+            // Reset the sync status for corresponding local shift to allow it to be re-pushed fresh
+            final localId = row['local_id']?.toString();
+            if (localId != null) {
+              final localIdInt = int.tryParse(localId);
+              if (localIdInt != null) {
+                await _dbService.update('shift_sessions', {'is_synced': 0}, 'id_shift = ?', [localIdInt]);
+                cleanedAny = true;
+              }
+            }
+          }
+        }
+        if (cleanedAny) {
+          // Re-enqueue unsynced shift logs using the clean payload format immediately
+          await pushShiftLogs();
+        }
+      } catch (e) {
+        debugPrint("SyncService: Error cleaning corrupted shift logs: $e");
+      }
+
       bool hasMore = true;
       final blockedLocalIds =
           <String>{}; // Persistent blocks during this entire process session
@@ -2268,10 +2387,29 @@ class SyncService extends GetxService {
         debugPrint("SyncService: Error parsing date for shift log: $e");
       }
 
+      String formatTimeForServer(String? timeStr) {
+        if (timeStr == null || timeStr.isEmpty || timeStr == 'null') return '';
+        try {
+          final clean = timeStr.replaceAll('T', ' ');
+          if (clean.length >= 19) {
+            return clean.substring(0, 19);
+          }
+          final dt = DateTime.parse(timeStr);
+          return "${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}";
+        } catch (_) {
+          return timeStr;
+        }
+      }
+
+      final loginAt = formatTimeForServer(row['start_time']?.toString());
+      final logoutAt = formatTimeForServer(row['end_time']?.toString());
+
       final payload = {
         'date': dateStr,
         'name': row['user_id'] ?? 'Kasir',
         'shift': row['shift_name'] ?? 'Shift 1',
+        'login_at': loginAt.isNotEmpty ? loginAt : null,
+        'logout_at': logoutAt.isNotEmpty ? logoutAt : null,
         'transactions': transactions,
       };
 

@@ -298,10 +298,16 @@ class ShiftController extends GetxController {
         }
       }
 
+      final String StringKeyFallback = (ppMethod.contains('cash') ||
+              ppMethod.contains('tunai') ||
+              localMethod.contains('cash') ||
+              localMethod.contains('tunai') ||
+              Constants.cashPaymentModeIds.contains(ppMethod)) ? '1' : 'other';
+
       final String key = matchedId ??
           (ppMethod.isNotEmpty
               ? ppMethod
-              : (localMethod.isNotEmpty ? localMethod : '1'));
+              : (localMethod.isNotEmpty ? localMethod : StringKeyFallback));
       final String name = matchedName ??
           (localMethod.isNotEmpty
               ? r['local_method']
@@ -493,6 +499,10 @@ class ShiftController extends GetxController {
           'actual_cash': actualCash,
           'difference': actualCash - expectedCash,
           'status': 1,
+          'starting_balance': activeShift.value!.startingBalance,
+          'opening_cash': activeShift.value!.startingBalance,
+          'opening_balance': activeShift.value!.startingBalance,
+          'closing_balance': actualCash,
         };
         finalData = jsonEncode([fullData]);
       } catch (e) {
@@ -514,6 +524,10 @@ class ShiftController extends GetxController {
           summary['actual_cash'] = actualCash;
           summary['difference'] = actualCash - expectedCash;
           summary['status'] = 1;
+          summary['starting_balance'] = activeShift.value!.startingBalance;
+          summary['opening_cash'] = activeShift.value!.startingBalance;
+          summary['opening_balance'] = activeShift.value!.startingBalance;
+          summary['closing_balance'] = actualCash;
           firstEntry['summary'] = summary;
           firstEntry['shift_name'] =
               firstEntry['shift_name'] ?? activeShift.value!.shiftName;

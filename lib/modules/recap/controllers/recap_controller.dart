@@ -190,8 +190,21 @@ class RecapController extends GetxController {
           (m) => m.name.toLowerCase() == ppMethod,
         );
 
-        // Fallback to cash if not matched
-        final String groupKey = matched?.id ?? '1';
+        // Find the dynamic cash mode to correctly check fallback
+        final cashMode = paymentModes.firstWhereOrNull(
+          (m) =>
+              m.name.toLowerCase().contains('cash') ||
+              m.name.toLowerCase().contains('tunai') ||
+              Constants.cashPaymentModeIds.contains(m.id),
+        );
+        final String cashKey = cashMode?.id ?? '1';
+
+        // Fallback to cash only if the method matches cash keywords, otherwise fall back to 'other'
+        final bool isMethodCash = ppMethod.contains('cash') ||
+            ppMethod.contains('tunai') ||
+            Constants.cashPaymentModeIds.contains(ppMethod);
+        
+        final String groupKey = matched?.id ?? (isMethodCash ? cashKey : 'other');
         recordedTotals[groupKey] = (recordedTotals[groupKey] ?? 0) + amount;
       }
 
@@ -307,7 +320,8 @@ class RecapController extends GetxController {
 
   Future<void> refreshHistory() async {
     final data = await _dbService.query('shift_sessions',
-        orderBy: 'id_shift DESC', limit: 30);
+        orderBy: "CASE WHEN end_time IS NOT NULL AND end_time != '' AND end_time != 'null' THEN end_time ELSE start_time END DESC",
+        limit: 30);
     shiftHistory.value = data;
   }
 

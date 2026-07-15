@@ -501,7 +501,7 @@ class HomeController extends GetxController {
         }
 
         if (currentParentId.value == null && !isPromoActive) {
-          where += ' AND (parent IS NULL OR parent = "" OR parent = "null")';
+          where += " AND (parent IS NULL OR parent = '' OR parent = 'null')";
         } else if (currentParentId.value != null) {
           where += ' AND parent = ?';
           whereArgs.add(currentParentId.value);

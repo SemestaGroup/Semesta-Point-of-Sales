@@ -961,24 +961,33 @@ class RecapViewTablet extends StatelessWidget {
               final reconList = jsonDecode(reconRaw) as List<dynamic>;
               if (reconList.isNotEmpty) {
                 final reconData = reconList.first as Map<String, dynamic>;
-                final summary = reconData['summary'] as Map<String, dynamic>?;
-                if (summary != null) {
-                  if (summary['expected_cash'] != null) {
-                    systemCash = (summary['expected_cash'] as num).toInt();
-                  } else if (summary['total_system_cash'] != null) {
-                    systemCash = (summary['total_system_cash'] as num).toInt();
+                final List<dynamic>? paymentModes = reconData['payment_modes'] as List<dynamic>?;
+                if (paymentModes != null && paymentModes.isNotEmpty) {
+                  int totalRecorded = 0;
+                  int totalAudited = 0;
+                  for (var mode in paymentModes) {
+                    totalRecorded += (mode['recorded'] as num?)?.toInt() ?? 0;
+                    totalAudited += (mode['audited'] as num?)?.toInt() ?? 0;
                   }
-                  if (summary['actual_cash'] != null) {
-                    final summaryActualCash =
-                        (summary['actual_cash'] as num).toInt();
-                    final fallbackActualCash =
-                        (shift['total_cash_actual'] as num?)?.toInt() ?? 0;
-                    actualCash =
-                        summaryActualCash == 0 && fallbackActualCash > 0
-                            ? fallbackActualCash
-                            : summaryActualCash;
-                  } else if (summary['total_actual_cash'] != null) {
-                    actualCash = (summary['total_actual_cash'] as num).toInt();
+                  systemCash = totalRecorded;
+                  actualCash = totalAudited;
+                } else {
+                  final summary = reconData['summary'] as Map<String, dynamic>?;
+                  if (summary != null) {
+                    if (summary['expected_cash'] != null) {
+                      systemCash = (summary['expected_cash'] as num).toInt();
+                    } else if (summary['total_system_cash'] != null) {
+                      systemCash = (summary['total_system_cash'] as num).toInt();
+                    }
+                    if (summary['actual_cash'] != null) {
+                      final summaryActualCash = (summary['actual_cash'] as num).toInt();
+                      final fallbackActualCash = (shift['total_cash_actual'] as num?)?.toInt() ?? 0;
+                      actualCash = summaryActualCash == 0 && fallbackActualCash > 0
+                          ? fallbackActualCash
+                          : summaryActualCash;
+                    } else if (summary['total_actual_cash'] != null) {
+                      actualCash = (summary['total_actual_cash'] as num).toInt();
+                    }
                   }
                 }
               }
