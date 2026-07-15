@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:semesta_pos/core/services/local/database_service.dart';
 import 'package:semesta_pos/core/services/sync_service.dart';
+import 'package:semesta_pos/core/util/note_parser.dart';
 import 'package:semesta_pos/core/util/constans.dart';
 
 class KitchenController extends GetxController {
@@ -218,6 +219,38 @@ class KitchenController extends GetxController {
           dateStr = dateStr.split(' ')[0];
       }
       
+      // Reconstruct consolidated clientnote (order note + item notes)
+      final detailRows = await _dbService.query(
+        'transaction_details',
+        where: 'id_penjualan = ?',
+        whereArgs: [tx['id_penjualan']],
+      );
+
+      final List<MapEntry<String, String>> itemNotes = [];
+      for (var row in detailRows) {
+        final String prodName = row['product_name']?.toString() ?? '';
+        final String note = row['note']?.toString() ?? '';
+        final String type = row['order_type']?.toString() ?? '';
+        
+        String combinedValue = '';
+        if (type.isNotEmpty && note.isNotEmpty) {
+          combinedValue = '$type - $note';
+        } else if (type.isNotEmpty) {
+          combinedValue = type;
+        } else if (note.isNotEmpty) {
+          combinedValue = note;
+        }
+
+        if (combinedValue.isNotEmpty && prodName.isNotEmpty) {
+          itemNotes.add(MapEntry(prodName, combinedValue));
+        }
+      }
+
+      final String consolidatedNote = NoteParser.buildCanonicalNote(
+        orderNote: tx['order_note'] ?? '',
+        itemNotes: itemNotes,
+      );
+
       final putBody = <String, dynamic>{
         'clientid': clientId.toString(),
         'date': dateStr,
@@ -231,9 +264,9 @@ class KitchenController extends GetxController {
         'discount_total': discountAmount.toStringAsFixed(2),
         'discount_percent': '0.00',
         'discount_type': 'fixed',
-        'clientnote': tx['order_note'] ?? '',
+        'clientnote': consolidatedNote,
         'terms': tx['order_type'] ?? 'Dine In',
-        'sent': sentStatus,
+        'sent': int.tryParse(sentStatus) ?? 0,
       };
 
       if (Get.isRegistered<SyncService>()) {

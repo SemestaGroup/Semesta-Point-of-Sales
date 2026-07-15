@@ -349,12 +349,30 @@ class SyncService extends GetxService {
             continue;
           }
 
-          // PERFORMANCE OPTIMIZATION: Skip fetching details if order already synced and status hasn't changed
+          // PERFORMANCE OPTIMIZATION: Skip fetching details if order already synced,
+          // transaction status hasn't changed, AND kitchen status (sent) is in sync.
           if (localOrder['is_synced'] == 1 &&
               localOrder['id_penjualan_remote'] != null) {
             final int localStatus = localOrder['status'] ?? 1;
             final int remoteStatus = _toInt(orderJson['status']);
-            if (localStatus == remoteStatus) {
+            final int remoteSent = _toInt(orderJson['sent']);
+
+            // Get local kitchen status from transaction details.
+            // If all items are completed (1), we treat the local order as sent (1).
+            final List<Map<String, dynamic>> localKitchenDetails = await _dbService.rawQuery(
+                "SELECT COUNT(*) as completed_count, COUNT(id_penjualan_detail) as total_count "
+                "FROM transaction_details WHERE id_penjualan = ? AND kitchen_status = 1",
+                [localIdPenjualan]);
+            final int localSent = (localKitchenDetails.isNotEmpty &&
+                    localKitchenDetails.first['completed_count'] != null &&
+                    localKitchenDetails.first['total_count'] != null &&
+                    localKitchenDetails.first['completed_count'] ==
+                        localKitchenDetails.first['total_count'] &&
+                    localKitchenDetails.first['total_count'] > 0)
+                ? 1
+                : 0;
+
+            if (localStatus == remoteStatus && localSent == remoteSent) {
               continue; // Skip fetching the full details API call!
             }
           }
@@ -475,16 +493,29 @@ class SyncService extends GetxService {
                 .replaceAll('<br />', '\n')
                 .replaceAll('<br>', '\n');
             final parsedLines = cleanSection.split('\n');
-            final knownTypes = {
-              'dine in',
-              'take away',
-              'gofood',
-              'grabfood',
-              'shopeefood',
+            final Set<String> knownTypes = {
               'delivery',
               'other',
-              'regular'
+              'regular',
+              'tiktokshop'
             };
+            try {
+              for (var entry in Constants.orderTypeLabels.entries) {
+                knownTypes.add(entry.key.toLowerCase());
+                knownTypes.add(entry.value.toLowerCase());
+                knownTypes.add(entry.value.replaceAll(' ', '').toLowerCase());
+              }
+            } catch (_) {
+              knownTypes.addAll([
+                'dine in',
+                'take away',
+                'gofood',
+                'grabfood',
+                'shopeefood',
+                'tiktok',
+                'tiktok shop'
+              ]);
+            }
             for (var rawLine in parsedLines) {
               final line = rawLine.trim();
               if (line.isEmpty) continue;
@@ -539,67 +570,100 @@ class SyncService extends GetxService {
               }
             }
           }
-
           // Clear existing local items and replace with server's source-of-truth
-          await txn.delete('transaction_details',
-              where: 'id_penjualan = ?', whereArgs: [localIdPenjualan]);
-
+          // ONLY if the server actually returned items! If the server returned an empty
+          // items list (which happens for paid/closed invoices in Perfex), we MUST preserve
+          // the local items to avoid losing item notes, quantities, and product associations.
           final items = fullOrderData['items'] as List? ?? [];
-          for (var item in items) {
-            final String desc = item['description']?.toString() ?? '';
-            final qty = double.tryParse(item['qty']?.toString() ?? '1') ?? 1.0;
-            final rate =
-                double.tryParse(item['rate']?.toString() ?? '0') ?? 0.0;
+          if (items.isNotEmpty) {
+            await txn.delete('transaction_details',
+                where: 'id_penjualan = ?', whereArgs: [localIdPenjualan]);
 
-            // 3. Match reverse ID by string matching the product name
-            final prodHit = await txn.query('products',
-                columns: ['id_produk', 'order_types', 'description'],
-                where: 'nama_produk = ?',
-                whereArgs: [desc],
-                limit: 1);
-            int produkId = 0; // Default 0 for custom/deleted items
-            String orderTypesJson = '';
-            String? prodDescription;
-            if (prodHit.isNotEmpty) {
-              produkId = (prodHit.first['id_produk'] as num?)?.toInt() ?? 0;
-              orderTypesJson = prodHit.first['order_types']?.toString() ?? '';
-              prodDescription = prodHit.first['description']?.toString();
+            for (var item in items) {
+              final String desc = item['description']?.toString() ?? '';
+              final double qty =
+                  double.tryParse(item['qty']?.toString() ?? '1') ?? 1;
+              final double rate =
+                  double.tryParse(item['rate']?.toString() ?? '0') ?? 0;
+
+              // Find locally matched product
+              final List<Map<String, dynamic>> prodHit = await txn.query(
+                  'products',
+                  where: 'description = ? OR nama_produk = ?',
+                  whereArgs: [desc, desc],
+                  limit: 1);
+              int produkId = 0; // Default 0 for custom/deleted items
+              String orderTypesJson = '';
+              String? prodDescription;
+              if (prodHit.isNotEmpty) {
+                produkId =
+                    (prodHit.first['id_produk'] as num?)?.toInt() ?? 0;
+                orderTypesJson =
+                    prodHit.first['order_types']?.toString() ?? '';
+                prodDescription = prodHit.first['description']?.toString();
+              }
+
+              // Pop the next queued note/type for this product name. Using
+              // removeAt(0) ensures each row consumes a unique note — we never
+              // re-attach another row's note.
+              final key = desc.toLowerCase();
+              final attrList = itemAttrQueue[key];
+              final Map<String, String>? attr =
+                  (attrList != null && attrList.isNotEmpty)
+                      ? attrList.removeAt(0)
+                      : null;
+              final String itemNote = attr?['note'] ?? '';
+              final String itemOrderType = attr?['type']?.isNotEmpty == true
+                  ? attr!['type']!
+                  : (headerMap['order_type']?.toString() ?? 'Dine In');
+              final remoteItemId = item['id']; // Perfex item row ID
+
+              // STICKY KITCHEN STATUS: If this item already exists locally and is marked
+              // as completed (1) in the kitchen, keep it completed. Do not let
+              // a server sync override it back to active (0) due to API status sync lags.
+              final List<Map<String, dynamic>> existingDetail = await txn.query(
+                'transaction_details',
+                where:
+                    'id_penjualan = ? AND id_produk = ? AND product_name = ?',
+                whereArgs: [localIdPenjualan, produkId, desc],
+              );
+              int localKitchenStatus = 0;
+              int? localRemoteItemId;
+              if (existingDetail.isNotEmpty) {
+                localKitchenStatus =
+                    (existingDetail.first['kitchen_status'] as num?)?.toInt() ??
+                        0;
+                localRemoteItemId =
+                    (existingDetail.first['remote_item_id'] as num?)?.toInt();
+              }
+
+              final int targetKitchenStatus =
+                  (_toInt(fullOrderData['sent']) == 1 ||
+                          localKitchenStatus == 1)
+                      ? 1
+                      : 0;
+
+              await txn.insert('transaction_details', {
+                'id_penjualan': localIdPenjualan,
+                'id_produk': produkId,
+                'jumlah': qty.toInt(),
+                'harga_jual': rate.toInt(),
+                'subtotal': (qty * rate).toInt(),
+                'note': itemNote.isNotEmpty
+                    ? itemNote
+                    : (produkId == 0 ? 'REMOTE_ITEM:$desc' : ''),
+                'order_type': itemOrderType,
+                'orderTypesJson': orderTypesJson,
+                'remote_item_id': _toInt(remoteItemId ?? localRemoteItemId),
+                'product_name': desc,
+                'description': prodDescription,
+                'kitchen_status': targetKitchenStatus,
+                'is_refund': item['is_refund']?.toString() == '1' ||
+                        item['is_refund'] == true
+                    ? 1
+                    : 0
+              });
             }
-
-            // Pop the next queued note/type for this product name. Using
-            // removeAt(0) ensures each row consumes a unique note — we never
-            // re-attach another row's note.
-            final key = desc.toLowerCase();
-            final attrList = itemAttrQueue[key];
-            final Map<String, String>? attr = (attrList != null && attrList.isNotEmpty)
-                ? attrList.removeAt(0)
-                : null;
-            final String itemNote = attr?['note'] ?? '';
-            final String itemOrderType = attr?['type']?.isNotEmpty == true
-                ? attr!['type']!
-                : (headerMap['order_type']?.toString() ?? 'Dine In');
-            final remoteItemId = item['id']; // Perfex item row ID
-
-            await txn.insert('transaction_details', {
-              'id_penjualan': localIdPenjualan,
-              'id_produk': produkId,
-              'jumlah': qty.toInt(),
-              'harga_jual': rate.toInt(),
-              'subtotal': (qty * rate).toInt(),
-              'note': itemNote.isNotEmpty
-                  ? itemNote
-                  : (produkId == 0 ? 'REMOTE_ITEM:$desc' : ''),
-              'order_type': itemOrderType,
-              'orderTypesJson': orderTypesJson,
-              'remote_item_id': _toInt(remoteItemId),
-              'product_name': desc,
-              'description': prodDescription,
-              'kitchen_status': _toInt(fullOrderData['sent']) == 1 ? 1 : 0,
-              'is_refund': item['is_refund']?.toString() == '1' ||
-                      item['is_refund'] == true
-                  ? 1
-                  : 0
-            });
           }
         });
       }

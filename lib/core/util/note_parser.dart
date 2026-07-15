@@ -1,4 +1,5 @@
 /// Centralised note parser/normaliser for POS.
+import 'package:semesta_pos/core/util/constans.dart';
 ///
 /// Notes in this codebase have two layers:
 /// * Order-level note: a free-form string attached to the whole transaction.
@@ -96,16 +97,33 @@ class NoteParser {
   static String _stripItemNoteLines(String input) {
     final lines = input.split('\n');
     final dumpIndices = <int>[];
-    final knownTypes = {
-      'dine in',
-      'take away',
-      'gofood',
-      'grabfood',
-      'shopeefood',
+    
+    // Dynamically build known types from Constants mapping
+    final Set<String> knownTypes = {
       'delivery',
       'other',
-      'regular'
+      'regular',
+      'tiktokshop'
     };
+    try {
+      for (var entry in Constants.orderTypeLabels.entries) {
+        knownTypes.add(entry.key.toLowerCase());
+        knownTypes.add(entry.value.toLowerCase());
+        knownTypes.add(entry.value.replaceAll(' ', '').toLowerCase());
+      }
+    } catch (_) {
+      // Fallback in case of class loading order issues
+      knownTypes.addAll([
+        'dine in',
+        'take away',
+        'gofood',
+        'grabfood',
+        'shopeefood',
+        'tiktok',
+        'tiktok shop'
+      ]);
+    }
+
     for (var i = 0; i < lines.length; i++) {
       final line = lines[i].trim();
       if (line.isEmpty) continue;
