@@ -184,18 +184,22 @@ class HomeAdminController extends GetxController {
 
   Future<void> _calculateTopProduct(String datePattern, {required bool isMonth}) async {
     final query = isMonth 
-        ? '''SELECT p.nama_produk as productName, td.note, SUM(td.jumlah) as qty
+        ? '''SELECT 
+               CASE WHEN td.id_produk = 0 AND td.note LIKE 'REMOTE_ITEM:%' THEN td.note ELSE p.nama_produk END as productName,
+               SUM(td.jumlah) as qty
              FROM transaction_details td
              JOIN transactions t ON td.id_penjualan = t.id_penjualan
              LEFT JOIN products p ON td.id_produk = p.id_produk
              WHERE t.tgl_penjualan LIKE ? AND t.status != 5
-             GROUP BY td.id_produk, td.note ORDER BY qty DESC'''
-        : '''SELECT p.nama_produk as productName, td.note, SUM(td.jumlah) as qty
+             GROUP BY productName ORDER BY qty DESC'''
+        : '''SELECT 
+               CASE WHEN td.id_produk = 0 AND td.note LIKE 'REMOTE_ITEM:%' THEN td.note ELSE p.nama_produk END as productName,
+               SUM(td.jumlah) as qty
              FROM transaction_details td
              JOIN transactions t ON td.id_penjualan = t.id_penjualan
              LEFT JOIN products p ON td.id_produk = p.id_produk
              WHERE date(t.tgl_penjualan) = date(?) AND t.status != 5
-             GROUP BY td.id_produk, td.note ORDER BY qty DESC''';
+             GROUP BY productName ORDER BY qty DESC''';
     
     final results = await _dbService.rawQuery(query, [datePattern]);
     
@@ -205,8 +209,8 @@ class HomeAdminController extends GetxController {
       final popularity = totalQty > 0 ? (top['qty'] as num).toDouble() / totalQty : 0.0;
       
       String name = top['productName'] ?? 'Unknown';
-      if (top['note'] != null && top['note'].toString().startsWith('REMOTE_ITEM:')) {
-         name = top['note'].toString().substring(12);
+      if (name.startsWith('REMOTE_ITEM:')) {
+         name = name.substring(12);
       }
       
       final data = {
