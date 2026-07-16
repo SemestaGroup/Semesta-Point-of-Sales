@@ -8,32 +8,17 @@ import 'package:semesta_pos/styles/app_theme.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:semesta_pos/core/services/sync_service.dart';
 import 'package:semesta_pos/core/util/note_parser.dart';
+import 'package:semesta_pos/core/util/date_formatter.dart';
 
 class ReportScreen extends StatelessWidget {
   const ReportScreen({super.key});
 
   String _formatDateTime(String? dateStr) {
-    if (dateStr == null || dateStr.isEmpty) return "-";
-    try {
-      final cleanStr = dateStr.replaceAll('T', ' ');
-      final parsedDate = DateTime.tryParse(cleanStr);
-      if (parsedDate != null) {
-        return DateFormat('dd MMM yyyy, HH:mm').format(parsedDate.toLocal());
-      }
-    } catch (_) {}
-    return dateStr;
+    return DateFormatter.formatDateTime(dateStr);
   }
 
   String _formatDateTimeShort(String? dateStr) {
-    if (dateStr == null || dateStr.isEmpty) return "-";
-    try {
-      final cleanStr = dateStr.replaceAll('T', ' ');
-      final parsedDate = DateTime.tryParse(cleanStr);
-      if (parsedDate != null) {
-        return DateFormat('dd/MM/yyyy HH:mm').format(parsedDate.toLocal());
-      }
-    } catch (_) {}
-    return dateStr;
+    return DateFormatter.formatDateTimeShort(dateStr);
   }
 
   @override

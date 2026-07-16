@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:semesta_pos/modules/member/controllers/member_controller.dart';
 import 'package:semesta_pos/styles/app_theme.dart';
+import 'package:semesta_pos/core/util/date_formatter.dart';
 
 class MemberScreen extends StatelessWidget {
   const MemberScreen({super.key});
@@ -734,10 +735,10 @@ class MemberScreen extends StatelessWidget {
                       child: Row(
                         children: [
                           Expanded(
-                              flex: 2,
-                              child: Text(
-                                  tx['tgl_penjualan'].toString().split('T')[0],
-                                  style: TextStyle(fontSize: 13.sp))),
+                             flex: 2,
+                             child: Text(
+                                 DateFormatter.formatDate(tx['tgl_penjualan']?.toString()),
+                                 style: TextStyle(fontSize: 13.sp))),
                           Expanded(
                               flex: 2,
                               child: Text(
