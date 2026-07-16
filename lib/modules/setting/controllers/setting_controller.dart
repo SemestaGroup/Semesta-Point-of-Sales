@@ -243,6 +243,9 @@ class SettingController extends GetxController {
     final appModelVersion = _sanitizeVersion(appModel.value.version);
     if (appModelVersion.isNotEmpty) return appModelVersion;
 
+    final fallbackVersion = _sanitizeVersion(Constants.appVersion);
+    if (fallbackVersion.isNotEmpty) return fallbackVersion;
+
     return _sanitizeVersion(companyVersionFieldController.text);
   }
 

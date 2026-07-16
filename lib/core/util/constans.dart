@@ -1,4 +1,5 @@
 class Constants {
+  static const appVersion = "1.5.1";
   static const centralBaseUrl = "https://flinkaja.com/";
   static const staticAuthToken =
       "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiIiwibmFtZSI6IiIsIkFQSV9USU1FIjoxNzY4Nzg5Mzg1fQ.ivZLnFkdbTXhYLgCpOuZwSoai6TO9NhbEsUb8uLZ3Qc";
