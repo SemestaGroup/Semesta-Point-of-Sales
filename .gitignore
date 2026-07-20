@@ -63,3 +63,5 @@ logs.txt
 *.txt
 public/
 PANDUAN_DESAIN_MOBILE.md
+# CocoIndex Code (ccc)
+/.cocoindex_code/

@@ -1193,8 +1193,16 @@ class ApiService extends GetxService {
             data: members);
       }
 
-      return const ResponseApiModel(
-          message: 'Gagal menyimpan data',
+      String failMessage = 'Gagal menyimpan data';
+      try {
+        final errResponse = jsonDecode(responseApi.body);
+        if (errResponse is Map && errResponse.containsKey('message') && errResponse['message'] != null) {
+          failMessage = errResponse['message'].toString();
+        }
+      } catch (_) {}
+
+      return ResponseApiModel(
+          message: failMessage,
           responsestate: Constants.errorState,
           data: null);
     } catch (e) {

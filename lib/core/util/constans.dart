@@ -1,5 +1,8 @@
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+
 class Constants {
-  static const appVersion = "1.5.1";
+  static const appVersion = "1.5.2";
   static const centralBaseUrl = "https://flinkaja.com/";
   static const staticAuthToken =
       "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiIiwibmFtZSI6IiIsIkFQSV9USU1FIjoxNzY4Nzg5Mzg1fQ.ivZLnFkdbTXhYLgCpOuZwSoai6TO9NhbEsUb8uLZ3Qc";
@@ -46,4 +49,58 @@ class Constants {
   // '1' = standard Perfex Cash ID, '7' = Semesta POS custom Cash ID.
   static const List<String> cashPaymentModeIds = ['1', '7'];
   static const String defaultCashPaymentModeId = '7';
+
+  // Custom Snackbar
+  static void showSnackbar({
+    required String title,
+    required String message,
+    required bool isSuccess,
+    bool isWarning = false,
+  }) {
+    var bgColor = const Color(0xFF1E293B); // Dark slate default
+    var iconData = Icons.info_outline;
+    var iconColor = const Color(0xFF38BDF8); // Sky blue
+
+    if (isSuccess) {
+      bgColor = const Color(0xFF0F766E); // Deep teal
+      iconData = Icons.check_circle_outline;
+      iconColor = const Color(0xFF2DD4BF); // Mint green
+    } else if (isWarning) {
+      bgColor = const Color(0xFFC2410C); // Burnt orange
+      iconData = Icons.warning_amber_outlined;
+      iconColor = const Color(0xFFFDBA74); // Light peach
+    }
+
+    Get.snackbar(
+      title,
+      message,
+      backgroundColor: bgColor,
+      colorText: const Color(0xFFF8FAFC),
+      icon: Icon(iconData, color: iconColor, size: 24),
+      snackPosition: SnackPosition.TOP,
+      borderRadius: 12,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      boxShadows: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.15),
+          blurRadius: 12,
+          offset: const Offset(0, 6),
+        )
+      ],
+      duration: const Duration(seconds: 3),
+      shouldIconPulse: false,
+    );
+  }
+
+  static String normalizePhoneNumber(String phone) {
+    String cleaned = phone.replaceAll(RegExp(r'\D'), '');
+    if (cleaned.startsWith('0')) {
+      cleaned = cleaned.substring(1);
+    }
+    if (cleaned.startsWith('62')) {
+      cleaned = cleaned.substring(2);
+    }
+    return '08$cleaned';
+  }
 }

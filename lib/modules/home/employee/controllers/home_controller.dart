@@ -395,10 +395,20 @@ class HomeController extends GetxController {
       if (query.isEmpty) {
         filteredMemberList.value = memberList;
       } else {
-        final q = query.toLowerCase();
+        final q = query.toLowerCase().trim();
+        final qNormalized = _normalizePhoneNumber(q);
+        
         filteredMemberList.value = memberList.where((m) {
           final n = m.nama?.toLowerCase() ?? "";
           final p = m.telepon?.toLowerCase() ?? "";
+          
+          // If query looks like a phone number, compare normalized versions
+          if (qNormalized.isNotEmpty && RegExp(r'^[0-9+\-\s]+$').hasMatch(q)) {
+            final pNormalized = _normalizePhoneNumber(p);
+            return pNormalized.contains(qNormalized) || p.contains(q);
+          }
+          
+          // Otherwise do normal text matching
           return n.contains(q) || p.contains(q);
         }).toList();
       }
@@ -1582,7 +1592,24 @@ class HomeController extends GetxController {
       final List<Map<String, dynamic>> results =
           await _dbService.query('members');
       memberList.value = results.map((m) => MemberModel.fromJson(m)).toList();
-      filteredMemberList.value = memberList;
+      
+      // Keep existing filter search query active after reload
+      if (searchMemberQuery.value.isEmpty) {
+        filteredMemberList.value = memberList;
+      } else {
+        final q = searchMemberQuery.value.toLowerCase().trim();
+        final qNormalized = _normalizePhoneNumber(q);
+        filteredMemberList.value = memberList.where((m) {
+          final n = m.nama?.toLowerCase() ?? "";
+          final p = m.telepon?.toLowerCase() ?? "";
+          if (qNormalized.isNotEmpty && RegExp(r'^[0-9+\-\s]+$').hasMatch(q)) {
+            final pNormalized = _normalizePhoneNumber(p);
+            return pNormalized.contains(qNormalized) || p.contains(q);
+          }
+          return n.contains(q) || p.contains(q);
+        }).toList();
+      }
+      
       debugPrint(
           'HomeController: Member list loaded from SQLite, count: ${memberList.length}');
     } catch (e) {
@@ -3890,10 +3917,132 @@ class HomeController extends GetxController {
     isAddingCustomer.value = false;
   }
 
+  // Prepares the form when user clicks "Add New Customer".
+  // Autodetects if the query matches an existing customer locally (by phone only).
+  // If matched, selects them instantly instead of opening the form.
+  bool prepareAddCustomer() {
+    // Dismiss keyboard instantly to prevent Android IME thread layout lag
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    final searchText = searchCustomerController.text.trim();
+    if (searchText.isEmpty) {
+      clearCustomerForm();
+      isAddingCustomer.value = true;
+      update(); // Force immediate layout refresh
+      return true;
+    }
+
+    final isNumeric = RegExp(r'^[0-9+\-\s]+$').hasMatch(searchText);
+
+    // 1. Try to find exact match in local memberList by PHONE only (Names can be duplicate)
+    MemberModel? matchedMember;
+    if (isNumeric) {
+      final normalizedSearch = _normalizePhoneNumber(searchText);
+      matchedMember = memberList.firstWhere(
+        (m) {
+          final dbPhone = m.telepon ?? '';
+          if (dbPhone.isEmpty) return false;
+          return _normalizePhoneNumber(dbPhone) == normalizedSearch;
+        },
+        orElse: () => MemberModel(idMember: 0, nama: ''),
+      );
+    }
+
+    // 2. If matched by phone, select customer and auto-close dialog
+    if (matchedMember != null && matchedMember.idMember != 0) {
+      selectedMember.value = matchedMember;
+      memberId.value = matchedMember.idMember;
+      customerLabel.value = matchedMember.nama ?? '';
+      
+      Get.snackbar(
+        'Customer Ditemukan',
+        'Customer "${matchedMember.nama}" otomatis terpilih.',
+        backgroundColor: Colors.indigo.shade700,
+        colorText: Colors.white,
+        icon: const Icon(Icons.check_circle, color: Colors.white),
+      );
+      
+      clearCustomerForm();
+      Get.back(); // close dialog
+      return false; // did not open add form
+    }
+
+    // 3. If no phone match found, prepopulate form
+    nameController.clear();
+    phoneController.clear();
+    addressController.clear();
+
+    if (isNumeric) {
+      phoneController.text = searchText;
+    } else {
+      nameController.text = searchText;
+    }
+
+    isAddingCustomer.value = true;
+    update(); // Force immediate layout refresh
+    return true;
+  }
+
+  // Normalizes phone numbers (e.g. "+62812...", "62812...", "812..." all become "0812...")
+  String _normalizePhoneNumber(String phone) {
+    String cleaned = phone.replaceAll(RegExp(r'\D'), '');
+    if (cleaned.isEmpty) return '';
+    if (cleaned.startsWith('62')) {
+      cleaned = '0' + cleaned.substring(2);
+    }
+    if (cleaned.startsWith('8')) {
+      cleaned = '0' + cleaned;
+    }
+    return cleaned;
+  }
+
   Future<void> saveNewCustomer() async {
     if (nameController.text.isEmpty) {
-      Get.snackbar('Error', 'Nama customer tidak boleh kosong');
+      Constants.showSnackbar(
+        title: 'Perhatian',
+        message: 'Nama customer tidak boleh kosong',
+        isSuccess: false,
+        isWarning: true,
+      );
       return;
+    }
+
+    final String name = nameController.text.trim();
+    final String phone = phoneController.text.trim();
+    final String address = addressController.text.trim();
+
+    // Prevent duplicates: Check if phone number already exists locally in SQLite memberList
+    if (phone.isNotEmpty) {
+      final normalizedInput = Constants.normalizePhoneNumber(phone);
+      final existingLocal = memberList.firstWhere(
+        (m) {
+          final dbPhone = m.telepon ?? '';
+          if (dbPhone.isEmpty) return false;
+          return Constants.normalizePhoneNumber(dbPhone) == normalizedInput;
+        },
+        orElse: () => MemberModel(idMember: 0, nama: ''),
+      );
+      if (existingLocal.idMember != 0) {
+        // Automatically select the existing customer
+        selectedMember.value = existingLocal;
+        memberId.value = existingLocal.idMember;
+        customerLabel.value = existingLocal.nama ?? '';
+        
+        // Return to search list and filter by this customer's phone
+        isAddingCustomer.value = false;
+        searchCustomerController.text = phone;
+        searchMemberQuery.value = phone;
+        update();
+
+        Constants.showSnackbar(
+          title: 'Informasi',
+          message: 'Nomor HP sudah terdaftar. Mengarahkan ke customer tersebut.',
+          isSuccess: true,
+        );
+        
+        clearCustomerForm();
+        return;
+      }
     }
 
     // Show loading
@@ -3903,9 +4052,6 @@ class HomeController extends GetxController {
     );
 
     try {
-      final String name = nameController.text.trim();
-      final String phone = phoneController.text.trim();
-      final String address = addressController.text.trim();
       final String idPosMember = const Uuid().v4();
 
       final Map<String, String> memberData = {
@@ -3918,6 +4064,7 @@ class HomeController extends GetxController {
       // 1. Try to sync immediately
       MemberModel? resolvedMember;
       bool syncedInstantly = false;
+      String? errorMessage;
 
       try {
         final response = await apiService.storeMember(memberData);
@@ -3928,10 +4075,98 @@ class HomeController extends GetxController {
             resolvedMember = members.first;
             syncedInstantly = true;
           }
+        } else {
+          errorMessage = response.message;
         }
       } catch (e) {
         debugPrint(
             'HomeController: Immediate member sync failed (offline?), falling back: $e');
+      }
+
+      // If online sync explicitly rejected the member because the phone number exists
+      if (errorMessage != null && (
+          errorMessage.toLowerCase().contains("sudah ada") || 
+          errorMessage.toLowerCase().contains("already exists") || 
+          errorMessage.toLowerCase().contains("terdaftar") ||
+          errorMessage.toLowerCase().contains("no_hp")
+      )) {
+        Get.back(); // Close loading dialog
+        
+        // 1. Check local database first
+        final normalizedInput = Constants.normalizePhoneNumber(phone);
+        var existingMember = memberList.firstWhere(
+          (m) {
+            final dbPhone = m.telepon ?? '';
+            if (dbPhone.isEmpty) return false;
+            return Constants.normalizePhoneNumber(dbPhone) == normalizedInput;
+          },
+          orElse: () => MemberModel(idMember: 0, nama: ''),
+        );
+
+        // 2. If not found locally, fetch members from API server right now to update SQLite
+        if (existingMember.idMember == 0) {
+          // Re-show loading for sync operation
+          Get.dialog(
+            const Center(child: CircularProgressIndicator()),
+            barrierDismissible: false,
+          );
+          try {
+            // Trigger pull member from remote via MemberController / SyncService if registered
+            if (Get.isRegistered<MemberController>()) {
+              await Get.find<MemberController>().getMember();
+            }
+            // Reload local list
+            await getMember();
+            
+            // Search again after sync
+            existingMember = memberList.firstWhere(
+              (m) {
+                final dbPhone = m.telepon ?? '';
+                if (dbPhone.isEmpty) return false;
+                return Constants.normalizePhoneNumber(dbPhone) == normalizedInput;
+              },
+              orElse: () => MemberModel(idMember: 0, nama: ''),
+            );
+          } catch (syncError) {
+            debugPrint('HomeController: Failed to sync members on duplicate: $syncError');
+          }
+          if (Get.isDialogOpen ?? false) Get.back(); // close sync loading
+        }
+
+        // 3. If found now, select it
+        if (existingMember.idMember != 0) {
+          selectedMember.value = existingMember;
+          memberId.value = existingMember.idMember;
+          customerLabel.value = existingMember.nama ?? '';
+          
+          // Return to search list and filter by this customer's phone
+          isAddingCustomer.value = false;
+          searchCustomerController.text = phone;
+          searchMemberQuery.value = phone;
+          update();
+
+          Constants.showSnackbar(
+            title: 'Informasi',
+            message: 'Nomor HP sudah terdaftar. Mengarahkan ke customer tersebut.',
+            isSuccess: true,
+          );
+          
+          clearCustomerForm();
+        } else {
+          // Fallback if not found anywhere: go back to search screen with prepopulated query
+          isAddingCustomer.value = false;
+          searchCustomerController.text = phone;
+          searchMemberQuery.value = phone;
+          update();
+
+          Constants.showSnackbar(
+            title: 'Perhatian',
+            message: 'Nomor HP sudah terdaftar di server. Silakan cari nomor tersebut di pencarian.',
+            isSuccess: false,
+            isWarning: true,
+          );
+        }
+        return;
       }
 
       int localId;
@@ -3992,11 +4227,13 @@ class HomeController extends GetxController {
         Get.find<MemberController>().getMember();
       }
 
-      Get.snackbar(
-          'Success',
-          syncedInstantly
-              ? 'Customer berhasil ditambahkan'
-              : 'Customer ditambahkan lokal & sedang disinkronkan');
+      Constants.showSnackbar(
+        title: 'Sukses',
+        message: syncedInstantly
+            ? 'Customer berhasil ditambahkan'
+            : 'Customer ditambahkan lokal & sedang disinkronkan',
+        isSuccess: true,
+      );
     } catch (e) {
       if (Get.isOverlaysOpen) Get.back(); // Close loading if open
       Get.snackbar('Error', 'Gagal menambahkan customer: $e');

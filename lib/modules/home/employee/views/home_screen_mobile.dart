@@ -710,15 +710,25 @@ class HomeScreenMobile extends StatelessWidget {
 
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(24.r)),
-        backgroundColor: AppTheme.scaffoldBackgroundColor(context),
-        child: SingleChildScrollView(
+      builder: (context) {
+        final mediaQuery = MediaQuery.of(context);
+        final keyboardHeight = mediaQuery.viewInsets.bottom;
+
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24.r)),
+          backgroundColor: AppTheme.scaffoldBackgroundColor(context),
+          // Clean inset padding that shifts up automatically when keyboard appears
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: 40.w, 
+            vertical: keyboardHeight > 0 ? 12.h : 24.h
+          ),
           child: Container(
-            padding: EdgeInsets.fromLTRB(28.w, 28.w, 28.w,
-                28.w + MediaQuery.of(context).viewInsets.bottom),
+            padding: EdgeInsets.all(24.w),
             width: 450.w,
+            // Constraints to prevent dialog from growing infinitely
+            constraints: BoxConstraints(
+              maxHeight: mediaQuery.size.height - keyboardHeight - 48.h,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -752,202 +762,226 @@ class HomeScreenMobile extends StatelessWidget {
                   ],
                 ),
                 SizedBox(height: 16.h),
-                // Label / Call ID Field (Integrated)
-                Obx(() => controller.isAddingCustomer.value
-                    ? Column(
-                        children: [
-                          _buildTextField(context, "Full Name",
-                              controller.nameController, Icons.person),
-                          SizedBox(height: 16.h),
-                          _buildTextField(context, "Phone Number",
-                              controller.phoneController, Icons.phone,
-                              keyboardType: TextInputType.phone),
-                          SizedBox(height: 16.h),
-                          _buildTextField(context, "Address",
-                              controller.addressController, Icons.location_on,
-                              maxLines: 3),
-                          SizedBox(height: 24.h),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: () => controller.saveNewCustomer(),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.primaryColor,
-                                padding: EdgeInsets.symmetric(vertical: 14.h),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12.r)),
+                // Wrap content in Flexible + SingleChildScrollView to ensure scrollability & compact wrap_content layout
+                Flexible(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Obx(() => controller.isAddingCustomer.value
+                        ? Column(
+                            children: [
+                              _buildTextField(context, "Full Name",
+                                  controller.nameController, Icons.person),
+                              SizedBox(height: 16.h),
+                              _buildTextField(context, "Phone Number",
+                                  controller.phoneController, Icons.phone,
+                                  keyboardType: TextInputType.phone),
+                              SizedBox(height: 16.h),
+                              _buildTextField(context, "Address",
+                                  controller.addressController, Icons.location_on,
+                                  maxLines: 3),
+                              SizedBox(height: 24.h),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: () => controller.saveNewCustomer(),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.primaryColor,
+                                    padding: EdgeInsets.symmetric(vertical: 14.h),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12.r)),
+                                  ),
+                                  child: Text("Save Customer",
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontFamily: AppTheme.fontBold,
+                                          fontSize: 16.sp)),
+                                ),
                               ),
-                              child: Text("Save Customer",
-                                  style: TextStyle(
-                                      color: Colors.white,
-                                      fontFamily: AppTheme.fontBold,
-                                      fontSize: 16.sp)),
-                            ),
-                          ),
-                        ],
-                      )
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              color: AppTheme.cardColor(context),
-                              borderRadius: BorderRadius.circular(12.r),
-                              border: Border.all(
-                                  color: AppTheme.borderColor(context)),
-                            ),
-                            child: TextField(
-                              controller: controller.searchCustomerController,
-                              autofocus:
-                                  false, // Fix: Disable auto-focus to prevent keyboard pop-up
-                              decoration: InputDecoration(
-                                hintText: "Search customer name or phone...",
-                                prefixIcon: const Icon(Icons.search,
-                                    color: AppTheme.primaryColor),
-                                suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                                  valueListenable: controller.searchCustomerController,
-                                  builder: (context, value, child) {
-                                    return value.text.isNotEmpty
-                                        ? IconButton(
-                                            icon: const Icon(Icons.clear, color: Colors.grey),
-                                            onPressed: () {
-                                              controller.searchCustomerController.clear();
-                                              controller.searchMemberQuery.value = '';
-                                            },
-                                          )
-                                        : const SizedBox.shrink();
+                            ],
+                          )
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: AppTheme.cardColor(context),
+                                  borderRadius: BorderRadius.circular(12.r),
+                                  border: Border.all(
+                                      color: AppTheme.borderColor(context)),
+                                ),
+                                child: TextField(
+                                  controller: controller.searchCustomerController,
+                                  autofocus: false,
+                                  decoration: InputDecoration(
+                                    hintText: "Search customer name or phone...",
+                                    prefixIcon: const Icon(Icons.search,
+                                        color: AppTheme.primaryColor),
+                                    suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                                      valueListenable: controller.searchCustomerController,
+                                      builder: (context, value, child) {
+                                        return value.text.isNotEmpty
+                                            ? IconButton(
+                                                icon: const Icon(Icons.clear, color: Colors.grey),
+                                                onPressed: () {
+                                                  controller.searchCustomerController.clear();
+                                                  controller.searchMemberQuery.value = '';
+                                                },
+                                              )
+                                            : const SizedBox.shrink();
+                                      },
+                                    ),
+                                    border: InputBorder.none,
+                                    contentPadding:
+                                        EdgeInsets.symmetric(vertical: 14.h),
+                                  ),
+                                  onChanged: (value) {
+                                    controller.searchMemberQuery.value = value;
                                   },
                                 ),
-                                border: InputBorder.none,
-                                contentPadding:
-                                    EdgeInsets.symmetric(vertical: 14.h),
                               ),
-                              onChanged: (value) {
-                                controller.searchMemberQuery.value = value;
-                              },
-                            ),
-                          ),
-                          SizedBox(height: 16.h),
-                          ConstrainedBox(
-                            constraints: BoxConstraints(maxHeight: 300.h),
-                            child: Obx(() => controller.isLoadingMember.value
-                                ? const Center(
-                                    child: CircularProgressIndicator())
-                                : controller.filteredMemberList.isEmpty
-                                    ? Center(
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.person_off,
-                                                size: 48.sp,
-                                                color: Colors.grey.shade400),
-                                            SizedBox(height: 8.h),
-                                            Text("No customers found",
-                                                style: AppTheme.labelMedium),
-                                          ],
-                                        ),
-                                      )
-                                    : ListView.separated(
-                                        shrinkWrap: true,
-                                        physics:
-                                            const AlwaysScrollableScrollPhysics(),
-                                        itemCount: controller
-                                            .filteredMemberList.length,
-                                        separatorBuilder: (c, i) => Divider(
-                                            color:
-                                                AppTheme.borderColor(context),
-                                            height: 1),
-                                        itemBuilder: (context, index) {
-                                          final member = controller
-                                              .filteredMemberList[index];
-                                          bool isSelected = controller
-                                                  .selectedMember
-                                                  .value
-                                                  ?.idMember ==
-                                              member.idMember;
-
-                                          return ListTile(
-                                            dense: true,
-                                            contentPadding:
-                                                EdgeInsets.symmetric(
-                                                    horizontal: 12.w,
-                                                    vertical: 4.h),
-                                            leading: CircleAvatar(
-                                              radius: 16.r,
-                                              backgroundColor: isSelected
-                                                  ? AppTheme.primaryColor
-                                                  : AppTheme.borderColor(
-                                                      context),
-                                              child: Icon(Icons.person,
-                                                  size: 16.sp,
-                                                  color: isSelected
-                                                      ? Colors.white
-                                                      : AppTheme
-                                                          .secondaryTextColor(
-                                                              context)),
+                              SizedBox(height: 16.h),
+                              // ListView inside SingleChildScrollView should use NeverScrollableScrollPhysics to avoid nested scroll conflicts
+                              controller.isLoadingMember.value
+                                  ? Padding(
+                                      padding: EdgeInsets.symmetric(vertical: 32.h),
+                                      child: const Center(
+                                          child: CircularProgressIndicator()),
+                                    )
+                                  : controller.filteredMemberList.isEmpty
+                                      ? Padding(
+                                          padding: EdgeInsets.symmetric(vertical: 24.h),
+                                          child: Center(
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.person_off,
+                                                    size: 40.sp,
+                                                    color: Colors.grey.shade400),
+                                                SizedBox(height: 8.h),
+                                                Text("No customers found",
+                                                    style: AppTheme.labelMedium),
+                                                SizedBox(height: 16.h),
+                                                ElevatedButton.icon(
+                                                  onPressed: () => controller.prepareAddCustomer(),
+                                                  icon: const Icon(Icons.person_add_alt_1,
+                                                      color: Colors.white),
+                                                  label: Text("Add New Customer",
+                                                      style: TextStyle(
+                                                          color: Colors.white,
+                                                          fontFamily: AppTheme.fontBold,
+                                                          fontSize: 14.sp)),
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: AppTheme.primaryColor,
+                                                    padding: EdgeInsets.symmetric(
+                                                        vertical: 12.h, horizontal: 24.w),
+                                                    shape: RoundedRectangleBorder(
+                                                        borderRadius: BorderRadius.circular(12.r)),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
-                                            title: Text(
-                                                member.nama ?? "Unknown",
-                                                style: AppTheme.bodyLarge
-                                                    .copyWith(
-                                                        fontSize: 14.sp,
-                                                        fontFamily: isSelected
-                                                            ? AppTheme.fontBold
-                                                            : AppTheme
-                                                                .fontRegular)),
-                                            subtitle: Text(
-                                                member.telepon ?? "No phone",
-                                                style: AppTheme.labelMedium
-                                                    .copyWith(fontSize: 11.sp)),
-                                            trailing: isSelected
-                                                ? Icon(Icons.check_circle,
-                                                    color:
-                                                        AppTheme.primaryColor,
-                                                    size: 18.sp)
-                                                : null,
-                                            onTap: () {
-                                              controller.selectedMember.value =
-                                                  member;
-                                              controller.memberId.value =
-                                                  member.idMember;
-                                              controller.customerLabel.value =
-                                                  member.nama ?? '';
-                                              Get.back();
-                                            },
-                                          );
-                                        },
-                                      )),
-                          ),
-                          SizedBox(height: 24.h),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                controller.clearCustomerForm();
-                                controller.isAddingCustomer.value = true;
-                              },
-                              icon: const Icon(Icons.person_add_alt_1,
-                                  color: Colors.white),
-                              label: Text("Add New Customer",
-                                  style: TextStyle(
-                                      color: Colors.white,
-                                      fontFamily: AppTheme.fontBold,
-                                      fontSize: 16.sp)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.primaryColor,
-                                padding: EdgeInsets.symmetric(vertical: 16.h),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16.r)),
-                              ),
-                            ),
-                          ),
-                        ],
-                      )),
+                                          ),
+                                        )
+                                      : ListView.separated(
+                                          shrinkWrap: true,
+                                          physics: const NeverScrollableScrollPhysics(),
+                                          itemCount: controller
+                                              .filteredMemberList.length,
+                                          separatorBuilder: (c, i) => Divider(
+                                              color:
+                                                  AppTheme.borderColor(context),
+                                              height: 1),
+                                          itemBuilder: (context, index) {
+                                            final member = controller
+                                                .filteredMemberList[index];
+                                            bool isSelected = controller
+                                                    .selectedMember
+                                                    .value
+                                                    ?.idMember ==
+                                                member.idMember;
+
+                                            return ListTile(
+                                              dense: true,
+                                              contentPadding:
+                                                  EdgeInsets.symmetric(
+                                                      horizontal: 12.w,
+                                                      vertical: 4.h),
+                                              leading: CircleAvatar(
+                                                radius: 16.r,
+                                                backgroundColor: isSelected
+                                                    ? AppTheme.primaryColor
+                                                    : AppTheme.borderColor(
+                                                        context),
+                                                child: Icon(Icons.person,
+                                                    size: 16.sp,
+                                                    color: isSelected
+                                                        ? Colors.white
+                                                        : AppTheme
+                                                            .secondaryTextColor(
+                                                                context)),
+                                              ),
+                                              title: Text(
+                                                  member.nama ?? "Unknown",
+                                                  style: AppTheme.bodyLarge
+                                                      .copyWith(
+                                                          fontSize: 14.sp,
+                                                          fontFamily: isSelected
+                                                              ? AppTheme.fontBold
+                                                              : AppTheme
+                                                                  .fontRegular)),
+                                              subtitle: Text(
+                                                  member.telepon ?? "No phone",
+                                                  style: AppTheme.labelMedium
+                                                      .copyWith(fontSize: 11.sp)),
+                                              trailing: isSelected
+                                                  ? Icon(Icons.check_circle,
+                                                      color:
+                                                          AppTheme.primaryColor,
+                                                      size: 18.sp)
+                                                  : null,
+                                              onTap: () {
+                                                controller.selectedMember.value =
+                                                    member;
+                                                controller.memberId.value =
+                                                    member.idMember;
+                                                controller.customerLabel.value =
+                                                    member.nama ?? '';
+                                                Get.back();
+                                              },
+                                            );
+                                          },
+                                        ),
+                              if (controller.filteredMemberList.isNotEmpty) ...[
+                                SizedBox(height: 24.h),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton.icon(
+                                    onPressed: () => controller.prepareAddCustomer(),
+                                    icon: const Icon(Icons.person_add_alt_1,
+                                        color: Colors.white),
+                                    label: Text("Add New Customer",
+                                        style: TextStyle(
+                                            color: Colors.white,
+                                            fontFamily: AppTheme.fontBold,
+                                            fontSize: 16.sp)),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppTheme.primaryColor,
+                                      padding: EdgeInsets.symmetric(vertical: 16.h),
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(16.r)),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          )),
+                  ),
+                ),
               ],
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -3344,24 +3378,33 @@ class HomeScreenMobile extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: AppTheme.labelMedium),
-        SizedBox(height: 8.h),
-        Container(
-          decoration: BoxDecoration(
-            color: AppTheme.cardColor(context),
-            borderRadius: BorderRadius.circular(12.r),
-            border: Border.all(color: AppTheme.borderColor(context)),
-          ),
-          child: TextField(
-            controller: textController,
-            keyboardType: keyboardType,
-            maxLines: maxLines,
-            style: AppTheme.bodyLarge,
-            decoration: InputDecoration(
-              prefixIcon: Icon(icon, color: AppTheme.primaryColor),
-              border: InputBorder.none,
-              contentPadding:
-                  EdgeInsets.symmetric(vertical: 14.h, horizontal: 12.w),
+        Padding(
+          padding: EdgeInsets.only(left: 4.w),
+          child: Text(label, 
+              style: AppTheme.labelMedium.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.secondaryTextColor(context))),
+        ),
+        SizedBox(height: 6.h),
+        TextField(
+          controller: textController,
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          style: AppTheme.bodyLarge.copyWith(fontSize: 14.sp),
+          decoration: InputDecoration(
+            prefixIcon: Icon(icon, color: AppTheme.primaryColor, size: 20.sp),
+            hintText: "Enter $label...",
+            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13.sp),
+            filled: true,
+            fillColor: AppTheme.cardColor(context),
+            contentPadding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 16.w),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.r),
+              borderSide: BorderSide(color: AppTheme.borderColor(context), width: 1),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.r),
+              borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
             ),
           ),
         ),

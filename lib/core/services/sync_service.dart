@@ -1291,6 +1291,20 @@ class SyncService extends GetxService {
             "SyncService: Ignored pos_options 500 'Failed to update data' — server already has the current value.");
       }
 
+      // Handle duplicate customer registration in background sync queue
+      // If server returns status 400 (or status: false) stating the number already exists,
+      // it means the customer is already registered on the server.
+      // We should discard this task from the queue to prevent endless retries,
+      // and mark the local customer as synced.
+      if (!isTreatedAsSuccess &&
+          method == 'POST' &&
+          endpoint.contains('pos_customers') &&
+          response.body.contains("Nomor hp sudah ada")) {
+        debugPrint(
+            "SyncService: Terminal duplicate customer error. Marking queue item as success to discard, and forcing local sync mark.");
+        isTreatedAsSuccess = true;
+      }
+
       if (isTreatedAsSuccess) {
         if (method == 'POST' && endpoint.contains('pos_customers')) {
           try {

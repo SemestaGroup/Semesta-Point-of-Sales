@@ -145,11 +145,37 @@ class MemberController extends GetxController {
   }
 
   Future<void> storeMember() async {
+    final String name = namaMemberController.text.trim();
+    final String phone = teleponMemberController.text.trim();
+    final String address = alamatMemberController.text.trim();
     final String idPosMember = const Uuid().v4();
+
+    // Prevent duplicates: Check if phone number already exists locally
+    if (phone.isNotEmpty) {
+      final normalizedInput = Constants.normalizePhoneNumber(phone);
+      final existingLocal = memberModelList.firstWhere(
+        (m) {
+          final dbPhone = m.telepon ?? '';
+          if (dbPhone.isEmpty) return false;
+          return Constants.normalizePhoneNumber(dbPhone) == normalizedInput;
+        },
+        orElse: () => MemberModel(idMember: 0, nama: ''),
+      );
+      if (existingLocal.idMember != 0) {
+        Constants.showSnackbar(
+          title: 'Perhatian',
+          message: 'Nomor HP sudah terdaftar di database lokal.',
+          isSuccess: false,
+          isWarning: true,
+        );
+        return;
+      }
+    }
+
     final Map<String, String> newMemberDataMap = {
-      'nama': namaMemberController.text,
-      'no_hp': teleponMemberController.text,
-      'alamat': alamatMemberController.text,
+      'nama': name,
+      'no_hp': phone,
+      'alamat': address,
       'id_pos': idPosMember,
     };
 
@@ -158,6 +184,7 @@ class MemberController extends GetxController {
       // 1. Try immediate sync
       MemberModel? resolvedMember;
       bool syncedInstantly = false;
+      String? errorMessage;
 
       try {
         final response = await apiService.storeMember(newMemberDataMap);
@@ -167,9 +194,27 @@ class MemberController extends GetxController {
             resolvedMember = members.first;
             syncedInstantly = true;
           }
+        } else {
+          errorMessage = response.message;
         }
       } catch (e) {
         debugPrint('MemberController: Immediate sync failed, falling back to background: $e');
+      }
+
+      // Check if server rejected because the phone number exists
+      if (errorMessage != null && (
+          errorMessage.toLowerCase().contains("sudah ada") || 
+          errorMessage.toLowerCase().contains("already exists") || 
+          errorMessage.toLowerCase().contains("terdaftar") ||
+          errorMessage.toLowerCase().contains("no_hp")
+      )) {
+        Constants.showSnackbar(
+          title: 'Perhatian',
+          message: 'Nomor HP sudah terdaftar di server.',
+          isSuccess: false,
+          isWarning: true,
+        );
+        return;
       }
 
       int localId;
@@ -180,9 +225,9 @@ class MemberController extends GetxController {
         resolvedMember = MemberModel(
           idMember: localId,
           idPos: idPosMember,
-          nama: newMemberDataMap['nama'],
-          telepon: newMemberDataMap['no_hp'],
-          alamat: newMemberDataMap['alamat'],
+          nama: name,
+          telepon: phone,
+          alamat: address,
           datecreated: DateTime.now().toIso8601String(),
         );
       }
@@ -214,14 +259,18 @@ class MemberController extends GetxController {
       await getMember();
       cleanField();
       isFormView.value = false;
-      Get.snackbar('Success', 
-          syncedInstantly ? 'Customer added successfully' : 'Customer added locally and syncing in background',
-          backgroundColor: Colors.green.withValues(alpha: 0.1),
-          icon: const Icon(Icons.check_circle, color: Colors.green));
+      Constants.showSnackbar(
+        title: 'Sukses',
+        message: syncedInstantly ? 'Customer added successfully' : 'Customer added locally and syncing in background',
+        isSuccess: true,
+      );
     } catch (e) {
-      Get.snackbar('Error', 'Failed to save customer: $e',
-          backgroundColor: Colors.red.withValues(alpha: 0.1),
-          icon: const Icon(Icons.error, color: Colors.red));
+      Constants.showSnackbar(
+        title: 'Error',
+        message: 'Failed to save customer: $e',
+        isSuccess: false,
+        isWarning: true,
+      );
     } finally {
       isLoadingStore.value = false;
     }
