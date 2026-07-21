@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -57,6 +58,15 @@ class SettingController extends GetxController {
   RxBool isScanning = false.obs;
   String? connectedBluetoothAddress;
 
+  // Android SPP permits one Bluetooth socket at a time. Serialising all
+  // Bluetooth output prevents a second order from disconnecting a printer
+  // while the first order is still connecting or writing.
+  Future<void> _bluetoothPrintQueue = Future<void>.value();
+  Timer? _bluetoothIdleDisconnectTimer;
+  int _bluetoothConnectionVersion = 0;
+  static const Duration _bluetoothIdleDisconnectDelay = Duration(seconds: 20);
+  static const Duration _bluetoothSwitchCooldown = Duration(milliseconds: 1200);
+
   RxBool isCheckingUpdate = false.obs;
   RxDouble downloadProgress = 0.0.obs;
 
@@ -67,6 +77,7 @@ class SettingController extends GetxController {
   RxString installedAppVersion = ''.obs;
 
   RxList<String> availableBrands = <String>[].obs;
+
   /// Products for exception picker: {id_produk, nama_produk, brand_name}
   RxList<Map<String, dynamic>> availableProducts = <Map<String, dynamic>>[].obs;
 
@@ -114,6 +125,15 @@ class SettingController extends GetxController {
     });
 
     // 3. No longer calling getData() here as it's redundant with SyncService and AppService
+  }
+
+  @override
+  void onClose() {
+    _bluetoothIdleDisconnectTimer?.cancel();
+    try {
+      bluetooth.disconnect();
+    } catch (_) {}
+    super.onClose();
   }
 
   /// Loads cached configurations from storage instantly.
@@ -228,8 +248,6 @@ class SettingController extends GetxController {
   }
 
   String _resolveBestKnownVersion({String? preferred}) {
-
-
     final preferredVersion = _sanitizeVersion(preferred);
     if (preferredVersion.isNotEmpty) return preferredVersion;
 
@@ -248,8 +266,6 @@ class SettingController extends GetxController {
 
     return _sanitizeVersion(companyVersionFieldController.text);
   }
-
-
 
   Future<void> fetchAvailableBrands() async {
     try {
@@ -494,7 +510,7 @@ class SettingController extends GetxController {
   /// For network printers, try to connect and keep socket open.
   Future<void> autoConnectAll() async {
     // BT printers: always start as disconnected — actual connection
-    // only happens on-demand when printing (connect → print → disconnect).
+    // only happens on-demand when printing and is released after idle.
     for (var printer in assignedPrinters) {
       if (printer.type == 'bluetooth') {
         _updatePrinterStatus(printer.id, false);
@@ -510,28 +526,110 @@ class SettingController extends GetxController {
     }
   }
 
-  /// Connects to BT printer. Always disconnects first (Android SPP = 1 connection at a time).
-  /// Verifies connection actually succeeded AFTER connect() — library may not throw on failure.
-  /// Returns true only if printer is confirmed connected.
+  void _cancelBluetoothIdleDisconnect() {
+    _bluetoothIdleDisconnectTimer?.cancel();
+    _bluetoothIdleDisconnectTimer = null;
+    _bluetoothConnectionVersion++;
+  }
+
+  void _scheduleBluetoothIdleDisconnect(PrinterDevice printer) {
+    _cancelBluetoothIdleDisconnect();
+    final connectionVersion = _bluetoothConnectionVersion;
+    _bluetoothIdleDisconnectTimer = Timer(_bluetoothIdleDisconnectDelay, () {
+      // Disconnect uses the same queue as print jobs. A new job can therefore
+      // either cancel this task before it runs or safely connect after it ends.
+      final idleDisconnectJob = _bluetoothPrintQueue.then<void>(
+        (_) => _disconnectBluetoothAfterIdle(printer, connectionVersion),
+        onError: (_, __) =>
+            _disconnectBluetoothAfterIdle(printer, connectionVersion),
+      );
+      _bluetoothPrintQueue =
+          idleDisconnectJob.then<void>((_) {}, onError: (_, __) {});
+    });
+  }
+
+  Future<void> _disconnectBluetoothAfterIdle(
+      PrinterDevice printer, int connectionVersion) async {
+    // A newer print invalidates this idle task before it reaches the queue.
+    if (connectionVersion != _bluetoothConnectionVersion ||
+        connectedBluetoothAddress != printer.address) {
+      return;
+    }
+
+    try {
+      if (await bluetooth.isConnected != true ||
+          connectionVersion != _bluetoothConnectionVersion ||
+          connectedBluetoothAddress != printer.address) {
+        return;
+      }
+      await bluetooth.disconnect();
+      debugPrint('BT disconnected after idle: ${printer.name}');
+    } catch (e) {
+      debugPrint('BT idle disconnect failed for ${printer.name}: $e');
+    } finally {
+      if (connectionVersion == _bluetoothConnectionVersion &&
+          connectedBluetoothAddress == printer.address) {
+        connectedBluetoothAddress = null;
+        _updatePrinterStatus(printer.id, false);
+      }
+    }
+  }
+
+  /// Returns whether an active SPP socket was released. Callers use this to
+  /// apply a short Android RFCOMM cooldown before connecting another printer.
+  Future<bool> _disconnectBluetooth({PrinterDevice? printer}) async {
+    _cancelBluetoothIdleDisconnect();
+    final disconnectedAddress = connectedBluetoothAddress;
+    var hadActiveSocket = disconnectedAddress != null;
+    try {
+      hadActiveSocket = hadActiveSocket || await bluetooth.isConnected == true;
+    } catch (_) {}
+    try {
+      await bluetooth.disconnect();
+    } catch (e) {
+      debugPrint('BT disconnect failed: $e');
+    }
+
+    // Wait for Android's RFCOMM socket to report as closed. This avoids an
+    // immediate reconnect into the stale socket left by the previous job.
+    for (var i = 0; i < 10; i++) {
+      try {
+        if (await bluetooth.isConnected != true) break;
+      } catch (_) {
+        break;
+      }
+      await Future.delayed(const Duration(milliseconds: 150));
+    }
+
+    connectedBluetoothAddress = null;
+    final disconnectedPrinter = printer ??
+        assignedPrinters
+            .firstWhereOrNull((item) => item.address == disconnectedAddress);
+    if (disconnectedPrinter != null) {
+      _updatePrinterStatus(disconnectedPrinter.id, false);
+    }
+    return hadActiveSocket;
+  }
+
+  /// Connects to BT printer, reusing a healthy socket whenever possible.
+  /// Android SPP supports one active connection, so callers must be queued.
   Future<bool> _connectToBluetooth(PrinterDevice device) async {
+    if (connectedBluetoothAddress == device.address) {
+      try {
+        final bool? alreadyConnected = await bluetooth.isConnected;
+        if (alreadyConnected == true) {
+          debugPrint('BT reusing active connection for ${device.name}');
+          _updatePrinterStatus(device.id, true);
+          return true;
+        }
+      } catch (_) {}
+    }
+
     const int maxRetries = 3;
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         debugPrint('BT Connect Attempt $attempt for ${device.name}');
-
-        // Step 1: Always force-disconnect any existing connection first.
-        // This prevents "zombie socket" where library thinks it's connected but
-        // the underlying TCP/RFCOMM channel is dead after idle or printer restart.
-        try {
-          await bluetooth.disconnect();
-        } catch (_) {}
-        connectedBluetoothAddress = null;
-        // Android BT stack needs time to fully release the RFCOMM socket.
-        // 800ms is not enough on many devices — use 2000ms to be safe.
-        await Future.delayed(const Duration(milliseconds: 2000));
-
-        // Step 2: Find the specific target in bonded list
-        List<blue.BluetoothDevice> bonded = await bluetooth.getBondedDevices();
+        final bonded = await bluetooth.getBondedDevices();
         final target =
             bonded.firstWhereOrNull((d) => d.address == device.address);
         if (target == null) {
@@ -541,24 +639,32 @@ class SettingController extends GetxController {
             _updatePrinterStatus(device.id, false);
             return false;
           }
+          await Future.delayed(const Duration(milliseconds: 1000));
           continue;
         }
 
-        // Step 3: Attempt connection
+        // Switch printers or recover from a failed socket in a controlled way.
+        // Android can report a socket closed before RFCOMM has fully released.
+        final releasedActiveSocket = await _disconnectBluetooth();
+        if (releasedActiveSocket) {
+          await Future.delayed(_bluetoothSwitchCooldown);
+        }
         await bluetooth.connect(target);
+        await Future.delayed(const Duration(milliseconds: 600));
 
-        // Step 4: VERIFY — library may not throw even if printer is off
-        await Future.delayed(
-            const Duration(milliseconds: 1000)); // Wait for socket to stabilize
-        final bool? isConnected = await bluetooth.isConnected;
-        if (isConnected != true) {
+        if (await bluetooth.isConnected != true) {
           debugPrint(
               'BT connect() returned but isConnected=false for ${device.name}. Printer may be off.');
           if (attempt == maxRetries) {
             _updatePrinterStatus(device.id, false);
             return false;
           }
-          continue; // Retry
+          final releasedActiveSocket =
+              await _disconnectBluetooth(printer: device);
+          if (releasedActiveSocket) {
+            await Future.delayed(_bluetoothSwitchCooldown);
+          }
+          continue;
         }
 
         connectedBluetoothAddress = device.address;
@@ -576,8 +682,12 @@ class SettingController extends GetxController {
           );
           return false;
         }
-        await Future.delayed(
-            const Duration(milliseconds: 1500)); // Cool down before retry
+        final releasedActiveSocket =
+            await _disconnectBluetooth(printer: device);
+        if (releasedActiveSocket) {
+          await Future.delayed(_bluetoothSwitchCooldown);
+        }
+        await Future.delayed(const Duration(milliseconds: 1000));
       }
     }
     return false;
@@ -681,6 +791,7 @@ class SettingController extends GetxController {
     required String line3, // row 3: order code
     required String line4, // row 4: product name
     bool isAutoCut = false,
+    bool isRawFontA = true,
     int copies = 1,
     int startIndex = 1,
     int totalLabels = 1,
@@ -694,8 +805,10 @@ class SettingController extends GetxController {
     List<int> bytes = [];
 
     bytes += generator.reset();
-    // ESC M 0 = Select Font A (raw ESC/POS) - needed for MPT-II and similar 58mm printers
-    bytes += [0x1B, 0x4D, 0x00];
+    // ESC M 0 = Select Font A (raw ESC/POS) - bypass if printer mode disables raw font A
+    if (isRawFontA) {
+      bytes += [0x1B, 0x4D, 0x00];
+    }
 
     for (int i = 0; i < copies; i++) {
       int currentCounter = startIndex + i;
@@ -847,6 +960,7 @@ class SettingController extends GetxController {
         line3: '#ABCDEF12',
         line4: 'TEST PRODUCT NAME',
         isAutoCut: printer.isAutoCut,
+        isRawFontA: printer.isRawFontA,
       );
     }
 
@@ -862,7 +976,8 @@ class SettingController extends GetxController {
 
     bytes += generator.reset();
     // ESC M 0 = Select Font A (raw ESC/POS) - needed for printers that ignore library fontType
-    if (printer.paperSize == 58) bytes += [0x1B, 0x4D, 0x00];
+    if (printer.paperSize == 58 && printer.isRawFontA)
+      bytes += [0x1B, 0x4D, 0x00];
 
     String companyName = userService.getPrefString(Constants.posCompanyName);
     if (companyName == 'Guest' || companyName.isEmpty) companyName = 'FLINKPOS';
@@ -1270,13 +1385,11 @@ class SettingController extends GetxController {
         styles: const PosStyles(align: PosAlign.left, bold: true));
     bytes += generator.text(_formatCenter(companyName.toUpperCase(), maxChars),
         styles: const PosStyles(align: PosAlign.left));
-    bytes += generator.text(
-        _formatCenter('Staff: ${shift.userId}', maxChars),
+    bytes += generator.text(_formatCenter('Staff: ${shift.userId}', maxChars),
         styles: const PosStyles(align: PosAlign.left));
     bytes += generator.text('', styles: const PosStyles()); // blank line
     if (shift.endTime != null) {
-      final endStr =
-          shift.endTime.toString().split('.')[0].substring(0, 19);
+      final endStr = shift.endTime.toString().split('.')[0].substring(0, 19);
       bytes += generator.text(_formatCenter(endStr, maxChars),
           styles: const PosStyles(align: PosAlign.left));
     }
@@ -1289,12 +1402,10 @@ class SettingController extends GetxController {
     if (txData != null) {
       final modes = txData['payment_modes'] as List<dynamic>? ?? [];
       final summary = txData['summary'] as Map<String, dynamic>? ?? {};
-      final diff =
-          (summary['difference'] as num?)?.toInt() ?? 0;
+      final diff = (summary['difference'] as num?)?.toInt() ?? 0;
 
       // Header 3 Kolom Rapi untuk seluruh jenis saldo/pembayaran
-      bytes += generator.text(
-          row3('TIPE', 'Tercatat', 'Selisih'),
+      bytes += generator.text(row3('TIPE', 'Tercatat', 'Selisih'),
           styles: const PosStyles(align: PosAlign.left, bold: true));
 
       // 1. Opening Balance
@@ -1323,8 +1434,7 @@ class SettingController extends GetxController {
               styles: const PosStyles(align: PosAlign.left));
         } else {
           totalRecorded += amount;
-          bytes += generator.text(
-              row3(name, 'Rp.${f(amount)}', '0'),
+          bytes += generator.text(row3(name, 'Rp.${f(amount)}', '0'),
               styles: const PosStyles(align: PosAlign.left));
         }
       }
@@ -1336,8 +1446,8 @@ class SettingController extends GetxController {
           row3('TOTAL', 'Rp.${f(totalRecorded)}', totalDiffStr),
           styles: const PosStyles(align: PosAlign.left, bold: true));
 
-      bytes +=
-          generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.left));
 
       // ═══════════════════════════════════════════════════════════════════
       // SECTION 4 — RINGKASAN PENJUALAN
@@ -1355,7 +1465,10 @@ class SettingController extends GetxController {
       }
       if (totalTx == 0) {
         try {
-          final startStr = shift.startTime.toIso8601String().replaceAll('T', ' ').split('.')[0];
+          final startStr = shift.startTime
+              .toIso8601String()
+              .replaceAll('T', ' ')
+              .split('.')[0];
           final db = Get.find<DatabaseService>();
           final countRow = await db.rawQuery('''
             SELECT COUNT(*) as count FROM transactions
@@ -1406,8 +1519,8 @@ class SettingController extends GetxController {
           _formatRow('Total Penjualan', 'Rp.${f(finalTotal)}', maxChars),
           styles: const PosStyles(align: PosAlign.left, bold: true));
 
-      bytes +=
-          generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.left));
 
       // ═══════════════════════════════════════════════════════════════════
       // SECTION 5 — ITEM TERJUAL
@@ -1418,8 +1531,7 @@ class SettingController extends GetxController {
         totalQty += (p['qty'] ?? 0) as int;
       }
 
-      bytes += generator.text(
-          _formatRow('Item Terjual', '$totalQty', maxChars),
+      bytes += generator.text(_formatRow('Item Terjual', '$totalQty', maxChars),
           styles: const PosStyles(align: PosAlign.left, bold: true));
 
       for (var product in products) {
@@ -1429,13 +1541,12 @@ class SettingController extends GetxController {
         String lab = name;
         final maxName = maxChars - 4;
         if (lab.length > maxName) lab = '${lab.substring(0, maxName - 2)}..';
-        bytes += generator.text(
-            _formatRow(lab, '$qty', maxChars),
+        bytes += generator.text(_formatRow(lab, '$qty', maxChars),
             styles: const PosStyles(align: PosAlign.left));
       }
 
-      bytes +=
-          generator.text(lineSep, styles: const PosStyles(align: PosAlign.left));
+      bytes += generator.text(lineSep,
+          styles: const PosStyles(align: PosAlign.left));
     } else {
       // ─── Legacy fallback (no reconciliation data) ─────────────────────
       bytes += generator.text(
@@ -1444,13 +1555,11 @@ class SettingController extends GetxController {
       bytes += generator.text(
           _formatCenter(companyName.toUpperCase(), maxChars),
           styles: const PosStyles(align: PosAlign.left));
-      bytes += generator.text(
-          _formatCenter('Staff: ${shift.userId}', maxChars),
+      bytes += generator.text(_formatCenter('Staff: ${shift.userId}', maxChars),
           styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text('', styles: const PosStyles());
       if (shift.endTime != null) {
-        final endStr =
-            shift.endTime.toString().split('.')[0].substring(0, 19);
+        final endStr = shift.endTime.toString().split('.')[0].substring(0, 19);
         bytes += generator.text(_formatCenter(endStr, maxChars),
             styles: const PosStyles(align: PosAlign.left));
       }
@@ -1459,35 +1568,31 @@ class SettingController extends GetxController {
 
       // Simple fallback: opening balance + cash/non-cash
       bytes += generator.text(
-          _formatRow('Opening Balance',
-              'Rp.${f(shift.startingBalance)}', maxChars),
+          _formatRow(
+              'Opening Balance', 'Rp.${f(shift.startingBalance)}', maxChars),
           styles: const PosStyles(align: PosAlign.left, bold: true));
       bytes += generator.text(
-          _formatRow('Cash Sales',
-              'Rp.${f(recap['cash'] ?? 0)}', maxChars),
+          _formatRow('Cash Sales', 'Rp.${f(recap['cash'] ?? 0)}', maxChars),
           styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text(
-          _formatRow('Non-Cash Sales',
-              'Rp.${f(recap['nonCash'] ?? 0)}', maxChars),
+          _formatRow(
+              'Non-Cash Sales', 'Rp.${f(recap['nonCash'] ?? 0)}', maxChars),
           styles: const PosStyles(align: PosAlign.left));
       bytes += generator.text(lineSep,
           styles: const PosStyles(align: PosAlign.left));
-      final expectedTotal =
-          shift.startingBalance + (recap['cash'] ?? 0);
+      final expectedTotal = shift.startingBalance + (recap['cash'] ?? 0);
       bytes += generator.text(
-          _formatRow(
-              'EXPECTED CASH', 'Rp.${f(expectedTotal)}', maxChars),
+          _formatRow('EXPECTED CASH', 'Rp.${f(expectedTotal)}', maxChars),
           styles: const PosStyles(align: PosAlign.left, bold: true));
       if (shift.status == 1) {
         bytes += generator.text(
-            _formatRow('ACTUAL CASH',
-                'Rp.${f(shift.closingBalance)}', maxChars),
+            _formatRow(
+                'ACTUAL CASH', 'Rp.${f(shift.closingBalance)}', maxChars),
             styles: const PosStyles(align: PosAlign.left, bold: true));
         final d = shift.closingBalance - expectedTotal;
         bytes += generator.text(
             _formatRow('DIFFERENCE', 'Rp.${f(d)}', maxChars),
-            styles: PosStyles(
-                align: PosAlign.left, bold: d != 0));
+            styles: PosStyles(align: PosAlign.left, bold: d != 0));
       }
       bytes += generator.text(lineSep,
           styles: const PosStyles(align: PosAlign.left));
@@ -1518,70 +1623,25 @@ class SettingController extends GetxController {
     try {
       final List<int> bytes = prebuiltBytes ?? await _buildTestBytes(printer);
 
+      debugPrint('================ [DEBUG PRINT TEST/OUTPUT] ================');
+      debugPrint('Target Printer : ${printer.name} (${printer.address})');
+      debugPrint(
+          'Type / Roles   : ${printer.type} / [${printer.roles.join(", ")}]');
+      debugPrint('Total Bytes    : ${bytes.length} bytes');
+      try {
+        final decoded = latin1.decode(bytes
+            .where((b) => b >= 32 && b <= 126 || b == 10 || b == 13)
+            .toList());
+        debugPrint('--- RAW TEXT CONTENT ---');
+        debugPrint(decoded.trim());
+        debugPrint('------------------------');
+      } catch (e) {
+        debugPrint('Could not decode printable ASCII: $e');
+      }
+      debugPrint('===========================================================');
+
       if (printer.type == 'bluetooth') {
-        // Step 1: Connect
-        final connected = await _connectToBluetooth(printer);
-        if (!connected) {
-          Get.snackbar('Printer Warning',
-              'Printer ${printer.name} with roles ${printer.roles.join(", ")} failed. Make sure it is powered on and paired.');
-          return;
-        }
-        // Step 2: Send bytes
-        await Future.delayed(
-            const Duration(milliseconds: 300)); // Small settle time
-
-        // Write bytes with a one-time retry on failure (handles zombie socket)
-        bool writeSuccess = false;
-        for (int writeAttempt = 1; writeAttempt <= 2; writeAttempt++) {
-          try {
-            await bluetooth.writeBytes(Uint8List.fromList(bytes));
-            writeSuccess = true;
-            break;
-          } catch (writeErr) {
-            debugPrint(
-                'BT writeBytes ATTEMPT $writeAttempt failed for ${printer.name}: $writeErr');
-            if (writeAttempt < 2) {
-              // Force a fresh reconnect and retry once
-              connectedBluetoothAddress = null;
-              try {
-                await bluetooth.disconnect();
-              } catch (_) {}
-              await Future.delayed(const Duration(milliseconds: 1500));
-              final reconnected = await _connectToBluetooth(printer);
-              if (!reconnected) break;
-            }
-          }
-        }
-
-        if (!writeSuccess) {
-          Get.snackbar(
-            'Printer Tidak Merespon',
-            '⚠️ Pembayaran BERHASIL, tapi struk gagal dicetak.\nCoba tekan tombol "Cetak Ulang" atau restart printer.',
-            backgroundColor: Colors.orange.shade800,
-            colorText: Colors.white,
-            duration: const Duration(seconds: 6),
-            snackPosition: SnackPosition.TOP,
-            icon: const Icon(Icons.print_disabled, color: Colors.white),
-          );
-          connectedBluetoothAddress = null;
-          try {
-            await bluetooth.disconnect();
-          } catch (_) {}
-          return;
-        }
-
-        await Future.delayed(
-            const Duration(milliseconds: 500)); // Wait for data to flush
-        // Release the printer so other tablets/devices can connect.
-        // Most Bluetooth thermal printers only support one active connection.
-        await Future.delayed(
-            const Duration(seconds: 1)); // Give time to finish printing
-        try {
-          await bluetooth.disconnect();
-          connectedBluetoothAddress = null;
-        } catch (e) {
-          debugPrint('Error disconnecting after print: $e');
-        }
+        await _enqueueBluetoothPrint(printer, bytes);
       } else if (printer.type == 'network') {
         try {
           Socket? socket = networkSockets[printer.address];
@@ -1635,8 +1695,75 @@ class SettingController extends GetxController {
     }
   }
 
+  /// Adds a job to the one shared Android SPP connection. The queue continues
+  /// after an unexpected failed job so one printer error cannot block later
+  /// label orders.
+  Future<void> _enqueueBluetoothPrint(PrinterDevice printer, List<int> bytes) {
+    _cancelBluetoothIdleDisconnect();
+    final job = _bluetoothPrintQueue.then<void>(
+      (_) => _printToBluetooth(printer, bytes),
+      onError: (_, __) => _printToBluetooth(printer, bytes),
+    );
+    _bluetoothPrintQueue = job.then<void>((_) {}, onError: (_, __) {});
+    return job;
+  }
+
+  Future<void> _printToBluetooth(PrinterDevice printer, List<int> bytes) async {
+    // A preceding queued job may have scheduled the idle timer immediately
+    // before this job started.
+    _cancelBluetoothIdleDisconnect();
+    final connected = await _connectToBluetooth(printer);
+    if (!connected) {
+      Get.snackbar(
+        'Printer Warning',
+        'Printer ${printer.name} with roles ${printer.roles.join(", ")} failed. Make sure it is powered on and paired.',
+      );
+      return;
+    }
+
+    await Future.delayed(const Duration(milliseconds: 300));
+    var writeSuccess = false;
+    for (var writeAttempt = 1; writeAttempt <= 2; writeAttempt++) {
+      try {
+        await bluetooth.writeBytes(Uint8List.fromList(bytes));
+        writeSuccess = true;
+        break;
+      } catch (writeErr) {
+        debugPrint(
+            'BT writeBytes ATTEMPT $writeAttempt failed for ${printer.name}: $writeErr');
+        if (writeAttempt < 2) {
+          final releasedActiveSocket =
+              await _disconnectBluetooth(printer: printer);
+          if (releasedActiveSocket) {
+            await Future.delayed(_bluetoothSwitchCooldown);
+          }
+          if (!await _connectToBluetooth(printer)) break;
+        }
+      }
+    }
+
+    if (!writeSuccess) {
+      Get.snackbar(
+        'Printer Tidak Merespon',
+        '⚠️ Pembayaran BERHASIL, tapi struk gagal dicetak.\nCoba tekan tombol "Cetak Ulang" atau restart printer.',
+        backgroundColor: Colors.orange.shade800,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 6),
+        snackPosition: SnackPosition.TOP,
+        icon: const Icon(Icons.print_disabled, color: Colors.white),
+      );
+      await _disconnectBluetooth(printer: printer);
+      return;
+    }
+
+    // Do not disconnect here. The next nearby order reuses this healthy
+    // socket; an idle timer releases it when the printer is no longer needed.
+    await Future.delayed(const Duration(milliseconds: 500));
+    _scheduleBluetoothIdleDisconnect(printer);
+  }
+
   /// Sequential print to multiple printers.
-  /// For Bluetooth: connect → print → disconnect → next.
+  /// Bluetooth jobs are serialised and reuse the active socket when possible.
   /// Caller builds bytes for each printer role separately.
   Future<void> printSequential(Map<PrinterDevice, List<int>> printJobs) async {
     for (final entry in printJobs.entries) {
@@ -1689,7 +1816,8 @@ class SettingController extends GetxController {
   ///   2. Brand match — normal roleBrands routing.
   ///   3. Generic fallback — printer with no brands/exceptions configured.
   /// Returns null if no printer can handle this product.
-  PrinterDevice? resolveProductPrinter(String role, int productId, String brand) {
+  PrinterDevice? resolveProductPrinter(
+      String role, int productId, String brand) {
     // 1. Exception match (exclusive override)
     final exceptionMatch = assignedPrinters.firstWhereOrNull((p) {
       if (!p.roles.contains(role) || !p.isActive) return false;
@@ -2200,29 +2328,30 @@ class SettingController extends GetxController {
     try {
       final db = Get.find<DatabaseService>();
       final shiftCtrl = Get.find<ShiftController>();
-      
+
       // Get last closed shift
       final rows = await db.rawQuery('''
         SELECT * FROM shift_sessions 
         WHERE reconciliation_data IS NOT NULL 
         ORDER BY id_shift DESC LIMIT 1
       ''');
-      
+
       if (rows.isEmpty) {
         debugPrint('=== TEST Z REPORT ===');
         debugPrint('No closed shift found with reconciliation data.');
         debugPrint('====================');
         return;
       }
-      
+
       final shiftData = rows.first;
       final shift = ShiftSessionModel(
         idShift: shiftData['id_shift'] as int?,
         shiftName: (shiftData['shift_name'] ?? 'Shift') as String,
         userId: (shiftData['user_id'] ?? '') as String,
-        startTime: DateTime.parse((shiftData['start_time'] ?? DateTime.now().toIso8601String()) as String),
-        endTime: shiftData['end_time'] != null 
-            ? DateTime.parse(shiftData['end_time'] as String) 
+        startTime: DateTime.parse((shiftData['start_time'] ??
+            DateTime.now().toIso8601String()) as String),
+        endTime: shiftData['end_time'] != null
+            ? DateTime.parse(shiftData['end_time'] as String)
             : null,
         startingBalance: (shiftData['starting_balance'] ?? 0) as int,
         closingBalance: (shiftData['closing_balance'] ?? 0) as int,
@@ -2235,7 +2364,7 @@ class SettingController extends GetxController {
         isSynced: (shiftData['is_synced'] ?? 0) as int,
         idRemote: shiftData['id_remote'] as int?,
       );
-      
+
       // Use a dummy printer (80mm)
       final dummyPrinter = PrinterDevice(
         id: 'DEBUG_ID',
@@ -2245,16 +2374,16 @@ class SettingController extends GetxController {
         paperSize: 80,
         isConnected: false,
       );
-      
+
       // Generate bytes
       final bytes = await _buildZReportBytes(dummyPrinter, shift, {});
-      
+
       // Decode to text for console output
       final text = _bytesToText(bytes);
       debugPrint('=== TEST Z REPORT ===');
       debugPrint(text);
       debugPrint('====================');
-      
+
       Get.snackbar('Z Report Test', 'Check debug console for output',
           duration: const Duration(seconds: 3));
     } catch (e) {

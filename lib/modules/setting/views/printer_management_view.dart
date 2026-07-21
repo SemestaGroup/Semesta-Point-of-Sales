@@ -480,7 +480,14 @@ class PrinterManagementView extends GetView<SettingController> {
   }
 
   Widget _buildFontDropdown(BuildContext context, PrinterDevice printer) {
-    final options = {1: "Normal", 2: "Large"};
+    final options = {
+      1: "Normal (Std)",
+      2: "Large",
+      0: "No ESC-M (Safe/Label)",
+    };
+    
+    // Map isRawFontA false to 0, otherwise fontSize
+    int currentValue = !printer.isRawFontA ? 0 : (options.containsKey(printer.fontSize) ? printer.fontSize : 1);
     
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 16.w),
@@ -490,13 +497,18 @@ class PrinterManagementView extends GetView<SettingController> {
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<int>(
-          value: options.containsKey(printer.fontSize) ? printer.fontSize : 1,
+          value: currentValue,
           isExpanded: true,
           icon: Icon(CupertinoIcons.chevron_down, size: 14.sp, color: AppTheme.secondaryTextColor(context)),
           style: TextStyle(fontSize: 12.sp, color: AppTheme.textColor(context), fontFamily: AppTheme.fontMedium),
           onChanged: (val) {
             if (val == null) return;
-            final updated = printer.copyWith(fontSize: val);
+            PrinterDevice updated;
+            if (val == 0) {
+              updated = printer.copyWith(isRawFontA: false, fontSize: 1);
+            } else {
+              updated = printer.copyWith(isRawFontA: true, fontSize: val);
+            }
             _updatePrinter(printer, updated);
           },
           items: options.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),

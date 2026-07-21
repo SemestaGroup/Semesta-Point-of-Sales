@@ -1092,6 +1092,7 @@ class ReportController extends GetxController {
             line4: name,
             productNote: note,
             isAutoCut: labelPrinter.isAutoCut,
+            isRawFontA: labelPrinter.isRawFontA,
             copies: qty,
             startIndex: currentIndex,
             totalLabels: totalLabels,

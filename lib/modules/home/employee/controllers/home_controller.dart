@@ -2516,6 +2516,7 @@ class HomeController extends GetxController {
             productNote: item.note,
             orderNote: resolvedOrderNote,
             isAutoCut: labelPrinter.isAutoCut,
+            isRawFontA: labelPrinter.isRawFontA,
             copies: item.jumlah, // Use item quantity for copies
             startIndex: currentIndex,
             totalLabels: totalLabels,

@@ -13,6 +13,7 @@ class PrinterDevice {
   /// other printers that would have matched via brand routing.
   final Map<String, List<int>> roleProductExceptions;
   final bool isAutoCut; // true for large 80mm printers, false for standard 58mm
+  final bool isRawFontA; // true = send ESC M 0 byte, false = bypass raw font override
   final int paperSize; // 58 or 80
   final int fontSize; // 1 (normal), 2 (large), etc.
   bool isActive;
@@ -29,6 +30,7 @@ class PrinterDevice {
     this.roleBrands = const {},
     this.roleProductExceptions = const {},
     this.isAutoCut = false,
+    this.isRawFontA = true,
     this.paperSize = 58,
     this.fontSize = 1,
     this.isActive = true,
@@ -47,6 +49,7 @@ class PrinterDevice {
       'roleBrands': roleBrands,
       'roleProductExceptions': roleProductExceptions,
       'isAutoCut': isAutoCut,
+      'isRawFontA': isRawFontA,
       'paperSize': paperSize,
       'fontSize': fontSize,
       'isActive': isActive,
@@ -115,6 +118,7 @@ class PrinterDevice {
       roleBrands: parsedRoleBrands,
       roleProductExceptions: parsedRoleProductExceptions,
       isAutoCut: json['isAutoCut'] as bool? ?? false,
+      isRawFontA: json['isRawFontA'] as bool? ?? true,
       paperSize: json['paperSize'] as int? ?? 58,
       fontSize: json['fontSize'] as int? ?? 1,
       isActive: json['isActive'] as bool? ?? true,
@@ -133,6 +137,7 @@ class PrinterDevice {
     Map<String, List<String>>? roleBrands,
     Map<String, List<int>>? roleProductExceptions,
     bool? isAutoCut,
+    bool? isRawFontA,
     int? paperSize,
     int? fontSize,
     bool? isActive,
@@ -149,6 +154,7 @@ class PrinterDevice {
       roleBrands: roleBrands ?? this.roleBrands,
       roleProductExceptions: roleProductExceptions ?? this.roleProductExceptions,
       isAutoCut: isAutoCut ?? this.isAutoCut,
+      isRawFontA: isRawFontA ?? this.isRawFontA,
       paperSize: paperSize ?? this.paperSize,
       fontSize: fontSize ?? this.fontSize,
       isActive: isActive ?? this.isActive,
