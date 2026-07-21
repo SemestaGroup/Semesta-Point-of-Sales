@@ -948,8 +948,9 @@ class RecapViewTablet extends StatelessWidget {
             final endTime =
                 endTimeStr.isNotEmpty ? DateTime.tryParse(endTimeStr) : null;
             final dateStr = DateFormat('dd MMM yyyy').format(startTime);
+            final isClosed = (shift['status'] as num?)?.toInt() == 0 || shift['shift_name'] == 'End of Day';
             final timeRange =
-                "${DateFormat('HH:mm').format(startTime)} - ${endTime != null ? DateFormat('HH:mm').format(endTime) : 'Active'}";
+                "${DateFormat('HH:mm').format(startTime)} - ${endTime != null ? DateFormat('HH:mm').format(endTime) : (isClosed ? 'Closed' : 'Active')}";
 
             // Compute System Cash from reconciliation_data if available (more accurate)
             int systemCash =

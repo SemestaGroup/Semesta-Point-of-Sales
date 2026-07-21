@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -58,10 +59,11 @@ class ShiftController extends GetxController {
           try {
             final decoded = jsonDecode(rawSession);
             final session = ShiftSessionModel.fromJson(decoded);
-            
+
             // ponytail: shift session has 24h ceiling. If it is older than 24h, automatically clear it to avoid stale shift usage.
             if (DateTime.now().difference(session.startTime).inHours > 24) {
-              debugPrint('[ShiftController] loadShiftData: Stale active shift (>24h) detected, clearing local session.');
+              debugPrint(
+                  '[ShiftController] loadShiftData: Stale active shift (>24h) detected, clearing local session.');
               await _dbService.rawQuery(
                   "DELETE FROM pos_options WHERE option_name = 'pos_active_session'");
               activeShift.value = null;
@@ -302,7 +304,9 @@ class ShiftController extends GetxController {
               ppMethod.contains('tunai') ||
               localMethod.contains('cash') ||
               localMethod.contains('tunai') ||
-              Constants.cashPaymentModeIds.contains(ppMethod)) ? '1' : 'other';
+              Constants.cashPaymentModeIds.contains(ppMethod))
+          ? '1'
+          : 'other';
 
       final String key = matchedId ??
           (ppMethod.isNotEmpty
@@ -311,7 +315,9 @@ class ShiftController extends GetxController {
       final String name = matchedName ??
           (localMethod.isNotEmpty
               ? r['local_method']
-              : (Constants.cashPaymentModeIds.contains(ppMethod) ? 'Cash' : 'Other'));
+              : (Constants.cashPaymentModeIds.contains(ppMethod)
+                  ? 'Cash'
+                  : 'Other'));
 
       totals[key] = (totals[key] ?? 0) + amount;
       counts[key] = (counts[key] ?? 0) + 1;
@@ -604,9 +610,12 @@ class ShiftController extends GetxController {
 
     // 3. Trigger immediate sync to server
     try {
-      Get.find<SyncService>().pushShiftLogs();
+      final syncService = Get.find<SyncService>();
+      syncService.pushShiftLogs();
+      // Trigger global point sync safely in background after shift close
+      unawaited(syncService.syncGlobalPoints());
     } catch (e) {
-      debugPrint("ShiftController: Failed to trigger sync: $e");
+      debugPrint("ShiftController: Failed to trigger sync/points: $e");
     }
 
     return {
@@ -639,7 +648,8 @@ class ShiftController extends GetxController {
       for (var pm in pms) {
         final String name = (pm['name']?.toString() ?? '').toLowerCase();
         final String id = pm['id']?.toString() ?? '';
-        if (Constants.cashPaymentModeIds.contains(id) || name.contains('cash')) {
+        if (Constants.cashPaymentModeIds.contains(id) ||
+            name.contains('cash')) {
           expectedCash += (pm['recorded'] as num?)?.toInt() ?? 0;
         }
       }
@@ -692,6 +702,17 @@ class ShiftController extends GetxController {
 
       // Save EOD record to DB
       await _dbService.insert('shift_sessions', eodShift.toJson());
+
+      // closeShift already triggers this when an active shift was closed. For an
+      // EOD without an active shift, trigger it here as the fallback.
+      try {
+        if (closeResult == null && Get.isRegistered<SyncService>()) {
+          unawaited(Get.find<SyncService>().syncGlobalPoints());
+        }
+      } catch (e) {
+        debugPrint(
+            "ShiftController: Failed to trigger points sync during EOD: $e");
+      }
 
       // If closeResult was null, we still return a valid map to trigger the success UI and print
       return {
@@ -780,7 +801,9 @@ class ShiftController extends GetxController {
       final name = matchedName ??
           (localMethod.isNotEmpty
               ? r['local_method']
-              : (Constants.cashPaymentModeIds.contains(ppMethod) ? 'Cash' : 'Other'));
+              : (Constants.cashPaymentModeIds.contains(ppMethod)
+                  ? 'Cash'
+                  : 'Other'));
       totals[key] = (totals[key] ?? 0) + amount;
       if (!paymentModesList.any((m) => m['id'] == key))
         paymentModesList.add({'id': key, 'name': name, 'recorded': 0});

@@ -33,6 +33,10 @@ class SyncService extends GetxService {
 
   RxBool isProcessingQueue = false.obs;
   RxBool isSyncing = false.obs;
+  bool _isSyncingPoints = false;
+  bool _isMemberRefreshAfterPointSyncPending = false;
+  Future<void>? _queueProcessingFuture;
+  Future<bool>? _membersSyncFuture;
   Timer? _backgroundSyncTimer;
   Timer? _syncIndicatorTimer;
 
@@ -49,7 +53,8 @@ class SyncService extends GetxService {
     });
 
     // Background periodic sync — runs every 30s silently without blocking any UI
-    _backgroundSyncTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+    _backgroundSyncTimer =
+        Timer.periodic(const Duration(seconds: 30), (_) async {
       // Avoid starting background sync if the user is currently busy in the POS (checkout, payment, or loading)
       if (Get.isRegistered<HomeController>()) {
         final homeController = Get.find<HomeController>();
@@ -63,18 +68,20 @@ class SyncService extends GetxService {
       }
       debugPrint("SyncService: [Background] Periodic queue flush triggered.");
       await processQueue();
-      
+
       // Pull remote orders and payments periodically so transactions made on other devices appear automatically
       try {
         await pullRemoteOrders();
         await pullRemotePayments();
       } catch (e) {
-        debugPrint("SyncService: [Background] Failed to pull remote orders/payments: $e");
+        debugPrint(
+            "SyncService: [Background] Failed to pull remote orders/payments: $e");
       }
     });
 
     // Real-time Sync Indicator update loop (runs every 5s)
-    _syncIndicatorTimer = Timer.periodic(const Duration(seconds: 5), (_) => _updateSyncIndicatorState());
+    _syncIndicatorTimer = Timer.periodic(
+        const Duration(seconds: 5), (_) => _updateSyncIndicatorState());
   }
 
   @override
@@ -83,8 +90,6 @@ class SyncService extends GetxService {
     _syncIndicatorTimer?.cancel();
     super.onClose();
   }
-
-
 
   /// Orchestrates the mandatory post-login sequence in the exact order requested
   Future<void> runPostLoginSync() async {
@@ -359,7 +364,9 @@ class SyncService extends GetxService {
 
             // Get local kitchen status from transaction details.
             // If all items are completed (1), we treat the local order as sent (1).
-            final List<Map<String, dynamic>> localKitchenDetails = await _dbService.rawQuery(
+            final List<
+                Map<String,
+                    dynamic>> localKitchenDetails = await _dbService.rawQuery(
                 "SELECT COUNT(*) as completed_count, COUNT(id_penjualan_detail) as total_count "
                 "FROM transaction_details WHERE id_penjualan = ? AND kitchen_status = 1",
                 [localIdPenjualan]);
@@ -596,10 +603,8 @@ class SyncService extends GetxService {
               String orderTypesJson = '';
               String? prodDescription;
               if (prodHit.isNotEmpty) {
-                produkId =
-                    (prodHit.first['id_produk'] as num?)?.toInt() ?? 0;
-                orderTypesJson =
-                    prodHit.first['order_types']?.toString() ?? '';
+                produkId = (prodHit.first['id_produk'] as num?)?.toInt() ?? 0;
+                orderTypesJson = prodHit.first['order_types']?.toString() ?? '';
                 prodDescription = prodHit.first['description']?.toString();
               }
 
@@ -722,10 +727,9 @@ class SyncService extends GetxService {
               transactions.isNotEmpty) {
             final summary = transactions[0]['summary'];
             if (summary != null) {
-              expected = double.tryParse(
-                      summary['expected_cash']?.toString() ??
-                          summary['total_system_cash']?.toString() ??
-                          '0') ??
+              expected = double.tryParse(summary['expected_cash']?.toString() ??
+                      summary['total_system_cash']?.toString() ??
+                      '0') ??
                   0;
               actual = double.tryParse(summary['actual_cash']?.toString() ??
                       summary['total_actual_cash']?.toString() ??
@@ -757,10 +761,9 @@ class SyncService extends GetxService {
               0;
         }
         if (closingBal == 0) {
-          closingBal = double.tryParse(
-                  logJson['closing_balance']?.toString() ??
-                      logJson['closing_cash']?.toString() ??
-                      '0') ??
+          closingBal = double.tryParse(logJson['closing_balance']?.toString() ??
+                  logJson['closing_cash']?.toString() ??
+                  '0') ??
               0;
         }
 
@@ -784,7 +787,8 @@ class SyncService extends GetxService {
           // Back-fill starting_balance and total_cash_actual if they are currently 0 in the local DB
           // and we have non-zero data (EOD shifts_summary or direct shift properties)
           final localShift = localCheck.first;
-          final localStarting = (localShift['starting_balance'] as num?)?.toInt() ?? 0;
+          final localStarting =
+              (localShift['starting_balance'] as num?)?.toInt() ?? 0;
           if (localStarting == 0 && startingBal > 0) {
             await _dbService.update(
               'shift_sessions',
@@ -808,8 +812,10 @@ class SyncService extends GetxService {
             final shiftsSummary = transactions[0]['shifts_summary'];
             if (shiftsSummary is List) {
               for (final s in shiftsSummary) {
-                final linkedRemoteId = int.tryParse(s['id_shift']?.toString() ?? '');
-                final openingBalance = (s['opening_balance'] as num?)?.toInt() ?? 0;
+                final linkedRemoteId =
+                    int.tryParse(s['id_shift']?.toString() ?? '');
+                final openingBalance =
+                    (s['opening_balance'] as num?)?.toInt() ?? 0;
                 final actualCash = (s['actual_cash'] as num?)?.toInt() ?? 0;
                 if (linkedRemoteId != null && linkedRemoteId > 0) {
                   // Find if we have this remote shift locally with starting_balance = 0
@@ -828,7 +834,8 @@ class SyncService extends GetxService {
                       'id_remote = ?',
                       [linkedRemoteId],
                     );
-                    debugPrint('SyncService: Back-filled starting_balance=$openingBalance for remote shift $linkedRemoteId');
+                    debugPrint(
+                        'SyncService: Back-filled starting_balance=$openingBalance for remote shift $linkedRemoteId');
                   }
                 }
               }
@@ -938,13 +945,29 @@ class SyncService extends GetxService {
       debugPrint(
           "SyncService: Inserted new sync command for $endpoint ($localId).");
     }
-    
+
     _updateSyncIndicatorState();
   }
 
   Future<void> processQueue() async {
-    if (isProcessingQueue.value) return;
+    final activeProcess = _queueProcessingFuture;
+    if (activeProcess != null) {
+      await activeProcess;
+      return;
+    }
 
+    final currentProcess = _processQueue();
+    _queueProcessingFuture = currentProcess;
+    try {
+      await currentProcess;
+    } finally {
+      if (identical(_queueProcessingFuture, currentProcess)) {
+        _queueProcessingFuture = null;
+      }
+    }
+  }
+
+  Future<void> _processQueue() async {
     // Add a reasonable timeout to connectivity check to avoid hanging the queue
     final hasConnection = await InternetConnectionChecker()
         .hasConnection
@@ -969,13 +992,15 @@ class SyncService extends GetxService {
           final body = row['body']?.toString() ?? '';
           if (body.contains('starting_balance')) {
             await _dbService.delete('sync_queue', 'id = ?', [row['id']]);
-            debugPrint("SyncService: Cleaned up corrupted shift log sync queue item: ${row['id']}");
+            debugPrint(
+                "SyncService: Cleaned up corrupted shift log sync queue item: ${row['id']}");
             // Reset the sync status for corresponding local shift to allow it to be re-pushed fresh
             final localId = row['local_id']?.toString();
             if (localId != null) {
               final localIdInt = int.tryParse(localId);
               if (localIdInt != null) {
-                await _dbService.update('shift_sessions', {'is_synced': 0}, 'id_shift = ?', [localIdInt]);
+                await _dbService.update('shift_sessions', {'is_synced': 0},
+                    'id_shift = ?', [localIdInt]);
                 cleanedAny = true;
               }
             }
@@ -1120,7 +1145,7 @@ class SyncService extends GetxService {
         await Future.delayed(const Duration(seconds: 2));
         debugPrint("SyncService: Restarting loop...");
       }
-      
+
       // Update sync indicator when queue is processed successfully
       lastSuccessSyncTime.value = DateTime.now();
       _updateSyncIndicatorState();
@@ -1500,8 +1525,10 @@ class SyncService extends GetxService {
             endpoint.contains('pos_payments')) {
           debugPrint(
               "SyncService: Triggering background member sync to update points...");
-          syncMembers().catchError((e) =>
-              debugPrint("SyncService: Background points refresh failed: $e"));
+          unawaited(syncMembers().catchError((e) {
+            debugPrint("SyncService: Background points refresh failed: $e");
+            return false;
+          }));
         }
 
         // After payment is recorded, refresh the order list so the status updates immediately
@@ -1570,7 +1597,7 @@ class SyncService extends GetxService {
   Future<Map<String, int>> getUnsyncedDataCounts() async {
     try {
       final db = await _dbService.database;
-      
+
       // 1. Count pending/failed queue items
       final pendingCountResult = await db.rawQuery(
           "SELECT COUNT(*) as count FROM sync_queue WHERE status IN ('pending', 'failed') AND retry_count < 5");
@@ -1608,14 +1635,26 @@ class SyncService extends GetxService {
         'members': unsyncedMembers,
         'shifts': unsyncedShifts,
         'cash_flow': unsyncedCashFlow,
-        'total': pendingQueue + unsyncedTx + unsyncedPm + unsyncedMembers + unsyncedShifts + unsyncedCashFlow,
+        'total': pendingQueue +
+            unsyncedTx +
+            unsyncedPm +
+            unsyncedMembers +
+            unsyncedShifts +
+            unsyncedCashFlow,
       };
 
       unsyncedCounts.assignAll(updatedMap);
       return updatedMap;
     } catch (e) {
       debugPrint("SyncService: Error checking unsynced data counts: $e");
-      final fallback = {'queue': 0, 'transactions': 0, 'payments': 0, 'members': 0, 'shifts': 0, 'total': 0};
+      final fallback = {
+        'queue': 0,
+        'transactions': 0,
+        'payments': 0,
+        'members': 0,
+        'shifts': 0,
+        'total': 0
+      };
       unsyncedCounts.assignAll(fallback);
       return fallback;
     }
@@ -1653,7 +1692,8 @@ class SyncService extends GetxService {
         final isOwnerOrManager = role == 'owner' || role == 'supervisor';
 
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
           backgroundColor: Colors.white,
           child: Container(
             padding: EdgeInsets.all(24.w),
@@ -1702,7 +1742,7 @@ class SyncService extends GetxService {
                   ],
                 ),
                 SizedBox(height: 20.h),
-                
+
                 // List detail data unsynced
                 Container(
                   padding: EdgeInsets.all(16.w),
@@ -1714,17 +1754,21 @@ class SyncService extends GetxService {
                   child: Column(
                     children: [
                       if ((counts['transactions'] ?? 0) > 0)
-                        _buildUnsyncedRow("Transaksi Baru", counts['transactions']!),
+                        _buildUnsyncedRow(
+                            "Transaksi Baru", counts['transactions']!),
                       if ((counts['payments'] ?? 0) > 0)
-                        _buildUnsyncedRow("Pembayaran Penjualan", counts['payments']!),
+                        _buildUnsyncedRow(
+                            "Pembayaran Penjualan", counts['payments']!),
                       if ((counts['members'] ?? 0) > 0)
                         _buildUnsyncedRow("Pelanggan Baru", counts['members']!),
                       if ((counts['shifts'] ?? 0) > 0)
                         _buildUnsyncedRow("Sesi Shift", counts['shifts']!),
                       if ((counts['cash_flow'] ?? 0) > 0)
-                        _buildUnsyncedRow("Kas Masuk/Keluar", counts['cash_flow']!),
+                        _buildUnsyncedRow(
+                            "Kas Masuk/Keluar", counts['cash_flow']!),
                       if ((counts['queue'] ?? 0) > 0)
-                        _buildUnsyncedRow("Antrean Sinkronisasi", counts['queue']!),
+                        _buildUnsyncedRow(
+                            "Antrean Sinkronisasi", counts['queue']!),
                     ],
                   ),
                 ),
@@ -1766,7 +1810,8 @@ class SyncService extends GetxService {
                         child: LinearProgressIndicator(
                           value: syncProgress.value,
                           backgroundColor: Colors.blue.shade50,
-                          valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              AppTheme.primaryColor),
                           minHeight: 6.h,
                         ),
                       ),
@@ -1793,9 +1838,11 @@ class SyncService extends GetxService {
                     OutlinedButton(
                       onPressed: isSyncActive ? null : () => Get.back(),
                       style: OutlinedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 16.w, vertical: 12.h),
                         side: BorderSide(color: Colors.grey.shade300),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.r)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10.r)),
                       ),
                       child: Text(
                         "Batal",
@@ -1815,7 +1862,7 @@ class SyncService extends GetxService {
                           : () async {
                               // Run full sync sequence
                               await syncFullData();
-                              
+
                               // Re-check count
                               final reCheck = await getUnsyncedDataCounts();
                               if (reCheck['total'] == 0) {
@@ -1838,12 +1885,15 @@ class SyncService extends GetxService {
                               height: 14.w,
                               child: const CircularProgressIndicator(
                                 strokeWidth: 1.5,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.white),
                               ),
                             )
                           : Icon(Icons.sync, size: 16.sp),
                       label: Text(
-                        isSyncActive ? "Menyelaraskan..." : "Sinkronkan & Keluar",
+                        isSyncActive
+                            ? "Menyelaraskan..."
+                            : "Sinkronkan & Keluar",
                         style: TextStyle(
                           fontFamily: AppTheme.fontBold,
                           fontSize: 14.sp,
@@ -1852,8 +1902,10 @@ class SyncService extends GetxService {
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.primaryColor,
-                        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.r)),
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 16.w, vertical: 12.h),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10.r)),
                         elevation: 0,
                       ),
                     ),
@@ -1861,7 +1913,9 @@ class SyncService extends GetxService {
                 ),
 
                 // Bypass Force Logout for Owner / Manager (only visible when not active syncing)
-                if (isOwnerOrManager && onForceLogout != null && !isSyncActive) ...[
+                if (isOwnerOrManager &&
+                    onForceLogout != null &&
+                    !isSyncActive) ...[
                   SizedBox(height: 16.h),
                   const Divider(),
                   TextButton.icon(
@@ -1877,7 +1931,9 @@ class SyncService extends GetxService {
                             "Tindakan ini akan menghapus semua data offline yang belum sinkron secara permanen. Apakah Anda yakin?",
                           ),
                           actions: [
-                            TextButton(onPressed: () => Get.back(), child: const Text("Batal")),
+                            TextButton(
+                                onPressed: () => Get.back(),
+                                child: const Text("Batal")),
                             ElevatedButton(
                               onPressed: () {
                                 if (Get.isDialogOpen ?? false) {
@@ -1885,14 +1941,17 @@ class SyncService extends GetxService {
                                 }
                                 onForceLogout();
                               },
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                              child: const Text("Ya, Paksa Keluar", style: TextStyle(color: Colors.white)),
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red),
+                              child: const Text("Ya, Paksa Keluar",
+                                  style: TextStyle(color: Colors.white)),
                             ),
                           ],
                         ),
                       );
                     },
-                    icon: Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 16.sp),
+                    icon: Icon(Icons.warning_amber_rounded,
+                        color: Colors.red.shade700, size: 16.sp),
                     label: Text(
                       "Owner Bypass: Tetap Keluar & Hapus Data",
                       style: TextStyle(
@@ -2058,9 +2117,10 @@ class SyncService extends GetxService {
                       Get.isRegistered<ShiftController>()) {
                     final shiftCtrl = Get.find<ShiftController>();
                     final session = ShiftSessionModel.fromJson(decoded);
-                    
+
                     // ponytail: ignore stale remote shift (>24h old) to prevent local device from joining outdated server sessions.
-                    if (DateTime.now().difference(session.startTime).inHours <= 24) {
+                    if (DateTime.now().difference(session.startTime).inHours <=
+                        24) {
                       if (shiftCtrl.activeShift.value == null) {
                         batch.insert(
                             'pos_options',
@@ -2072,7 +2132,8 @@ class SyncService extends GetxService {
                         shiftCtrl.activeShift.value = session;
                       }
                     } else {
-                      debugPrint('SyncService: Stale remote shift session (>24h) ignored: ${session.shiftName} starting at ${session.startTime}');
+                      debugPrint(
+                          'SyncService: Stale remote shift session (>24h) ignored: ${session.shiftName} starting at ${session.startTime}');
                     }
                   } else if (key == 'pos_active_staff') {
                     batch.insert(
@@ -2228,7 +2289,150 @@ class SyncService extends GetxService {
     }
   }
 
-  Future<void> syncMembers() async {
+  Future<bool> _hasPendingPointSourceData() async {
+    final result = await _dbService.rawQuery(
+      '''
+        SELECT COUNT(*) AS count
+        FROM sync_queue
+        WHERE status IN ('pending', 'failed')
+          AND (
+            endpoint LIKE ? OR endpoint LIKE ? OR endpoint LIKE ?
+          )
+      ''',
+      ['%pos_order%', '%pos_payments%', '%pos_transaction%'],
+    );
+    final pendingQueue = (result.first['count'] as num?)?.toInt() ?? 0;
+    if (pendingQueue > 0) return true;
+
+    // A queue item may not have been created yet (for example after an app
+    // interruption). Never process points while its source sale/payment is
+    // still local-only.
+    final pendingTransactions = await _dbService.rawQuery(
+      '''
+        SELECT COUNT(*) AS count
+        FROM transactions
+        WHERE is_synced = 0
+          AND (status IS NULL OR status != 5)
+      ''',
+    );
+    if (((pendingTransactions.first['count'] as num?)?.toInt() ?? 0) > 0) {
+      return true;
+    }
+
+    final pendingPayments = await _dbService.rawQuery(
+      'SELECT COUNT(*) AS count FROM pos_payments WHERE is_synced = 0',
+    );
+    return ((pendingPayments.first['count'] as num?)?.toInt() ?? 0) > 0;
+  }
+
+  Future<void> syncGlobalPoints() async {
+    if (_isSyncingPoints) {
+      debugPrint(
+          "SyncService: Global point synchronization is already in progress. Skipping.");
+      return;
+    }
+    _isSyncingPoints = true;
+    debugPrint("SyncService: Starting global point synchronization check...");
+
+    try {
+      // 1. Queue every remaining local sale/payment, then wait for the shared
+      // queue processor to finish before asking the server to calculate points.
+      await pushLocalTransactions();
+      await pushLocalPayments();
+      await processQueue();
+
+      if (await _hasPendingPointSourceData()) {
+        debugPrint(
+            'SyncService: Deferring global points sync because transaction/payment data is not fully synced.');
+        return;
+      }
+
+      // 2. Fetch point summary
+      final summaryResp = await _apiService.getUnsyncedPointsSummary();
+      if (summaryResp.responsestate == Constants.successState &&
+          summaryResp.data != null) {
+        final data = summaryResp.data;
+        final unsyncedRecords =
+            (data['unsynced_records'] as num?)?.toInt() ?? 0;
+        final unsyncedPoints = (data['unsynced_points'] as num?)?.toInt() ?? 0;
+
+        debugPrint(
+            "SyncService: Unsynced global points: $unsyncedPoints points in $unsyncedRecords records.");
+
+        if (unsyncedRecords > 0) {
+          // 3. Trigger server points processing
+          final syncResp = await _apiService.syncPoints();
+          if (syncResp.responsestate == Constants.successState) {
+            _isMemberRefreshAfterPointSyncPending = true;
+            debugPrint(
+                "SyncService: Successfully triggered global points sync. Response: ${syncResp.message}");
+          } else {
+            debugPrint(
+                "SyncService: Failed to trigger global points sync: ${syncResp.message}");
+            ErrorLogService.log(
+              category: 'sync',
+              errCode: 'SYNC_GLOBAL_POINTS_API_FAIL',
+              errMsg: syncResp.message ?? 'Unknown point sync API error',
+            );
+          }
+        } else {
+          debugPrint(
+              "SyncService: No unsynced global points found. Skipping sync trigger.");
+        }
+      } else {
+        debugPrint(
+            "SyncService: Failed to fetch unsynced points summary: ${summaryResp.message}");
+        ErrorLogService.log(
+          category: 'sync',
+          errCode: 'SYNC_GLOBAL_POINTS_SUMMARY_FAIL',
+          errMsg: summaryResp.message ?? 'Unknown point summary API error',
+        );
+      }
+    } catch (e) {
+      debugPrint("SyncService: Error during syncGlobalPoints execution: $e");
+      ErrorLogService.log(
+        category: 'sync',
+        errCode: 'SYNC_GLOBAL_POINTS_FAIL',
+        errMsg: e.toString(),
+      );
+    } finally {
+      // Refresh only after a successful point sync. If refreshing members fails,
+      // keep the flag set so the periodic retry can safely try again.
+      if (_isMemberRefreshAfterPointSyncPending) {
+        try {
+          final refreshed = await syncMembers();
+          if (refreshed) {
+            _isMemberRefreshAfterPointSyncPending = false;
+          } else {
+            debugPrint(
+                'SyncService: Member point refresh was not successful; retry remains pending.');
+          }
+        } catch (e) {
+          debugPrint(
+              "SyncService: Failed to refresh local member points after sync: $e");
+        }
+      }
+      _isSyncingPoints = false;
+      debugPrint("SyncService: Global point synchronization check completed.");
+    }
+  }
+
+  Future<bool> syncMembers() async {
+    final activeSync = _membersSyncFuture;
+    if (activeSync != null) return activeSync;
+
+    final currentSync = _syncMembers();
+    _membersSyncFuture = currentSync;
+    try {
+      return await currentSync;
+    } finally {
+      if (identical(_membersSyncFuture, currentSync)) {
+        _membersSyncFuture = null;
+      }
+    }
+  }
+
+  Future<bool> _syncMembers() async {
     syncStatus.value = "Pulling Customers...";
     final response = await _apiService.getMember();
     if (response.responsestate == Constants.successState &&
@@ -2257,7 +2461,9 @@ class SyncService extends GetxService {
       }
       await batch.commit(noResult: true);
       syncStatus.value = "Customers Updated";
+      return true;
     }
+    return false;
   }
 
   Future<void> pushLocalMembers() async {
@@ -2380,7 +2586,10 @@ class SyncService extends GetxService {
 
       final map = {
         'clientid': row['id_member'],
-        'date': row['tgl_penjualan'].toString().split('T')[0].split(' ')[0], // YYYY-MM-DD
+        'date': row['tgl_penjualan']
+            .toString()
+            .split('T')[0]
+            .split(' ')[0], // YYYY-MM-DD
         'datecreated': row['tgl_penjualan'].toString(),
         'prefix': 'POS-',
         'id_pos': row['id_pos'] ?? "",
@@ -2461,8 +2670,11 @@ class SyncService extends GetxService {
         'id_pos': row['id_pos'],
         'invoiceid': invoiceIdStr,
         'amount': row['amount']?.toString() ?? '0',
-        'paymentmode': row['paymentmode']?.toString().toLowerCase() ?? Constants.defaultCashPaymentModeId,
-        'paymentmethod': row['paymentmethod'] ?? row['paymentmode'] ?? Constants.defaultCashPaymentModeId,
+        'paymentmode': row['paymentmode']?.toString().toLowerCase() ??
+            Constants.defaultCashPaymentModeId,
+        'paymentmethod': row['paymentmethod'] ??
+            row['paymentmode'] ??
+            Constants.defaultCashPaymentModeId,
         'date': row['date']?.toString() ??
             DateTime.now().toIso8601String().split('T')[0],
         'daterecorded':
@@ -2485,8 +2697,6 @@ class SyncService extends GetxService {
     if (trimmed.isEmpty || trimmed == 'Guest' || trimmed == 'null') return '';
     return trimmed.endsWith('/') ? trimmed : '$trimmed/';
   }
-
-
 
   Future<void> pushShiftLogs() async {
     final unsynced = await _dbService

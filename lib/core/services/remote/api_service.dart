@@ -20,6 +20,13 @@ import 'package:semesta_pos/core/services/user_service.dart';
 import 'package:semesta_pos/core/util/constans.dart';
 
 class ApiService extends GetxService {
+  Uri _getUriV2(String resource) {
+    final userService = Get.find<UserService>();
+    String baseUrl = userService.getBaseUrl();
+    if (!baseUrl.endsWith('/')) baseUrl += '/';
+    return Uri.parse('${baseUrl}api/v2/$resource');
+  }
+
   Map<String, String> _getAuthHeaders({bool isMultipart = false}) {
     final userService = Get.find<UserService>();
     final headers = {
@@ -544,6 +551,90 @@ class ApiService extends GetxService {
           responsestate: Constants.errorState,
           message: 'Server error: $e',
           data: null);
+    }
+  }
+
+  Future<ResponseApiModel> getUnsyncedPointsSummary() async {
+    try {
+      final responseApi = await http
+          .get(
+            _getUriV2('pos-points/unsynced-summary'),
+            headers: _getAuthHeaders(),
+          )
+          .timeout(const Duration(seconds: 15));
+      if (responseApi.statusCode != 200) {
+        return ResponseApiModel(
+          responsestate: Constants.errorState,
+          message: 'Gagal cek summary point (HTTP ${responseApi.statusCode})',
+          data: null,
+        );
+      }
+
+      final decoded = jsonDecode(responseApi.body);
+      final isSuccess = decoded is Map &&
+          (decoded['status'] == true || decoded['status'] == 'true');
+      if (!isSuccess) {
+        return ResponseApiModel(
+          responsestate: Constants.errorState,
+          message: decoded is Map
+              ? decoded['message']?.toString() ?? 'Gagal cek summary point'
+              : 'Respons summary point tidak valid',
+          data: null,
+        );
+      }
+      return ResponseApiModel(
+        responsestate: Constants.successState,
+        message: decoded['message']?.toString() ?? 'Success',
+        data: decoded['data'],
+      );
+    } catch (e) {
+      return ResponseApiModel(
+        responsestate: Constants.errorState,
+        message: 'Error getUnsyncedPointsSummary: $e',
+        data: null,
+      );
+    }
+  }
+
+  Future<ResponseApiModel> syncPoints() async {
+    try {
+      final responseApi = await http
+          .post(
+            _getUriV2('pos-points/sync'),
+            headers: _getAuthHeaders(),
+          )
+          .timeout(const Duration(seconds: 15));
+      if (responseApi.statusCode != 200) {
+        return ResponseApiModel(
+          responsestate: Constants.errorState,
+          message: 'Gagal sync point (HTTP ${responseApi.statusCode})',
+          data: null,
+        );
+      }
+
+      final decoded = jsonDecode(responseApi.body);
+      final isSuccess = decoded is Map &&
+          (decoded['status'] == true || decoded['status'] == 'true');
+      if (!isSuccess) {
+        return ResponseApiModel(
+          responsestate: Constants.errorState,
+          message: decoded is Map
+              ? decoded['message']?.toString() ?? 'Gagal sync point'
+              : 'Respons sync point tidak valid',
+          data: null,
+        );
+      }
+      return ResponseApiModel(
+        responsestate: Constants.successState,
+        message: decoded['message']?.toString() ?? 'Synchronization completed',
+        data: decoded['data'],
+      );
+    } catch (e) {
+      return ResponseApiModel(
+        responsestate: Constants.errorState,
+        message: 'Error syncPoints: $e',
+        data: null,
+      );
     }
   }
 
@@ -1196,7 +1287,9 @@ class ApiService extends GetxService {
       String failMessage = 'Gagal menyimpan data';
       try {
         final errResponse = jsonDecode(responseApi.body);
-        if (errResponse is Map && errResponse.containsKey('message') && errResponse['message'] != null) {
+        if (errResponse is Map &&
+            errResponse.containsKey('message') &&
+            errResponse['message'] != null) {
           failMessage = errResponse['message'].toString();
         }
       } catch (_) {}
@@ -1871,7 +1964,8 @@ class ApiService extends GetxService {
       if (responseApi.statusCode == 200 || responseApi.statusCode == 201) {
         bool status = false;
         if (dataResponse is Map && dataResponse.containsKey('status')) {
-          status = dataResponse['status'] == true || dataResponse['status'] == 'true';
+          status = dataResponse['status'] == true ||
+              dataResponse['status'] == 'true';
         } else {
           status = true; // Assume success if 2xx and no explicit status false
         }
@@ -1889,7 +1983,8 @@ class ApiService extends GetxService {
       if (dataResponse is Map) message = dataResponse['message'];
       return ResponseApiModel(
         responsestate: Constants.errorState,
-        message: message ?? 'Failed to add expense (HTTP ${responseApi.statusCode})',
+        message:
+            message ?? 'Failed to add expense (HTTP ${responseApi.statusCode})',
         data: null,
       );
     } catch (e) {
@@ -1907,7 +2002,7 @@ class ApiService extends GetxService {
       final uri = _getUri('pos_expenses');
       debugPrint('=== [getExpenses] ===');
       debugPrint('URL    : $uri');
-      
+
       final responseApi = await http.get(
         uri,
         headers: _getAuthHeaders(),
@@ -1923,7 +2018,9 @@ class ApiService extends GetxService {
         return ResponseApiModel(
           responsestate: Constants.successState,
           message: 'Berhasil memuat pengeluaran',
-          data: (dataResponse is Map) ? (dataResponse['data'] ?? dataResponse) : dataResponse,
+          data: (dataResponse is Map)
+              ? (dataResponse['data'] ?? dataResponse)
+              : dataResponse,
         );
       }
 
@@ -1931,7 +2028,8 @@ class ApiService extends GetxService {
       if (dataResponse is Map) message = dataResponse['message'];
       return ResponseApiModel(
         responsestate: Constants.errorState,
-        message: message ?? 'Failed to get expenses (HTTP ${responseApi.statusCode})',
+        message: message ??
+            'Failed to get expenses (HTTP ${responseApi.statusCode})',
         data: null,
       );
     } catch (e) {

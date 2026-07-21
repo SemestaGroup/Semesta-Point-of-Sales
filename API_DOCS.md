@@ -2112,7 +2112,46 @@ lastname wajib: kalau kosong default "-"
         "taxrate2": null,
         "expenseid": "4",
         "customfields": []
-    },
+    }
 ]
 ```
+
+## 22. Global Member Points (V2 API)
+
+### `pos-points/unsynced-summary`
+* **Method**: `GET`
+* **URL**: `{{base_url}}api/v2/pos-points/unsynced-summary`
+* **Headers**:
+    * `authtoken`: `<token>`
+
+**Example Success Response:**
+```json
+{
+    "status": true,
+    "message": "Success",
+    "data": {
+        "unsynced_records": 1,
+        "unsynced_points": 3
+    }
+}
+```
+
+### `pos-points/sync`
+* **Method**: `POST`
+* **URL**: `{{base_url}}api/v2/pos-points/sync`
+* **Headers**:
+    * `authtoken`: `<token>`
+
+**Example Success Response:**
+```json
+{
+    "status": true,
+    "message": "Synchronization completed",
+    "data": {
+        "total_records_synced": 1,
+        "total_points_synced": 3
+    }
+}
+```
+
 
