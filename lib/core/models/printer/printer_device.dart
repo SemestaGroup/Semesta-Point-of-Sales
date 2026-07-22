@@ -13,7 +13,9 @@ class PrinterDevice {
   /// other printers that would have matched via brand routing.
   final Map<String, List<int>> roleProductExceptions;
   final bool isAutoCut; // true for large 80mm printers, false for standard 58mm
-  final bool isRawFontA; // true = send ESC M 0 byte, false = bypass raw font override
+  /// true = normal ESC/POS label output; false = Safe plain-text
+  /// output. The field name is retained for backward-compatible storage.
+  final bool isRawFontA;
   final int paperSize; // 58 or 80
   final int fontSize; // 1 (normal), 2 (large), etc.
   bool isActive;

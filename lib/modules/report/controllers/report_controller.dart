@@ -203,7 +203,8 @@ class ReportController extends GetxController {
       // Payment method filter: match against pos_payments.paymentmethod
       final filterMethod = selectedPaymentMethod.value;
       if (filterMethod.isNotEmpty && filterMethod != 'All') {
-        sql += ''' AND LOWER(${DatabaseService.paymentMethodSubquery}) = LOWER(?)''';
+        sql +=
+            ''' AND LOWER(${DatabaseService.paymentMethodSubquery}) = LOWER(?)''';
         args.add(filterMethod);
       }
 
@@ -256,7 +257,7 @@ class ReportController extends GetxController {
         DateTime dateB =
             DateTime.tryParse(b['tgl_penjualan']?.toString() ?? '') ??
                 DateTime(2000);
-        
+
         if (dateA.isAtSameMomentAs(dateB)) {
           final idA = int.tryParse(a['id_penjualan']?.toString() ?? '0') ?? 0;
           final idB = int.tryParse(b['id_penjualan']?.toString() ?? '0') ?? 0;
@@ -761,27 +762,49 @@ class ReportController extends GetxController {
 
       // 4. Items
       for (var item in items) {
-        final double qty = double.tryParse(item['jumlah']?.toString() ?? "1") ?? 1;
+        final double qty =
+            double.tryParse(item['jumlah']?.toString() ?? "1") ?? 1;
         final String rawDesc = item['description']?.toString() ?? "";
         final String rawProd = item['nama_produk']?.toString() ?? "";
         final String rawNote = item['note']?.toString() ?? "";
-        
-        String name = rawDesc.isNotEmpty ? rawDesc : (rawProd.isNotEmpty ? rawProd : rawNote);
+
+        String name = rawDesc.isNotEmpty
+            ? rawDesc
+            : (rawProd.isNotEmpty ? rawProd : rawNote);
         if (name.isEmpty) name = "Item";
 
-        final int subtotal = (double.tryParse(item['subtotal']?.toString() ?? "0") ?? 0).toInt();
+        final int subtotal =
+            (double.tryParse(item['subtotal']?.toString() ?? "0") ?? 0).toInt();
 
         final String prefix = '${qty.toInt()}x ';
 
-        String cleanName = name.replaceAll('_', ' ').replaceAll('|', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+        String cleanName = name
+            .replaceAll('_', ' ')
+            .replaceAll('|', ' ')
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
 
-        final double hargaAwal = double.tryParse(item['hargaAwal']?.toString() ?? item['harga_awal']?.toString() ?? "0") ?? 0;
-        final double hargaJual = double.tryParse(item['harga_jual']?.toString() ?? item['hargaJual']?.toString() ?? "0") ?? 0;
+        final double hargaAwal = double.tryParse(
+                item['hargaAwal']?.toString() ??
+                    item['harga_awal']?.toString() ??
+                    "0") ??
+            0;
+        final double hargaJual = double.tryParse(
+                item['harga_jual']?.toString() ??
+                    item['hargaJual']?.toString() ??
+                    "0") ??
+            0;
         final double base = hargaAwal > 0 ? hargaAwal : hargaJual;
 
         int displaySubtotal = subtotal;
-        final double itemDiscTotal = double.tryParse(item['discountTotal']?.toString() ?? item['discount_total']?.toString() ?? "0") ?? 0;
-        final String discType = item['discountType']?.toString() ?? item['discount_type']?.toString() ?? 'fixed';
+        final double itemDiscTotal = double.tryParse(
+                item['discountTotal']?.toString() ??
+                    item['discount_total']?.toString() ??
+                    "0") ??
+            0;
+        final String discType = item['discountType']?.toString() ??
+            item['discount_type']?.toString() ??
+            'fixed';
         int totalNominal = 0;
 
         if (itemDiscTotal > 0) {
@@ -797,13 +820,15 @@ class ReportController extends GetxController {
           totalNominal = (nominalPerUnit * qty).toInt();
         }
 
-        final String itemPrice = _rawFormatRupiah(displaySubtotal).replaceAll('Rp. ', '');
+        final String itemPrice =
+            _rawFormatRupiah(displaySubtotal).replaceAll('Rp. ', '');
 
         int maxWidth = 24 - prefix.length;
         List<String> wrappedLines = _wrapText(cleanName, maxWidth);
 
         if (wrappedLines.length == 1) {
-          bytes += generator.text(_formatRow('$prefix${wrappedLines[0]}', itemPrice, maxChars),
+          bytes += generator.text(
+              _formatRow('$prefix${wrappedLines[0]}', itemPrice, maxChars),
               styles: const PosStyles(align: PosAlign.left));
         } else {
           bytes += generator.text('$prefix${wrappedLines[0]}',
@@ -811,7 +836,8 @@ class ReportController extends GetxController {
           for (int i = 1; i < wrappedLines.length; i++) {
             String indent = ' ' * prefix.length;
             if (i == wrappedLines.length - 1) {
-              bytes += generator.text(_formatRow('$indent${wrappedLines[i]}', itemPrice, maxChars),
+              bytes += generator.text(
+                  _formatRow('$indent${wrappedLines[i]}', itemPrice, maxChars),
                   styles: const PosStyles(align: PosAlign.left));
             } else {
               bytes += generator.text('$indent${wrappedLines[i]}',
@@ -973,7 +999,9 @@ class ReportController extends GetxController {
     } finally {
       isPrinting.value = false;
     }
-  }  Future<void> printLabelsOnly(Map<String, dynamic> order, List<dynamic> items,
+  }
+
+  Future<void> printLabelsOnly(Map<String, dynamic> order, List<dynamic> items,
       {Map<String, dynamic>? member}) async {
     isPrinting.value = true;
     try {
@@ -1008,15 +1036,18 @@ class ReportController extends GetxController {
       final Map<String, List<String>> skippedByBrand = {};
 
       for (var item in items) {
-        final idProduk = int.tryParse(item['id_produk']?.toString() ?? '0') ?? 0;
+        final idProduk =
+            int.tryParse(item['id_produk']?.toString() ?? '0') ?? 0;
         final brand = itemBrands[idProduk] ?? '';
-        final printer = settingCtrl.resolveProductPrinter('label', idProduk, brand);
+        final printer =
+            settingCtrl.resolveProductPrinter('label', idProduk, brand);
 
         if (printer != null) {
           printJobs.putIfAbsent(printer, () => []).add(item);
         } else {
           final brandLabel = brand.isEmpty ? '(No Brand)' : brand;
-          skippedByBrand.putIfAbsent(brandLabel, () => [])
+          skippedByBrand
+              .putIfAbsent(brandLabel, () => [])
               .add(item['nama_produk']?.toString() ?? 'Item');
           debugPrint(
               'printLabelsOnly: No label printer for item ${item['nama_produk']} (brand: "$brand")');
@@ -1030,7 +1061,7 @@ class ReportController extends GetxController {
           Get.snackbar(
             'Tidak Ada Printer Label',
             'Tidak ada printer label yang dikonfigurasi untuk brand: $brandList.\n'
-            'Silakan tambahkan printer di Pengaturan → Printer Management.',
+                'Silakan tambahkan printer di Pengaturan → Printer Management.',
             duration: const Duration(seconds: 6),
             snackPosition: SnackPosition.BOTTOM,
           );
@@ -1056,11 +1087,21 @@ class ReportController extends GetxController {
       final int idMember =
           int.tryParse(order['id_member']?.toString() ?? '0') ?? 0;
       final isWalkIn = idMember == 0 || idMember == 1;
-      final customerName = isWalkIn
-          ? 'Walk In'
-          : (member?['nama']?.toString() ?? 'Customer #$idMember');
+      // Reprints run outside HomeController, so use the order label persisted
+      // with the transaction before falling back to the member name.
+      final storedOrderLabel = order['label']?.toString().trim() ?? '';
+      final customerName = storedOrderLabel.isNotEmpty
+          ? storedOrderLabel
+          : isWalkIn
+              ? 'Walk In'
+              : (member?['nama']?.toString() ?? 'Customer #$idMember');
       final orderTypeStr = order['order_type']?.toString() ?? 'Dine In';
       final customerWithOrderType = '$customerName ($orderTypeStr)';
+      debugPrint(
+        '[LABEL_REPRINT] header="$customerName" | source='
+        '${storedOrderLabel.isNotEmpty ? 'stored_order_label' : 'member_or_walk_in'} | '
+        'orderCode=$orderCode | itemCount=${items.length}',
+      );
 
       // 4. Print each group to its assigned printer
       for (final entry in printJobs.entries) {
@@ -1081,8 +1122,8 @@ class ReportController extends GetxController {
           final double qtyDouble =
               double.tryParse(item['jumlah']?.toString() ?? '1') ?? 1;
           final int qty = qtyDouble.toInt();
-          final String name =
-              _cleanReprintProductName(item['nama_produk']?.toString() ?? 'Item');
+          final String name = _cleanReprintProductName(
+              item['nama_produk']?.toString() ?? 'Item');
           final String note = item['note']?.toString() ?? '';
 
           final bytes = await settingCtrl.buildLabelEscPos(

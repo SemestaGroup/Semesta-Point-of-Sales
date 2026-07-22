@@ -271,7 +271,7 @@ class HomeController extends GetxController {
   // Filtered cashless payment modes based on the selected order type
   List<Map<String, dynamic>> get filteredCashlessPaymentModes {
     final currentOrderType = selectedOrderType.value;
-    
+
     // Helper to normalize and check match dynamically
     bool isMatch(String modeName, String orderType) {
       final m = modeName.toLowerCase().replaceAll(' ', '');
@@ -285,13 +285,15 @@ class HomeController extends GetxController {
         .toList();
 
     // Check if current order type is one of the merchant types
-    final currentIsMerchant = merchantOrderTypes.any((type) => type == currentOrderType);
+    final currentIsMerchant =
+        merchantOrderTypes.any((type) => type == currentOrderType);
 
     if (currentIsMerchant) {
       // Find the specific payment mode matching this merchant order type
       final merchantMode = allPaymentModes.firstWhereOrNull((mode) {
         final name = (mode['name'] ?? '').toString();
-        if (name.toLowerCase() == 'cash' || name.toLowerCase() == 'tunai') return false;
+        if (name.toLowerCase() == 'cash' || name.toLowerCase() == 'tunai')
+          return false;
         return isMatch(name, currentOrderType);
       });
       if (merchantMode != null) {
@@ -305,8 +307,9 @@ class HomeController extends GetxController {
       final name = (mode['name'] ?? '').toString();
       final lowerName = name.toLowerCase();
       if (lowerName == 'cash' || lowerName == 'tunai') return false;
-      
-      final isMerchantMode = merchantOrderTypes.any((type) => isMatch(name, type));
+
+      final isMerchantMode =
+          merchantOrderTypes.any((type) => isMatch(name, type));
       return !isMerchantMode;
     }).toList();
   }
@@ -397,17 +400,17 @@ class HomeController extends GetxController {
       } else {
         final q = query.toLowerCase().trim();
         final qNormalized = _normalizePhoneNumber(q);
-        
+
         filteredMemberList.value = memberList.where((m) {
           final n = m.nama?.toLowerCase() ?? "";
           final p = m.telepon?.toLowerCase() ?? "";
-          
+
           // If query looks like a phone number, compare normalized versions
           if (qNormalized.isNotEmpty && RegExp(r'^[0-9+\-\s]+$').hasMatch(q)) {
             final pNormalized = _normalizePhoneNumber(p);
             return pNormalized.contains(qNormalized) || p.contains(q);
           }
-          
+
           // Otherwise do normal text matching
           return n.contains(q) || p.contains(q);
         }).toList();
@@ -549,7 +552,8 @@ class HomeController extends GetxController {
         }).toList();
 
         // Apply promo bundling filter if selected
-        if (selectedPromoFilterId.value != 0 && Get.isRegistered<PromoService>()) {
+        if (selectedPromoFilterId.value != 0 &&
+            Get.isRegistered<PromoService>()) {
           final promoService = Get.find<PromoService>();
           final targetPromo = promoService.activePromos.firstWhereOrNull((p) =>
               (int.tryParse(p['id']?.toString() ?? '') ?? 0) ==
@@ -576,7 +580,9 @@ class HomeController extends GetxController {
                     }
                   }
                 }
-                newProducts = newProducts.where((p) => allowedIds.contains(p.idProduk)).toList();
+                newProducts = newProducts
+                    .where((p) => allowedIds.contains(p.idProduk))
+                    .toList();
               } catch (e) {
                 debugPrint("HomeController: Error applying promo filter - $e");
               }
@@ -768,11 +774,11 @@ class HomeController extends GetxController {
 
   Future<void> addProduct(ProductModel productModel, {String note = ""}) async {
     String currentItemType = selectedOrderType.value;
-    
+
     // Match based on idProduk, orderType, AND note to keep items with different notes separate
-    var index = penjualanDetailModelList.indexWhere((element) => 
-        element.idProduk == productModel.idProduk && 
-        element.orderType == currentItemType && 
+    var index = penjualanDetailModelList.indexWhere((element) =>
+        element.idProduk == productModel.idProduk &&
+        element.orderType == currentItemType &&
         (element.note ?? "") == note);
 
     // Determine the active price according to order type
@@ -962,9 +968,7 @@ class HomeController extends GetxController {
     for (var promo in appliedPromos) {
       if (promo['promo_type'] == 'bundling') {
         tempBundlingDiscountAmount += promoService.calculateBundlingDiscount(
-          penjualanDetailModelList, 
-          promo
-        );
+            penjualanDetailModelList, promo);
       }
     }
     bundlingDiscountAmount.value = tempBundlingDiscountAmount;
@@ -1173,9 +1177,9 @@ class HomeController extends GetxController {
       );
 
       // Check if an item with the exact same id, type, and note already exists elsewhere
-      int existingIdx = penjualanDetailModelList.indexWhere((element) => 
-          element.idProduk == item.idProduk && 
-          element.orderType == targetOrderType && 
+      int existingIdx = penjualanDetailModelList.indexWhere((element) =>
+          element.idProduk == item.idProduk &&
+          element.orderType == targetOrderType &&
           (element.note ?? "") == targetNote &&
           element.isRefund == item.isRefund);
 
@@ -1190,7 +1194,7 @@ class HomeController extends GetxController {
         // Insert as a new row next to the original item
         penjualanDetailModelList.insert(index + 1, splitItem);
       }
-      
+
       penjualanDetailModelList.refresh();
       calculateTotals();
       return;
@@ -1229,8 +1233,7 @@ class HomeController extends GetxController {
       hargaJual: finalPrice, // UPDATE HARGA
       discountTotal: currentDiscountTotal,
       discountType: currentDiscountType,
-      subtotal:
-          targetQty * finalPrice, // RECALC SUBTOTAL WITH NEW PRICE
+      subtotal: targetQty * finalPrice, // RECALC SUBTOTAL WITH NEW PRICE
     );
     penjualanDetailModelList.refresh();
     calculateTotals();
@@ -1308,16 +1311,18 @@ class HomeController extends GetxController {
 
   void applyPromo(Map<String, dynamic> promo) {
     final String promoIdStr = promo['id']?.toString() ?? '';
-    bool isAlreadyApplied = appliedPromos.any((p) => p['id']?.toString() == promoIdStr);
+    bool isAlreadyApplied =
+        appliedPromos.any((p) => p['id']?.toString() == promoIdStr);
 
     if (isAlreadyApplied) {
       appliedPromos.removeWhere((p) => p['id']?.toString() == promoIdStr);
     } else {
       if (promo['promo_type'] == 'bundling') {
-        int discount = promoService.calculateBundlingDiscount(penjualanDetailModelList, promo);
+        int discount = promoService.calculateBundlingDiscount(
+            penjualanDetailModelList, promo);
         if (discount == 0) {
           Get.snackbar(
-            'Promo Bundling Tidak Aktif', 
+            'Promo Bundling Tidak Aktif',
             'Isi keranjang belum memenuhi syarat kelengkapan kombinasi paket/qty untuk promo ini.',
             backgroundColor: Colors.orange.shade800,
             colorText: Colors.white,
@@ -1592,7 +1597,7 @@ class HomeController extends GetxController {
       final List<Map<String, dynamic>> results =
           await _dbService.query('members');
       memberList.value = results.map((m) => MemberModel.fromJson(m)).toList();
-      
+
       // Keep existing filter search query active after reload
       if (searchMemberQuery.value.isEmpty) {
         filteredMemberList.value = memberList;
@@ -1609,7 +1614,7 @@ class HomeController extends GetxController {
           return n.contains(q) || p.contains(q);
         }).toList();
       }
-      
+
       debugPrint(
           'HomeController: Member list loaded from SQLite, count: ${memberList.length}');
     } catch (e) {
@@ -1959,7 +1964,7 @@ class HomeController extends GetxController {
           discountAmount = subtotalVal * (discountPercent / 100);
           discountType = 'percent';
         }
-        
+
         if (bundlingDiscountAmount.value > 0) {
           discountAmount += bundlingDiscountAmount.value.toDouble();
         }
@@ -2104,11 +2109,11 @@ class HomeController extends GetxController {
           discountAmount = subtotalVal * (discountPercent / 100);
           discountType = 'percent';
         }
-        
+
         if (bundlingDiscountAmount.value > 0) {
           discountAmount += bundlingDiscountAmount.value.toDouble();
         }
-        
+
         final putBody = <String, dynamic>{
           'clientid': clientId.toString(),
           'date': today,
@@ -2440,7 +2445,8 @@ class HomeController extends GetxController {
           printJobs.putIfAbsent(printer, () => []).add(item);
         } else {
           final brandLabel = brand.isEmpty ? '(No Brand)' : brand;
-          skippedByBrand.putIfAbsent(brandLabel, () => [])
+          skippedByBrand
+              .putIfAbsent(brandLabel, () => [])
               .add(item.productName ?? 'Item');
           debugPrint(
               'No label printer found for item ${item.productName} (brand: $brand).');
@@ -2474,12 +2480,23 @@ class HomeController extends GetxController {
           ? '#${idPosRef.substring(idPosRef.length > 8 ? idPosRef.length - 8 : 0).toUpperCase()}'
           : '#---';
 
-      final customerName = penjualan != null
-          ? ((selectedMember.value != null &&
-                  selectedMember.value!.idMember == penjualan.idMember)
-              ? (selectedMember.value!.nama ?? 'Customer')
-              : 'Customer #${penjualan.idMember}')
-          : (selectedMember.value?.nama ?? 'Walk In');
+      // The manually entered order label is the intended header on a product
+      // label. Previously this path ignored customerLabel and fell back to
+      // "Walk In" whenever no member was selected.
+      final manualOrderLabel = customerLabel.value.trim();
+      final customerName = manualOrderLabel.isNotEmpty
+          ? manualOrderLabel
+          : penjualan != null
+              ? ((selectedMember.value != null &&
+                      selectedMember.value!.idMember == penjualan.idMember)
+                  ? (selectedMember.value!.nama ?? 'Customer')
+                  : 'Customer #${penjualan.idMember}')
+              : (selectedMember.value?.nama ?? 'Walk In');
+      debugPrint(
+        '[LABEL_PRINT] header="$customerName" | source='
+        '${manualOrderLabel.isNotEmpty ? 'manual_order_label' : 'member_or_walk_in'} | '
+        'orderCode=$orderCode | itemCount=${items.length}',
+      );
 
       // 3. Process Print Jobs per Printer
       for (final entry in printJobs.entries) {
@@ -3954,7 +3971,7 @@ class HomeController extends GetxController {
       selectedMember.value = matchedMember;
       memberId.value = matchedMember.idMember;
       customerLabel.value = matchedMember.nama ?? '';
-      
+
       Get.snackbar(
         'Customer Ditemukan',
         'Customer "${matchedMember.nama}" otomatis terpilih.',
@@ -3962,7 +3979,7 @@ class HomeController extends GetxController {
         colorText: Colors.white,
         icon: const Icon(Icons.check_circle, color: Colors.white),
       );
-      
+
       clearCustomerForm();
       Get.back(); // close dialog
       return false; // did not open add form
@@ -4028,7 +4045,7 @@ class HomeController extends GetxController {
         selectedMember.value = existingLocal;
         memberId.value = existingLocal.idMember;
         customerLabel.value = existingLocal.nama ?? '';
-        
+
         // Return to search list and filter by this customer's phone
         isAddingCustomer.value = false;
         searchCustomerController.text = phone;
@@ -4037,10 +4054,11 @@ class HomeController extends GetxController {
 
         Constants.showSnackbar(
           title: 'Informasi',
-          message: 'Nomor HP sudah terdaftar. Mengarahkan ke customer tersebut.',
+          message:
+              'Nomor HP sudah terdaftar. Mengarahkan ke customer tersebut.',
           isSuccess: true,
         );
-        
+
         clearCustomerForm();
         return;
       }
@@ -4085,14 +4103,13 @@ class HomeController extends GetxController {
       }
 
       // If online sync explicitly rejected the member because the phone number exists
-      if (errorMessage != null && (
-          errorMessage.toLowerCase().contains("sudah ada") || 
-          errorMessage.toLowerCase().contains("already exists") || 
-          errorMessage.toLowerCase().contains("terdaftar") ||
-          errorMessage.toLowerCase().contains("no_hp")
-      )) {
+      if (errorMessage != null &&
+          (errorMessage.toLowerCase().contains("sudah ada") ||
+              errorMessage.toLowerCase().contains("already exists") ||
+              errorMessage.toLowerCase().contains("terdaftar") ||
+              errorMessage.toLowerCase().contains("no_hp"))) {
         Get.back(); // Close loading dialog
-        
+
         // 1. Check local database first
         final normalizedInput = Constants.normalizePhoneNumber(phone);
         var existingMember = memberList.firstWhere(
@@ -4118,18 +4135,20 @@ class HomeController extends GetxController {
             }
             // Reload local list
             await getMember();
-            
+
             // Search again after sync
             existingMember = memberList.firstWhere(
               (m) {
                 final dbPhone = m.telepon ?? '';
                 if (dbPhone.isEmpty) return false;
-                return Constants.normalizePhoneNumber(dbPhone) == normalizedInput;
+                return Constants.normalizePhoneNumber(dbPhone) ==
+                    normalizedInput;
               },
               orElse: () => MemberModel(idMember: 0, nama: ''),
             );
           } catch (syncError) {
-            debugPrint('HomeController: Failed to sync members on duplicate: $syncError');
+            debugPrint(
+                'HomeController: Failed to sync members on duplicate: $syncError');
           }
           if (Get.isDialogOpen ?? false) Get.back(); // close sync loading
         }
@@ -4139,7 +4158,7 @@ class HomeController extends GetxController {
           selectedMember.value = existingMember;
           memberId.value = existingMember.idMember;
           customerLabel.value = existingMember.nama ?? '';
-          
+
           // Return to search list and filter by this customer's phone
           isAddingCustomer.value = false;
           searchCustomerController.text = phone;
@@ -4148,10 +4167,11 @@ class HomeController extends GetxController {
 
           Constants.showSnackbar(
             title: 'Informasi',
-            message: 'Nomor HP sudah terdaftar. Mengarahkan ke customer tersebut.',
+            message:
+                'Nomor HP sudah terdaftar. Mengarahkan ke customer tersebut.',
             isSuccess: true,
           );
-          
+
           clearCustomerForm();
         } else {
           // Fallback if not found anywhere: go back to search screen with prepopulated query
@@ -4162,7 +4182,8 @@ class HomeController extends GetxController {
 
           Constants.showSnackbar(
             title: 'Perhatian',
-            message: 'Nomor HP sudah terdaftar di server. Silakan cari nomor tersebut di pencarian.',
+            message:
+                'Nomor HP sudah terdaftar di server. Silakan cari nomor tersebut di pencarian.',
             isSuccess: false,
             isWarning: true,
           );
@@ -4288,40 +4309,46 @@ class HomeController extends GetxController {
   }
 
   void _checkQualifyingBundlingPromos() {
-    if (penjualanDetailModelList.isEmpty || !Get.isRegistered<PromoService>()) return;
-    
+    if (penjualanDetailModelList.isEmpty || !Get.isRegistered<PromoService>())
+      return;
+
     // Prevent showing multiple dialogs at once
     if (Get.isDialogOpen == true) return;
-    
+
     final promoService = Get.find<PromoService>();
     final activeBundlings = promoService.activePromos
         .where((p) => p['promo_type']?.toString() == 'bundling')
         .toList();
-        
-    final bool hasActiveNonStackable = appliedPromos.any((p) => p['is_stackable']?.toString() != '1');
-        
+
+    final bool hasActiveNonStackable =
+        appliedPromos.any((p) => p['is_stackable']?.toString() != '1');
+
     for (var promo in activeBundlings) {
       final promoIdStr = promo['id']?.toString() ?? '';
-      
-      final bool isAlreadyApplied = appliedPromos.any((p) => p['id']?.toString() == promoIdStr);
+
+      final bool isAlreadyApplied =
+          appliedPromos.any((p) => p['id']?.toString() == promoIdStr);
       if (isAlreadyApplied || dismissedPromoIds.contains(promoIdStr)) continue;
-      
+
       final isPromoStackable = promo['is_stackable']?.toString() == '1';
       // If the candidate promo is non-stackable and we already have a non-stackable active promo,
       // skip auto-offering it to avoid infinite competition loops.
       if (!isPromoStackable && hasActiveNonStackable) continue;
-      
-      int discount = promoService.calculateBundlingDiscount(penjualanDetailModelList, promo);
+
+      int discount = promoService.calculateBundlingDiscount(
+          penjualanDetailModelList, promo);
       if (discount > 0) {
         final isDark = Get.isDarkMode;
-        
+
         Get.dialog(
           AlertDialog(
-            backgroundColor: AppTheme.cardColor(Get.context ?? Get.overlayContext!),
+            backgroundColor:
+                AppTheme.cardColor(Get.context ?? Get.overlayContext!),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20.r),
             ),
-            contentPadding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
+            contentPadding:
+                EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -4346,14 +4373,16 @@ class HomeController extends GetxController {
                   style: TextStyle(
                     fontFamily: AppTheme.fontBold,
                     fontSize: 18.sp,
-                    color: AppTheme.textColor(Get.context ?? Get.overlayContext!),
+                    color:
+                        AppTheme.textColor(Get.context ?? Get.overlayContext!),
                   ),
                 ),
                 SizedBox(height: 12.h),
                 // Decorative Promo Name Box
                 Container(
                   width: double.infinity,
-                  padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+                  padding:
+                      EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
                   decoration: BoxDecoration(
                     color: const Color(0xFF482CD9).withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(12.r),
@@ -4364,7 +4393,8 @@ class HomeController extends GetxController {
                   ),
                   child: Center(
                     child: Text(
-                      promo['name']?.toString().toUpperCase() ?? 'PROMO BUNDLING',
+                      promo['name']?.toString().toUpperCase() ??
+                          'PROMO BUNDLING',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontFamily: AppTheme.fontBold,
@@ -4383,7 +4413,8 @@ class HomeController extends GetxController {
                   style: TextStyle(
                     fontFamily: AppTheme.fontRegular,
                     fontSize: 13.sp,
-                    color: AppTheme.secondaryTextColor(Get.context ?? Get.overlayContext!),
+                    color: AppTheme.secondaryTextColor(
+                        Get.context ?? Get.overlayContext!),
                     height: 1.4,
                   ),
                 ),
@@ -4396,7 +4427,10 @@ class HomeController extends GetxController {
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
                           padding: EdgeInsets.symmetric(vertical: 12.h),
-                          side: BorderSide(color: isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+                          side: BorderSide(
+                              color: isDark
+                                  ? Colors.grey.shade700
+                                  : Colors.grey.shade300),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10.r),
                           ),
@@ -4410,7 +4444,9 @@ class HomeController extends GetxController {
                           style: TextStyle(
                             fontFamily: AppTheme.fontBold,
                             fontSize: 13.sp,
-                            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : Colors.grey.shade600,
                           ),
                         ),
                       ),

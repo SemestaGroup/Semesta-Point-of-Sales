@@ -483,7 +483,7 @@ class PrinterManagementView extends GetView<SettingController> {
     final options = {
       1: "Normal (Std)",
       2: "Large",
-      0: "No ESC-M (Safe/Label)",
+      0: "Safe (Plain Text)",
     };
     
     // Map isRawFontA false to 0, otherwise fontSize
@@ -505,6 +505,8 @@ class PrinterManagementView extends GetView<SettingController> {
             if (val == null) return;
             PrinterDevice updated;
             if (val == 0) {
+              // `isRawFontA=false` is retained for backwards-compatible
+              // storage, but now activates the full Safe mode.
               updated = printer.copyWith(isRawFontA: false, fontSize: 1);
             } else {
               updated = printer.copyWith(isRawFontA: true, fontSize: val);

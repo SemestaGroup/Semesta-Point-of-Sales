@@ -798,6 +798,25 @@ class SettingController extends GetxController {
     String? productNote,
     String? orderNote,
   }) async {
+    // Legacy `isRawFontA=false` is now the Safe  mode. Unlike the
+    // old behaviour, it removes *all* ESC/POS control commands rather than
+    // merely omitting ESC M. This is intended for firmware that reacts
+    // unexpectedly to command bytes during Bluetooth label printing.
+    if (!isRawFontA) {
+      return _buildSafeBluetoothLabel(
+        line1: line1,
+        line2: line2,
+        line3: line3,
+        line4: line4,
+        isAutoCut: isAutoCut,
+        copies: copies,
+        startIndex: startIndex,
+        totalLabels: totalLabels,
+        productNote: productNote,
+        orderNote: orderNote,
+      );
+    }
+
     final profile = await CapabilityProfile.load();
     final paper = PaperSize.mm58;
     final generator = Generator(paper, profile);
@@ -805,10 +824,8 @@ class SettingController extends GetxController {
     List<int> bytes = [];
 
     bytes += generator.reset();
-    // ESC M 0 = Select Font A (raw ESC/POS) - bypass if printer mode disables raw font A
-    if (isRawFontA) {
-      bytes += [0x1B, 0x4D, 0x00];
-    }
+    // ESC M 0 = Select Font A (raw ESC/POS).
+    bytes += [0x1B, 0x4D, 0x00];
 
     for (int i = 0; i < copies; i++) {
       int currentCounter = startIndex + i;
@@ -860,6 +877,70 @@ class SettingController extends GetxController {
       bytes += generator.feed(1);
       if (isAutoCut) {
         bytes += generator.cut();
+      }
+    }
+
+    return bytes;
+  }
+
+  /// Builds a label using printable text and LF bytes. No ESC/POS reset,
+  /// font, alignment, bold, or feed commands are emitted. The optional cut
+  /// command is retained because it is independently supported by the affected
+  /// printer and makes each printed label easier to separate.
+  List<int> _buildSafeBluetoothLabel({
+    required String line1,
+    required String line2,
+    required String line3,
+    required String line4,
+    required bool isAutoCut,
+    required int copies,
+    required int startIndex,
+    required int totalLabels,
+    String? productNote,
+    String? orderNote,
+  }) {
+    const maxChars = 32;
+    final bytes = <int>[];
+
+    for (var i = 0; i < copies; i++) {
+      final output = StringBuffer();
+      final labelCounter = '${startIndex + i}/$totalLabels';
+      output.writeln(_formatRow(line1, labelCounter, maxChars));
+      output.writeln(line2);
+      output.writeln(line3);
+
+      for (final nameLine in _wrapTextByWord(line4, maxChars)) {
+        output.writeln(nameLine);
+      }
+
+      final trimmedOrderNote = orderNote?.trim() ?? '';
+      if (trimmedOrderNote.isNotEmpty) {
+        for (final noteLine
+            in _wrapTextByWord('Order: $trimmedOrderNote', maxChars)) {
+          output.writeln(noteLine);
+        }
+      }
+
+      final trimmedProductNote = productNote?.trim() ?? '';
+      if (trimmedProductNote.isNotEmpty) {
+        for (final noteLine
+            in _wrapTextByWord('Item: $trimmedProductNote', maxChars)) {
+          output.writeln(noteLine);
+        }
+      }
+
+      // Extra newlines advance the paper without an ESC/POS feed command.
+      output.writeln();
+      output.writeln();
+      bytes.addAll(latin1.encode(output.toString()));
+
+      if (isAutoCut) {
+        // The printer demonstrably accepts its cutter command. Keep this one
+        // supported command while avoiding the other control bytes.
+        // Match the normal label path: one feed plus the five lines normally
+        // emitted before a cut, so Safe mode keeps the same paper spacing.
+        bytes.addAll(List<int>.filled(4, 0x0A));
+        bytes.addAll([0x1D, 0x56, 0x30]); // GS V 0: full cut
       }
     }
 
